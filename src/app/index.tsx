@@ -23,30 +23,10 @@ import { Stack, router } from 'expo-router';
 import { Eye, EyeOff, ChevronRight, ChevronDown } from 'lucide-react-native';
 
 import { colors, space, radius, typography, screenPadding } from '../theme';
+import { usePressAnim } from '../ui/usePressAnim';
 
 // System monospace for the help / setup code block
 const MONO_FONT = Platform.select({ ios: 'Menlo', default: 'monospace' }) ?? 'monospace';
-
-// ---------------------------------------------------------------------------
-// Tiny hook: animated press feedback (opacity + scale, 150 ms)
-// ---------------------------------------------------------------------------
-
-function usePressAnim() {
-  const anim = useRef(new Animated.Value(1)).current;
-
-  const onPressIn = () =>
-    Animated.timing(anim, { toValue: 0.97, duration: 150, useNativeDriver: true }).start();
-
-  const onPressOut = () =>
-    Animated.timing(anim, { toValue: 1, duration: 150, useNativeDriver: true }).start();
-
-  const animStyle = {
-    transform: [{ scale: anim }],
-    opacity: anim,
-  } as const;
-
-  return { onPressIn, onPressOut, animStyle };
-}
 
 // ---------------------------------------------------------------------------
 // Connect screen
