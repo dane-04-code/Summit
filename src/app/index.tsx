@@ -1,9 +1,11 @@
 /**
- * Connect screen — entry point for Agent Messenger.
- * UI is fully built; networking is stubbed (see ponytail comment below).
+ * Agent chat screen — Agent Messenger.
+ * Header + hybrid message thread + composer, per the Agent Messenger design.
+ * Networking is stubbed (see ponytail comments); the opening thread is seeded
+ * from `SEED_THREAD` and live sends stream a placeholder reply.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,257 +14,310 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
-  LayoutAnimation,
-  AccessibilityInfo,
-  ActivityIndicator,
   Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
-import { Eye, EyeOff, ChevronRight, ChevronDown } from 'lucide-react-native';
+import { FlashList, FlashListRef } from '@shopify/flash-list';
+import { ArrowUp } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 
 import { colors, space, radius, typography, screenPadding } from '../theme';
 import { usePressAnim } from '../ui/usePressAnim';
-
-// System monospace for the help / setup code block
-const MONO_FONT = Platform.select({ ios: 'Menlo', default: 'monospace' }) ?? 'monospace';
+import { Header } from '../ui/chat/Header';
+import { AgentMessage } from '../ui/chat/AgentMessage';
+import { ApprovalCard } from '../ui/chat/ApprovalCard';
+import { Sidebar } from '../ui/chat/Sidebar';
+import { SEED_THREAD, RECENT_CHATS, ACTIVE_CHAT_ID, ACCOUNT } from '../ui/chat/seed';
+import type { Message, AgentBlock, RunState } from '../ui/chat/types';
 
 // ---------------------------------------------------------------------------
-// Connect screen
+// Stub streaming data
+// ponytail: replace stub stream with real hermes.sendMessage()
 // ---------------------------------------------------------------------------
 
-export default function ConnectScreen() {
-  const [host, setHost] = useState('');
-  const [apiKey, setApiKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [reduceMotion, setReduceMotion] = useState(false);
+const AGENT_NAME = 'Hermes';
+const RUNNING_HINT = 'searching the web…';
 
-  const btnAnim = usePressAnim();
+const STUB_WORDS =
+  'Got it. Let me check — everything looks good on my end. Feel free to ask anything else.'.split(
+    ' ',
+  );
+const STREAM_INTERVAL_MS = Math.round(1200 / STUB_WORDS.length);
 
-  // Track system "reduce motion" preference for the expand animation
-  useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then(setReduceMotion)
-      .catch(() => { /* ignore — stays false */ });
+function genId(): string {
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
-    const sub = AccessibilityInfo.addEventListener(
-      'reduceMotionChanged',
-      setReduceMotion,
+/** Build an agent message whose single text block holds `text`. */
+function agentText(id: string, text: string): Message {
+  const blocks: AgentBlock[] = [{ kind: 'text', spans: [{ text }] }];
+  return { id, role: 'agent', blocks };
+}
+
+// ---------------------------------------------------------------------------
+// MessageRow
+// ---------------------------------------------------------------------------
+
+function MessageRow({
+  message,
+  onApprove,
+  onStop,
+}: {
+  message: Message;
+  onApprove: (id: string) => void;
+  onStop: (id: string) => void;
+}) {
+  if (message.role === 'user') {
+    return (
+      <View style={styles.userRow}>
+        <View style={styles.userBubble}>
+          <Text style={styles.userText}>{message.text}</Text>
+        </View>
+      </View>
     );
-    return () => sub.remove();
-  }, []);
-
-  // Toggle the "Where do I find these?" help accordion
-  function handleToggleHelp() {
-    if (!reduceMotion) {
-      LayoutAnimation.configureNext({
-        duration: 200,
-        create: {
-          type: LayoutAnimation.Types.easeInEaseOut,
-          property: LayoutAnimation.Properties.opacity,
-        },
-        update: { type: LayoutAnimation.Types.easeInEaseOut },
-        delete: {
-          type: LayoutAnimation.Types.easeInEaseOut,
-          property: LayoutAnimation.Properties.opacity,
-        },
-      });
-    }
-    setExpanded((v) => !v);
   }
 
-  // Primary action — stub only
-  async function handleConnect() {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-
-    // ponytail: wire real connect() here later
-    //
-    // Suggested error mapping (reference only — not wired):
-    //   Can't reach host →
-    //     `Couldn't reach \`${host}\`. Is the API server running? (\`hermes gateway\`)`
-    //   401 / 403 →
-    //     "Server's there, but the API key was rejected."
-    //   Wrong shape →
-    //     "Reached something, but it doesn't look like Hermes. Check host/port."
-
-    await new Promise<void>((resolve) => setTimeout(resolve, 800));
-    setBusy(false);
-    router.replace('/agent');
+  if (message.role === 'action') {
+    return (
+      <View style={styles.block}>
+        <ApprovalCard
+          title={message.title}
+          command={message.command}
+          onApprove={() => onApprove(message.id)}
+          onStop={() => onStop(message.id)}
+        />
+      </View>
+    );
   }
 
   return (
+    <View style={styles.block}>
+      <AgentMessage blocks={message.blocks} />
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AgentScreen
+// ---------------------------------------------------------------------------
+
+export default function AgentScreen() {
+  const [messages, setMessages] = useState<Message[]>(SEED_THREAD);
+  const [input, setInput] = useState('');
+  const [status, setStatus] = useState<RunState>('running');
+  // True only while a live reply is streaming — gates the composer. Kept
+  // separate from `status` so the seeded "running" state still accepts input.
+  const [streaming, setStreaming] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const flashListRef = useRef<FlashListRef<Message>>(null);
+  const streamIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const insets = useSafeAreaInsets();
+  const sendAnim = usePressAnim();
+
+  // Clean up any live stream interval on unmount
+  useEffect(() => {
+    return () => {
+      if (streamIntervalRef.current !== null) {
+        clearInterval(streamIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Scroll to newest content whenever the thread changes (including mid-stream)
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const timer = setTimeout(() => {
+      flashListRef.current?.scrollToEnd({ animated: true });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [messages]);
+
+  const statusLabel =
+    status === 'running' ? 'running' : status === 'error' ? 'connection error' : 'ready';
+
+  const handleNewChat = useCallback(() => {
+    if (streamIntervalRef.current !== null) {
+      clearInterval(streamIntervalRef.current);
+      streamIntervalRef.current = null;
+    }
+    Haptics.selectionAsync().catch(() => {});
+    setMessages([]);
+    setInput('');
+    setStreaming(false);
+    setStatus('idle');
+    setSidebarOpen(false);
+  }, []);
+
+  const handleMenu = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    setSidebarOpen(true);
+  }, []);
+
+  const handleSelectChat = useCallback((_id: string) => {
+    // ponytail: load the selected conversation's history when sessions land
+    setSidebarOpen(false);
+  }, []);
+
+  const handleOpenSettings = useCallback(() => {
+    setSidebarOpen(false);
+    router.push('/settings');
+  }, []);
+
+  const handleApprove = useCallback((id: string) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === id
+          ? agentText(`${id}-result`, 'Approved — running the command now.')
+          : m,
+      ),
+    );
+  }, []);
+
+  const handleStop = useCallback((id: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === id ? agentText(`${id}-result`, 'Stopped. Nothing was run.') : m,
+      ),
+    );
+  }, []);
+
+  const handleSend = useCallback(() => {
+    const text = input.trim();
+    if (!text || streaming) return;
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setInput('');
+
+    const userMsg: Message = { id: genId(), role: 'user', text };
+    const agentId = genId();
+    setMessages((prev) => [...prev, userMsg, agentText(agentId, '')]);
+    setStreaming(true);
+    setStatus('running');
+
+    // ponytail: replace stub stream with real hermes.sendMessage()
+    let wordIndex = 0;
+    if (streamIntervalRef.current !== null) clearInterval(streamIntervalRef.current);
+
+    streamIntervalRef.current = setInterval(() => {
+      wordIndex += 1;
+      const streamed = STUB_WORDS.slice(0, wordIndex).join(' ');
+
+      setMessages((prev) =>
+        prev.map((m) => (m.id === agentId ? agentText(agentId, streamed) : m)),
+      );
+
+      if (wordIndex >= STUB_WORDS.length) {
+        if (streamIntervalRef.current !== null) {
+          clearInterval(streamIntervalRef.current);
+          streamIntervalRef.current = null;
+        }
+        setStreaming(false);
+        setStatus('idle');
+      }
+    }, STREAM_INTERVAL_MS);
+  }, [input, streaming]);
+
+  return (
     <>
-      {/* Hide the Stack header — we render our own title */}
       <Stack.Screen options={{ headerShown: false }} />
 
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom', 'left', 'right']}>
+      {/*
+       * Top + sides handled by SafeAreaView.
+       * Bottom safe area is applied directly to the input bar so it doesn't
+       * jump when the keyboard raises (KeyboardAvoidingView owns the bottom).
+       */}
+      <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
+        <Header
+          name={AGENT_NAME}
+          status={status}
+          statusLabel={statusLabel}
+          hint={RUNNING_HINT}
+          onMenu={handleMenu}
+          onNewChat={handleNewChat}
+        />
+
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <ScrollView
-            contentContainerStyle={styles.scroll}
-            keyboardShouldPersistTaps="handled"
+          <FlashList<Message>
+            ref={flashListRef}
+            data={messages}
+            renderItem={({ item }) => (
+              <MessageRow message={item} onApprove={handleApprove} onStop={handleStop} />
+            )}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+            maintainVisibleContentPosition={{
+              autoscrollToBottomThreshold: 120,
+              animateAutoScrollToBottom: true,
+              startRenderingFromBottom: true,
+            }}
+          />
+
+          {/* ── Input bar — pinned above keyboard ─────────── */}
+          <View
+            style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, space.md) }]}
           >
-            {/* ── Title ─────────────────────────────────────── */}
-            <Text style={styles.title}>Connect your agent</Text>
+            <TextInput
+              style={styles.textField}
+              value={input}
+              onChangeText={setInput}
+              placeholder="Message…"
+              placeholderTextColor={colors.muted}
+              returnKeyType="send"
+              onSubmitEditing={handleSend}
+              blurOnSubmit={false}
+              autoCorrect
+              multiline={false}
+              accessibilityLabel="Message input"
+            />
 
-            {/* ── Host ──────────────────────────────────────── */}
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Host</Text>
-              <TextInput
-                style={styles.input}
-                value={host}
-                onChangeText={setHost}
-                placeholder="my-hermes.home:8642"
-                placeholderTextColor={colors.muted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="url"
-                textContentType="URL"
-                returnKeyType="next"
-              />
-            </View>
-
-            {/* ── API Key ───────────────────────────────────── */}
-            <View style={[styles.fieldGroup, styles.fieldGroupGap]}>
-              <Text style={styles.label}>API Key</Text>
-              <View style={styles.keyRow}>
-                <TextInput
-                  style={[styles.input, styles.keyInput]}
-                  value={apiKey}
-                  onChangeText={setApiKey}
-                  placeholder="your-secret-key"
-                  placeholderTextColor={colors.muted}
-                  secureTextEntry={!showKey}
-                  textContentType="password"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="done"
-                />
-                <Pressable
-                  onPress={() => setShowKey((v) => !v)}
-                  hitSlop={12}
-                  accessibilityLabel={showKey ? 'Hide API key' : 'Show API key'}
-                  accessibilityRole="button"
-                  style={styles.eyeBtn}
-                >
-                  {({ pressed }) =>
-                    showKey ? (
-                      <EyeOff size={20} color={pressed ? colors.ink : colors.muted} />
-                    ) : (
-                      <Eye size={20} color={pressed ? colors.ink : colors.muted} />
-                    )
-                  }
-                </Pressable>
-              </View>
-            </View>
-
-            {/* ── "Where do I find these?" accordion ───────── */}
-            <View style={styles.helpContainer}>
-              <Pressable
-                onPress={handleToggleHelp}
-                hitSlop={{ top: 8, bottom: 8, left: 0, right: 16 }}
-                accessibilityLabel="Where do I find these?"
-                accessibilityRole="button"
-                accessibilityState={{ expanded }}
-                style={styles.helpToggle}
-              >
-                {({ pressed }) => (
-                  <>
-                    {expanded ? (
-                      <ChevronDown
-                        size={16}
-                        color={pressed ? colors.ink : colors.accent}
-                      />
-                    ) : (
-                      <ChevronRight
-                        size={16}
-                        color={pressed ? colors.ink : colors.accent}
-                      />
-                    )}
-                    <Text style={[styles.helpToggleText, pressed && styles.helpToggleTextPressed]}>
-                      Where do I find these?
-                    </Text>
-                  </>
-                )}
-              </Pressable>
-
-              {expanded && (
-                <View style={styles.helpPanel}>
-                  <Text style={styles.helpHint}>In ~/.hermes/.env:</Text>
-                  <View style={styles.codeBlock}>
-                    <Text style={styles.code}>
-                      {'API_SERVER_ENABLED=true\nAPI_SERVER_KEY=your-secret-key\nAPI_SERVER_PORT=8642'}
-                    </Text>
-                  </View>
-
-                  <Text style={[styles.helpHint, styles.helpHintGap]}>Then start it:</Text>
-                  <View style={styles.codeBlock}>
-                    <Text style={styles.code}>{'hermes gateway'}</Text>
-                  </View>
-                </View>
-              )}
-            </View>
-
-            {/* ── Test connection button ─────────────────────── */}
             <Pressable
-              onPress={handleConnect}
-              onPressIn={btnAnim.onPressIn}
-              onPressOut={btnAnim.onPressOut}
-              disabled={busy}
+              onPress={handleSend}
+              onPressIn={sendAnim.onPressIn}
+              onPressOut={sendAnim.onPressOut}
+              disabled={streaming}
+              hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel="Test connection"
-              accessibilityState={{ busy, disabled: busy }}
+              accessibilityLabel="Send message"
+              accessibilityState={{ disabled: streaming }}
             >
               <Animated.View
-                style={[
-                  styles.button,
-                  busy && styles.buttonBusy,
-                  btnAnim.animStyle,
-                ]}
+                style={[styles.sendBtn, sendAnim.animStyle, streaming && styles.sendBtnDisabled]}
               >
-                {busy ? (
-                  <>
-                    <ActivityIndicator
-                      color={colors.bg}
-                      size="small"
-                      style={styles.spinner}
-                    />
-                    <Text style={styles.buttonText}>Connecting…</Text>
-                  </>
-                ) : (
-                  <Text style={styles.buttonText}>Test connection</Text>
-                )}
+                <ArrowUp size={20} color={colors.onAccentBtn} strokeWidth={2.5} />
               </Animated.View>
             </Pressable>
-
-            {/* ── Error line ────────────────────────────────── */}
-            {error !== null && (
-              <Text style={styles.errorText} accessibilityRole="alert">
-                {error}
-              </Text>
-            )}
-          </ScrollView>
+          </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <Sidebar
+        visible={sidebarOpen}
+        groups={RECENT_CHATS}
+        activeId={ACTIVE_CHAT_ID}
+        account={ACCOUNT}
+        onClose={() => setSidebarOpen(false)}
+        onNewChat={handleNewChat}
+        onSelectChat={handleSelectChat}
+        onOpenSettings={handleOpenSettings}
+      />
     </>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Styles — no raw hex or magic numbers; everything comes from theme tokens
+// Styles — no raw hex; tokens for colour, spacing, radius, and type
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  // Layout
   safe: {
     flex: 1,
     backgroundColor: colors.bg,
@@ -270,126 +325,68 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  scroll: {
-    flexGrow: 1,
-    paddingHorizontal: screenPadding,
-    paddingTop: space.xxl,
-    paddingBottom: space.xxl,
+
+  // ── Message list ──────────────────────────────────────────────────────────
+  listContent: {
+    paddingHorizontal: screenPadding - 6,
+    paddingTop: space.lg,
+    paddingBottom: space.md,
   },
 
-  // Title
-  title: {
-    ...typography.title,
-    color: colors.ink,
-    marginBottom: space.xxl,
+  // Spacing between thread items (FlashList renders rows individually)
+  block: {
+    marginVertical: space.md - 2,
   },
 
-  // Fields
-  fieldGroup: {
-    // base — no extra margin; title already has marginBottom
+  // ── User bubble (right-aligned) ───────────────────────────────────────────
+  userRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginVertical: space.md - 2,
   },
-  fieldGroupGap: {
-    marginTop: space.lg,
+  userBubble: {
+    backgroundColor: colors.bubble,
+    borderRadius: radius.bubble,
+    paddingHorizontal: space.md + 2,
+    paddingVertical: space.sm + 1,
+    maxWidth: '80%',
   },
-  label: {
-    ...typography.small,
-    color: colors.muted,
-    marginBottom: space.xs,
-  },
-  input: {
+  userText: {
     ...typography.body,
     color: colors.ink,
-    height: 48,
+  },
+
+  // ── Input bar ─────────────────────────────────────────────────────────────
+  inputBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm + 2,
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm + 2,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+    backgroundColor: colors.bg,
+  },
+  textField: {
+    flex: 1,
+    ...typography.body,
+    color: colors.ink,
+    height: 44,
     borderWidth: 1,
     borderColor: colors.line,
     borderRadius: radius.input,
-    paddingHorizontal: space.md,
+    paddingHorizontal: space.md + 3,
+    backgroundColor: colors.surface,
   },
-  keyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  keyInput: {
-    flex: 1,
-  },
-  eyeBtn: {
+  sendBtn: {
     width: 44,
     height: 44,
+    borderRadius: 22, // circle
+    backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: space.xs,
   },
-
-  // Help accordion
-  helpContainer: {
-    marginTop: space.xl,
-  },
-  helpToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    minHeight: 44,
-  },
-  helpToggleText: {
-    ...typography.small,
-    color: colors.accent,
-    marginLeft: space.xs,
-  },
-  helpToggleTextPressed: {
-    color: colors.ink,
-  },
-  helpPanel: {
-    backgroundColor: colors.bubble,
-    borderRadius: radius.input,
-    padding: space.lg,
-    marginTop: space.sm,
-  },
-  helpHint: {
-    ...typography.small,
-    color: colors.ink,
-    marginBottom: space.sm,
-  },
-  helpHintGap: {
-    marginTop: space.md,
-  },
-  codeBlock: {
-    backgroundColor: colors.codeBg,
-    borderRadius: radius.code,
-    padding: space.md,
-  },
-  code: {
-    ...typography.mono,
-    color: colors.ink,
-    fontFamily: MONO_FONT,
-  },
-
-  // Button
-  button: {
-    backgroundColor: colors.accent,
-    borderRadius: radius.input,
-    minHeight: 48,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: space.xxl,
-    paddingHorizontal: space.lg,
-  },
-  buttonBusy: {
-    opacity: 0.7,
-  },
-  buttonText: {
-    ...typography.body,
-    fontWeight: '600',
-    color: colors.bg,
-  },
-  spinner: {
-    marginRight: space.sm,
-  },
-
-  // Error
-  errorText: {
-    ...typography.small,
-    color: colors.error,
-    marginTop: space.md,
-    textAlign: 'center',
+  sendBtnDisabled: {
+    opacity: 0.5,
   },
 });

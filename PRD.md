@@ -12,7 +12,7 @@
 
 ## 1. Problem Statement
 
-People running self-hosted AI agents (Hermes, OpenClaw) manage them from a desktop dashboard. When away from their desk, the only option is raw Telegram/Discord bots — which can't render markdown tables or headings properly, can't surface a clean "approve/stop" action for blocking agent decisions, and have no way to give a structured status view across multiple agents.
+People running self-hosted AI agents (Hermes, OpenClaw) manage them from a desktop dashboard. When away from their desk, the only option is raw Telegram/Discord bots — and the whole *experience* of working with your agent on mobile falls apart there. The flow is wrong end to end: you can't act on a blocking "approve/stop" decision cleanly, you get no real status (idle / running / error), and the agent's output is mangled — markdown tables, headings, and code blocks render as unreadable plain text. That last one is the most *visible* symptom, but the real gap is that there's no mobile client that makes talking to your agent feel like a first-class app instead of a degraded chat bot.
 
 This is a structural gap, not a tooling gap. The popular Scarf companion app (macOS) is architecturally stuck on desktop because it reads local SQLite files and spawns CLI subprocesses — neither works on mobile. The gap isn't unaddressed by laziness; it's unaddressed because the obvious approach doesn't work on mobile. An API-based approach is the correct and necessary path.
 
@@ -24,9 +24,13 @@ This is a structural gap, not a tooling gap. The popular Scarf companion app (ma
 
 A React Native (iOS first) mobile app that connects to self-hosted AI agent frameworks via their API servers, giving users a clean interface to monitor, chat with, and act on their agents from anywhere — fixing specific, real problems that Telegram/Discord have, not replacing them as everyday messengers.
 
-**One-line pitch:** "The mobile client your AI agent deserves — proper markdown, real push notifications, and a one-tap approve button."
+**One-line pitch:** "The mobile client your AI agent deserves — reach it from anywhere and work with it like a real app, not a degraded chat bot."
 
-**Connection model:** Relay-first, like Telegram. Hermes dials outbound to a relay; the user pairs the app with a **6-digit code** — no host URL, no exposed server, no accounts, works on cellular. A **direct host+key mode** remains available as an advanced option for the Tailscale / no-middleman crowd. Full rationale in [`docs/CONNECTION.md`](docs/CONNECTION.md).
+**What we're actually selling is the *flow*:** a fast, fluent mobile experience for your agent — pair in seconds, message it smoothly, see its status, and act on it with one tap. Proper markdown, push, and approve/stop are *parts* of that experience, not the headline. The differentiator is the whole thing feeling first-class; markdown rendering is the most visible piece of it, not the point of it.
+
+**UI direction:** Dark by default — clean, calm, premium. **Not white/stark.** One restrained accent, system font, generous spacing. Full tokens in [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md). (Light mode is a possible later option; dark is the product's look.)
+
+**Connection model:** Relay-first, like Telegram. A small **connector** next to Hermes dials outbound to a relay (Hermes is inbound-only and can't dial out itself); the user pairs the app with a **6-digit code** — no host URL, no exposed server, no accounts, works on cellular. The connector can be installed by the agent itself (agent-assisted onboarding). A **direct host+key mode** remains available as an advanced option for the Tailscale / no-middleman crowd. Full rationale in [`docs/CONNECTION.md`](docs/CONNECTION.md).
 
 ---
 
@@ -44,8 +48,9 @@ A React Native (iOS first) mobile app that connects to self-hosted AI agent fram
 ## 4. Goals & Non-Goals
 
 ### Goals
-- Let users connect to their self-hosted Hermes instance in under 2 minutes
-- Render markdown output (tables, headings, code blocks with syntax highlighting) properly
+- **Deliver a fluent, first-class mobile flow** — pairing in seconds, smooth messaging, quick transitions; the experience is the product
+- Let users connect to their self-hosted Hermes instance in under 2 minutes (agent-assisted pairing)
+- Render markdown output (tables, headings, code blocks with syntax highlighting) properly — the most visible part of that experience
 - Enable approve/stop actions on running agent tasks from the phone
 - Provide a meaningful status view (idle / running / error) per agent
 - Lay groundwork for multi-framework support via a clean adapter pattern
@@ -68,7 +73,7 @@ A React Native (iOS first) mobile app that connects to self-hosted AI agent fram
 |---|---------|-------|
 | 1 | **Onboarding (agent-assisted pairing)** | User pastes a prompt to their agent → the agent installs its own connector and reads back a **6-digit code** → user types it in the app. No host/key on the phone; relay device token in Keychain. Fallbacks: run the one-liner manually, or **direct mode** (host + key). See `docs/CONNECTION.md` §5/§5a. |
 | 2 | **Chat with agent** | `POST /v1/chat/completions`, SSE streaming, `X-Hermes-Session-Id` + `X-Hermes-Session-Key` headers for continuity |
-| 3 | **Proper markdown rendering** | Real tables, headings, code blocks with syntax highlighting. Handles partial/streaming markdown gracefully. **This is the #1 differentiator.** |
+| 3 | **Proper markdown rendering** | Real tables, headings, code blocks with syntax highlighting. Handles partial/streaming markdown gracefully. A core part of the "real client" experience (see §2) — the most *visible* upgrade over a raw Telegram bot, but in service of the overall flow, not the whole point. |
 | 4 | **Agent status indicator** | Idle / running / error — via polling `/health` or `/v1/runs/{id}` |
 | 5 | **Reply from app** | Standard message send; nothing fancy in v1 |
 | 6 | **Approve / Stop actions** | `POST /v1/runs/{run_id}/approval`, `POST /v1/runs/{run_id}/stop` — ⚠️ UNVERIFIED, must confirm these endpoints exist before building UI |

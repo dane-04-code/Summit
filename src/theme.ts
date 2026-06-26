@@ -13,14 +13,19 @@ import { TextStyle } from 'react-native';
 // ---------------------------------------------------------------------------
 
 export const colors = {
-  bg: '#FFFFFF',
-  ink: '#111114',
-  muted: '#8A8A8E',
-  bubble: '#F2F2F7',
-  codeBg: '#F6F6F6',
-  line: '#E5E5E7',
-  accent: '#0A7AFF',
-  error: '#E5484D',
+  bg: '#0F1012',
+  surface: '#1A1B1E',
+  surface2: '#232428',
+  drawer: '#161719', // navigation drawer panel — sits between bg and surface
+  hover: '#1F2023', // pressed/active row in lists (sidebar recents)
+  ink: '#F4F4F5',
+  muted: '#8B8B92',
+  bubble: '#1A1B1E',
+  codeBg: '#1A1B1E',
+  line: '#2A2B2F',
+  accent: '#5B9DFF',
+  onAccentBtn: '#0F1012',
+  error: '#FF6B6B',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -43,7 +48,8 @@ export const space = {
 export const radius = {
   bubble: 18,
   code: 10,
-  input: 12,
+  input: 14,
+  appMark: 16,
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -77,4 +83,4 @@ export const typography: {
 // Screen padding
 // ---------------------------------------------------------------------------
 
-export const screenPadding = 16;
+export const screenPadding = 24;

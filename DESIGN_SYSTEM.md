@@ -1,36 +1,40 @@
 # Design System — Agent Messenger
 
-**Goal: invisible.** A clean, simple chat. White, near-black text, lots of whitespace,
-one accent color used sparingly. The app disappears; the conversation is all you see.
-Think Apple Notes / Things — nothing decorative, nothing to notice.
+**Dark, clean, and quiet.** A dark chat app that feels calm and premium — not stark, not
+busy. Lots of breathing room, system font, one restrained accent. The UI recedes so the
+conversation is the focus.
+
+> **Not white.** The app is dark by default. (Light mode is a possible later option, but
+> dark is the product's look.)
 
 ## Rules of thumb
 
-- Whitespace does the design work. When in doubt, add space, not a line or a box.
-- One accent color, and only on things you tap (send, links, focus). Everything else is
-  greyscale.
-- System font everywhere. Monospace only *inside* code blocks (built-in system mono — we
-  bundle nothing).
-- No gradients, no shadows beyond a hairline, no custom theming, no animation beyond the
-  standard list/keyboard motion.
+- Whitespace (dark space) does the work. When in doubt, add space, not a line or a box.
+- Greyscale on dark for almost everything; the accent appears only on the one thing that
+  matters most on a screen.
+- System font everywhere. Monospace only inside code blocks (built-in system mono).
+- No gradients, no heavy shadows, no custom theming, no animation beyond standard
+  list/keyboard motion.
 
 ---
 
-## Color
+## Color (dark)
 
 | Token | Hex | Use |
 |---|---|---|
-| `bg` | `#FFFFFF` | Background |
-| `ink` | `#111114` | Primary text |
-| `muted` | `#8A8A8E` | Secondary text, placeholder, idle dot |
-| `bubble` | `#F2F2F7` | User message bubble (barely there) |
-| `code-bg` | `#F6F6F6` | Code block background |
-| `line` | `#E5E5E7` | Hairlines, input border |
-| `accent` | `#0A7AFF` | Send, links, focus — the only color |
-| `error` | `#E5484D` | Error text + error status (kept colored: it's functional) |
+| `bg` | `#0F1012` | App background (near-black, slightly cool) |
+| `surface` | `#1A1B1E` | Raised: inputs, user bubble, panels |
+| `surface2` | `#232428` | Pressed / higher elevation |
+| `ink` | `#F4F4F5` | Primary text |
+| `muted` | `#8B8B92` | Secondary text, placeholder, idle dot |
+| `line` | `#2A2B2F` | Hairlines, borders |
+| `accent` | `#5B9DFF` | The one accent — links, focus, key actions |
+| `onAccentBtn` | `#0F1012` | Text on a light/primary button |
+| `error` | `#FF6B6B` | Error text + error status |
 
-**Status dot** (one small dot): idle `muted` · running `accent` · error `error`. No pulse —
-the color is the signal.
+**Primary button** is light (`ink` fill, `bg` text) for a clean high-contrast action;
+the `accent` is reserved for links/focus. **Status dot:** idle `muted` · running `accent`
+· error `error` (color is the signal, no pulse).
 
 ---
 
@@ -40,7 +44,7 @@ System font for everything. Built-in monospace only inside code blocks.
 
 | Name | Size | Weight | LH | Use |
 |---|---|---|---|---|
-| `title` | 28 | 600 | 34 | Connect screen title |
+| `title` | 28 | 600 | 34 | Screen titles |
 | `h` | 20 | 600 | 26 | Markdown headings |
 | `body` | 17 | 400 | 24 | Messages, default |
 | `small` | 15 | 400 | 20 | Secondary |
@@ -52,51 +56,52 @@ System font for everything. Built-in monospace only inside code blocks.
 ## Spacing & shape
 
 - **Spacing scale:** `4 · 8 · 12 · 16 · 24 · 32`.
-- **Radii:** user bubble `18` · code block `10` · input field `12`.
-- **Screen padding:** `16` horizontal.
+- **Radii:** user bubble `18` · input `14` · code block `10` · app mark `16`.
+- **Screen padding:** `24` horizontal (generous).
 - **Hairline:** `1px` in `line`. Use rarely.
 
 ---
 
 ## Components
 
-### Message rows (hybrid layout)
-```
-                    │ show me a table │    user: bubble, right, max 80%
-                                              (#F2F2F7, radius 18)
+### App mark
+A small rounded-square mark (light `ink` fill, dark glyph) at the top of the Connect
+screen, with the wordmark "Agent Messenger" (muted, uppercase, tracked) — basic identity,
+not branding theatre.
 
-  Here's the data:                          agent: full width, plain text
-  Qty   Item
-  3     Pen
-```
-No name labels, no timestamps, no avatars. Just the messages.
+### Message rows (hybrid layout)
+- User: right-aligned bubble, `surface` background, `radius.bubble`, max 80%, `ink` text.
+- Agent: full width, no bubble, `ink` body text.
+- No name labels, timestamps, or avatars.
 
 ### Code block
-Light `code-bg` rounded box (radius 10, padding 12), system mono text, optional copy
-control. No border — the faint fill is enough.
+`surface` (slightly off-bg) rounded box, radius 10, system mono, optional copy. No border.
 
 ### Status
-A small dot (idle/running/error color) + a quiet `caption` label. That's the whole status
-UI. Tool progress appends a short label: `searching the web…`.
+A small dot (idle/running/error color) + a quiet `caption` label. Tool progress appends a
+short muted label: `searching the web…`.
 
 ### Input bar
-Pinned above the keyboard. Rounded field (radius 12, `line` border) with a send arrow in
-`accent`. Light haptic on send. Placeholder `Message…`.
+Pinned above the keyboard. `surface` rounded field (radius 14) + a circular send button in
+`ink` (light) with a dark arrow. Light haptic on send. Placeholder `Message…`.
 
 ### Connect screen
-`title` heading, two fields (host, key), an expandable `Where do I find these?` help (on a
-faint `bubble` panel), one `accent` button. Errors in `error`, plain and specific.
+App mark + wordmark, `title` heading + one-line muted subtitle, two filled `surface` fields
+(host, key), an expandable `Where do I find these?` help (mono on `surface`), one light
+primary button. Errors in `error`, plain and specific. Vertically composed (not crammed at
+the top).
 
 ---
 
 ## Quality floor (just do it, don't announce it)
 
-- Contrast meets WCAG AA. Visible focus state in `accent`.
+- Text contrast meets WCAG AA on dark (primary ≥4.5:1, secondary ≥3:1).
+- Visible focus state in `accent`. Borders/dividers stay visible on dark.
 - Respects reduced motion (we have almost none anyway).
-- Works down to small phones; input never hidden by the keyboard.
+- Works down to small phones; input never hidden by the keyboard; safe areas respected.
 - Copy is active and specific: "Couldn't reach <host>", "Save changes" — never vague.
 
 ## Deferred (not v1)
 
-- Dark mode (tokens are semantic, so it's a later swap).
+- Light mode (tokens are semantic, so it's a later swap).
 - Syntax highlighting inside code blocks (plain monospace ships first).
