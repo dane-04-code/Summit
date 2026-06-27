@@ -23,6 +23,7 @@ export const colors = {
   bubble: '#1A1B1E',
   codeBg: '#1A1B1E',
   line: '#2A2B2F',
+  lineFocus: '#3E3F45', // input border when focused — a gentle lift, still grey
   accent: '#5B9DFF',
   onAccentBtn: '#0F1012',
   error: '#FF6B6B',

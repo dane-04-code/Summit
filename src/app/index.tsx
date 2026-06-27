@@ -114,7 +114,25 @@ export default function AgentScreen() {
   const flashListRef = useRef<FlashListRef<Message>>(null);
   const streamIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const insets = useSafeAreaInsets();
-  const sendAnim = usePressAnim();
+  const sendAnim = usePressAnim({ scale: 0.9 });
+
+  // Smoothly lift the input border from grey → lighter grey on focus.
+  const focusAnim = useRef(new Animated.Value(0)).current;
+  const animateFocus = useCallback(
+    (to: number) =>
+      Animated.timing(focusAnim, {
+        toValue: to,
+        duration: 160,
+        useNativeDriver: false, // border colour can't run on the native driver
+      }).start(),
+    [focusAnim],
+  );
+  const fieldBorderColor = focusAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [colors.line, colors.lineFocus],
+  });
+
+  const canSend = input.trim().length > 0 && !streaming;
 
   // Clean up any live stream interval on unmount
   useEffect(() => {
@@ -189,7 +207,6 @@ export default function AgentScreen() {
     const text = input.trim();
     if (!text || streaming) return;
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     setInput('');
 
     const userMsg: Message = { id: genId(), role: 'user', text };
@@ -265,32 +282,39 @@ export default function AgentScreen() {
           <View
             style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, space.md) }]}
           >
-            <TextInput
-              style={styles.textField}
-              value={input}
-              onChangeText={setInput}
-              placeholder="Message…"
-              placeholderTextColor={colors.muted}
-              returnKeyType="send"
-              onSubmitEditing={handleSend}
-              blurOnSubmit={false}
-              autoCorrect
-              multiline={false}
-              accessibilityLabel="Message input"
-            />
+            <Animated.View style={[styles.fieldWrap, { borderColor: fieldBorderColor }]}>
+              <TextInput
+                style={styles.textField}
+                value={input}
+                onChangeText={setInput}
+                placeholder="Message…"
+                placeholderTextColor={colors.muted}
+                returnKeyType="send"
+                onSubmitEditing={handleSend}
+                onFocus={() => animateFocus(1)}
+                onBlur={() => animateFocus(0)}
+                blurOnSubmit={false}
+                autoCorrect
+                multiline={false}
+                accessibilityLabel="Message input"
+              />
+            </Animated.View>
 
             <Pressable
               onPress={handleSend}
-              onPressIn={sendAnim.onPressIn}
+              onPressIn={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                sendAnim.onPressIn();
+              }}
               onPressOut={sendAnim.onPressOut}
-              disabled={streaming}
+              disabled={!canSend}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="Send message"
-              accessibilityState={{ disabled: streaming }}
+              accessibilityState={{ disabled: !canSend }}
             >
               <Animated.View
-                style={[styles.sendBtn, sendAnim.animStyle, streaming && styles.sendBtnDisabled]}
+                style={[styles.sendBtn, sendAnim.animStyle, !canSend && styles.sendBtnDisabled]}
               >
                 <ArrowUp size={20} color={colors.onAccentBtn} strokeWidth={2.5} />
               </Animated.View>
@@ -367,16 +391,20 @@ const styles = StyleSheet.create({
     borderTopColor: colors.line,
     backgroundColor: colors.bg,
   },
-  textField: {
+  // Box chrome lives on the wrapper so its border colour can animate on focus.
+  fieldWrap: {
     flex: 1,
-    ...typography.body,
-    color: colors.ink,
     height: 44,
+    justifyContent: 'center',
     borderWidth: 1,
-    borderColor: colors.line,
     borderRadius: radius.input,
     paddingHorizontal: space.md + 3,
     backgroundColor: colors.surface,
+  },
+  textField: {
+    ...typography.body,
+    color: colors.ink,
+    padding: 0, // strip RN's default vertical padding so text sits dead-centre
   },
   sendBtn: {
     width: 44,
@@ -387,6 +415,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendBtnDisabled: {
-    opacity: 0.5,
+    opacity: 0.38, // clearly reads as inactive when there's nothing to send
   },
 });
