@@ -32,6 +32,7 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
 
 # typescript
@@ -43,3 +44,6 @@ example
 /ios
 /android
 .gstack/
+
+# local MCP config (may contain credentials)
+.mcp.json
