@@ -6,7 +6,6 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "node": "24",
       "ios": {
         "simulator": false
       }
