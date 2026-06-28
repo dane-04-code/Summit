@@ -1,8 +1,9 @@
 /**
- * Agent chat screen — Agent Messenger.
- * Header + hybrid message thread + composer, per the Agent Messenger design.
- * Networking is stubbed (see ponytail comments); the opening thread is seeded
- * from `SEED_THREAD` and live sends stream a placeholder reply.
+ * Agent chat screen — Summit.
+ * Header + hybrid message thread + composer, per the Summit design.
+ * The thread is restored from the active agent's most recent saved session and
+ * live sends stream through the agent adapter. (The sidebar still reads seed
+ * data — wired in the history slice.)
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -28,22 +29,19 @@ import { Header } from '@/ui/chat/Header';
 import { AgentMessage } from '@/ui/chat/AgentMessage';
 import { ApprovalCard } from '@/ui/chat/ApprovalCard';
 import { Sidebar } from '@/ui/chat/Sidebar';
-import { SEED_THREAD, RECENT_CHATS, ACTIVE_CHAT_ID, ACCOUNT } from '@/ui/chat/seed';
-import type { Message, AgentBlock, RunState } from '@/ui/chat/types';
+import { MdReader } from '@/ui/chat/MdReader';
+import { RECENT_CHATS, ACTIVE_CHAT_ID, ACCOUNT } from '@/ui/chat/seed';
+import type { Message, AgentBlock, RunState, MarkdownFile } from '@/ui/chat/types';
+import { useAgents } from '@/agents/AgentProvider';
+import { initialTurn, reduceTurn, turnToBlocks } from '@/ui/chat/streamReducer';
+import type { ChatSession } from '@/agents/types';
 
 // ---------------------------------------------------------------------------
-// Stub streaming data
-// ponytail: replace stub stream with real hermes.sendMessage()
+// Live streaming helpers
 // ---------------------------------------------------------------------------
 
 const AGENT_NAME = 'Hermes';
-const RUNNING_HINT = 'searching the web…';
-
-const STUB_WORDS =
-  'Got it. Let me check — everything looks good on my end. Feel free to ask anything else.'.split(
-    ' ',
-  );
-const STREAM_INTERVAL_MS = Math.round(1200 / STUB_WORDS.length);
+const RUNNING_HINT = 'working…';
 
 function genId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -63,10 +61,12 @@ function MessageRow({
   message,
   onApprove,
   onStop,
+  onOpenFile,
 }: {
   message: Message;
   onApprove: (id: string) => void;
   onStop: (id: string) => void;
+  onOpenFile: (file: MarkdownFile) => void;
 }) {
   if (message.role === 'user') {
     return (
@@ -93,7 +93,7 @@ function MessageRow({
 
   return (
     <View style={styles.block}>
-      <AgentMessage blocks={message.blocks} />
+      <AgentMessage blocks={message.blocks} onOpenFile={onOpenFile} />
     </View>
   );
 }
@@ -103,16 +103,18 @@ function MessageRow({
 // ---------------------------------------------------------------------------
 
 export default function AgentScreen() {
-  const [messages, setMessages] = useState<Message[]>(SEED_THREAD);
+  const { activeAgent, adapterFor, repo } = useAgents();
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
-  const [status, setStatus] = useState<RunState>('running');
-  // True only while a live reply is streaming — gates the composer. Kept
-  // separate from `status` so the seeded "running" state still accepts input.
+  const [status, setStatus] = useState<RunState>('idle');
+  // True only while a live reply is streaming — gates the composer.
   const [streaming, setStreaming] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [openFile, setOpenFile] = useState<MarkdownFile | null>(null);
 
   const flashListRef = useRef<FlashListRef<Message>>(null);
-  const streamIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionRef = useRef<ChatSession | null>(null);
+  const cancelledRef = useRef(false);
   const insets = useSafeAreaInsets();
   const sendAnim = usePressAnim({ scale: 0.9 });
 
@@ -134,14 +136,30 @@ export default function AgentScreen() {
 
   const canSend = input.trim().length > 0 && !streaming;
 
-  // Clean up any live stream interval on unmount
+  // Guard against setState after the screen unmounts mid-stream.
   useEffect(() => {
     return () => {
-      if (streamIntervalRef.current !== null) {
-        clearInterval(streamIntervalRef.current);
-      }
+      cancelledRef.current = true;
     };
   }, []);
+
+  // Restore the most recent thread for the active agent (docs/AGENTS.md §6).
+  useEffect(() => {
+    if (!activeAgent) return;
+    let cancelled = false;
+    (async () => {
+      const sessions = await repo.listSessions(activeAgent.id); // newest-first
+      const latest = sessions[0] ?? null;
+      if (!latest || cancelled) return;
+      const stored = await repo.listMessages(latest.id); // oldest-first
+      if (cancelled) return;
+      sessionRef.current = latest;
+      setMessages(stored.map((s) => s.message));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAgent, repo]);
 
   // Scroll to newest content whenever the thread changes (including mid-stream)
   useEffect(() => {
@@ -156,11 +174,8 @@ export default function AgentScreen() {
     status === 'running' ? 'running' : status === 'error' ? 'connection error' : 'ready';
 
   const handleNewChat = useCallback(() => {
-    if (streamIntervalRef.current !== null) {
-      clearInterval(streamIntervalRef.current);
-      streamIntervalRef.current = null;
-    }
     Haptics.selectionAsync().catch(() => {});
+    sessionRef.current = null;
     setMessages([]);
     setInput('');
     setStreaming(false);
@@ -173,14 +188,24 @@ export default function AgentScreen() {
     setSidebarOpen(true);
   }, []);
 
+  const handleOpenFile = useCallback((file: MarkdownFile) => {
+    Haptics.selectionAsync().catch(() => {});
+    setOpenFile(file);
+  }, []);
+
   const handleSelectChat = useCallback((_id: string) => {
-    // ponytail: load the selected conversation's history when sessions land
+    // ponytail: load the selected conversation's history when the history slice lands
     setSidebarOpen(false);
   }, []);
 
   const handleOpenSettings = useCallback(() => {
     setSidebarOpen(false);
     router.push('/(app)/settings');
+  }, []);
+
+  const handleOpenCron = useCallback(() => {
+    setSidebarOpen(false);
+    router.push('/(app)/cron');
   }, []);
 
   const handleApprove = useCallback((id: string) => {
@@ -197,46 +222,94 @@ export default function AgentScreen() {
   const handleStop = useCallback((id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     setMessages((prev) =>
-      prev.map((m) =>
-        m.id === id ? agentText(`${id}-result`, 'Stopped. Nothing was run.') : m,
-      ),
+      prev.map((m) => (m.id === id ? agentText(`${id}-result`, 'Stopped. Nothing was run.') : m)),
     );
   }, []);
 
-  const handleSend = useCallback(() => {
-    const text = input.trim();
-    if (!text || streaming) return;
+  const ensureSession = useCallback(async (): Promise<ChatSession> => {
+    if (sessionRef.current) return sessionRef.current;
+    const now = Date.now();
+    const session: ChatSession = {
+      id: genId(),
+      agentId: activeAgent!.id,
+      title: null,
+      remoteSessionKey: genId(), // stable channel identity for X-Hermes-Session-Key
+      createdAt: now,
+      updatedAt: now,
+    };
+    await repo.upsertSession(session);
+    sessionRef.current = session;
+    return session;
+  }, [activeAgent, repo]);
 
+  const handleSend = useCallback(async () => {
+    const text = input.trim();
+    if (!text || streaming || !activeAgent) return;
     setInput('');
 
+    const session = await ensureSession();
+    const now = Date.now();
     const userMsg: Message = { id: genId(), role: 'user', text };
+    await repo.appendMessage({ id: userMsg.id, sessionId: session.id, message: userMsg, createdAt: now });
+
     const agentId = genId();
-    setMessages((prev) => [...prev, userMsg, agentText(agentId, '')]);
+    setMessages((prev) => [
+      ...prev,
+      userMsg,
+      { id: agentId, role: 'agent', blocks: [{ kind: 'markdown', source: '' }] },
+    ]);
     setStreaming(true);
     setStatus('running');
 
-    // ponytail: replace stub stream with real hermes.sendMessage()
-    let wordIndex = 0;
-    if (streamIntervalRef.current !== null) clearInterval(streamIntervalRef.current);
-
-    streamIntervalRef.current = setInterval(() => {
-      wordIndex += 1;
-      const streamed = STUB_WORDS.slice(0, wordIndex).join(' ');
-
-      setMessages((prev) =>
-        prev.map((m) => (m.id === agentId ? agentText(agentId, streamed) : m)),
-      );
-
-      if (wordIndex >= STUB_WORDS.length) {
-        if (streamIntervalRef.current !== null) {
-          clearInterval(streamIntervalRef.current);
-          streamIntervalRef.current = null;
-        }
-        setStreaming(false);
-        setStatus('idle');
+    let turn = initialTurn;
+    try {
+      const stream = adapterFor(activeAgent).sendMessage(text, {
+        sessionId: session.id,
+        sessionKey: session.remoteSessionKey ?? undefined,
+      });
+      for await (const event of stream) {
+        turn = reduceTurn(turn, event);
+        if (cancelledRef.current) return;
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === agentId ? { id: agentId, role: 'agent', blocks: turnToBlocks(turn) } : m,
+          ),
+        );
+        if (turn.done) break;
       }
-    }, STREAM_INTERVAL_MS);
-  }, [input, streaming]);
+    } catch {
+      turn = { ...turn, status: 'error', error: 'The connection to the agent dropped.', done: true };
+    }
+
+    if (cancelledRef.current) return;
+    setStreaming(false);
+
+    if (turn.status === 'error') {
+      setStatus('error');
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === agentId
+            ? {
+                id: agentId,
+                role: 'agent',
+                blocks: [
+                  { kind: 'text', spans: [{ text: turn.error ?? 'Something went wrong.' }], tone: 'muted' },
+                ],
+              }
+            : m,
+        ),
+      );
+      return;
+    }
+
+    setStatus('idle');
+    const settled: Message = { id: agentId, role: 'agent', blocks: turnToBlocks(turn) };
+    await repo.appendMessage({ id: agentId, sessionId: session.id, message: settled, createdAt: Date.now() });
+    const title = session.title ?? text.slice(0, 40);
+    const updated: ChatSession = { ...session, title, updatedAt: Date.now() };
+    await repo.upsertSession(updated);
+    sessionRef.current = updated;
+  }, [input, streaming, activeAgent, adapterFor, repo, ensureSession]);
 
   return (
     <>
@@ -265,7 +338,12 @@ export default function AgentScreen() {
             ref={flashListRef}
             data={messages}
             renderItem={({ item }) => (
-              <MessageRow message={item} onApprove={handleApprove} onStop={handleStop} />
+              <MessageRow
+                message={item}
+                onApprove={handleApprove}
+                onStop={handleStop}
+                onOpenFile={handleOpenFile}
+              />
             )}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
@@ -332,7 +410,10 @@ export default function AgentScreen() {
         onNewChat={handleNewChat}
         onSelectChat={handleSelectChat}
         onOpenSettings={handleOpenSettings}
+        onOpenCron={handleOpenCron}
       />
+
+      <MdReader file={openFile} onClose={() => setOpenFile(null)} />
     </>
   );
 }
