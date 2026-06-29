@@ -1,0 +1,29 @@
+name: Deploy Relay
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'relay/**'
+      - 'protocol/**'
+      - '.github/workflows/deploy-relay.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install relay deps
+        run: npm install
+        working-directory: relay
+
+      - name: Deploy to Cloudflare
+        run: npx wrangler deploy
+        working-directory: relay
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

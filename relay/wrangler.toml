@@ -3,10 +3,14 @@ main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+routes = [
+  { pattern = "relay.summitapp.dev", custom_domain = true }
+]
+
 [[durable_objects.bindings]]
 name = "PAIRING_CHANNEL"
 class_name = "PairingChannel"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["PairingChannel"]
+new_sqlite_classes = ["PairingChannel"]
