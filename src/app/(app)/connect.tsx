@@ -148,6 +148,10 @@ export default function ConnectScreen() {
                 <Text style={styles.primaryBtnText}>Connect</Text>
               )}
             </Pressable>
+
+            <Pressable onPress={() => router.push('/(app)/pair' as '/')} hitSlop={8}>
+              <Text style={styles.pairLink}>Use pairing code instead</Text>
+            </Pressable>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -212,4 +216,5 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.4 },
   primaryBtnText: { ...typography.body, fontWeight: '600', color: colors.bg },
+  pairLink: { ...typography.caption, color: colors.muted, textAlign: 'center', marginTop: space.sm },
 });

@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useAgents } from '@/agents/AgentProvider';
 
-/** Forces the Connect screen when no agent is configured yet. */
 function AgentGuard() {
   const { ready, activeAgent } = useAgents();
   const segments = useSegments();
@@ -10,9 +9,10 @@ function AgentGuard() {
 
   useEffect(() => {
     if (!ready) return;
-    const onConnect = segments[segments.length - 1] === 'connect';
-    if (!activeAgent && !onConnect) {
-      router.replace('/(app)/connect');
+    const last = segments[segments.length - 1] as string;
+    const onOnboarding = last === 'connect' || last === 'pair';
+    if (!activeAgent && !onOnboarding) {
+      router.replace('/(app)/pair' as '/');  // typed route added on next expo start
     }
   }, [ready, activeAgent, segments]);
 
@@ -25,6 +25,7 @@ export default function AppLayout() {
       <AgentGuard />
       <Stack>
         <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="pair" options={{ headerShown: false }} />
         <Stack.Screen name="connect" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         <Stack.Screen name="cron" options={{ headerShown: false }} />
