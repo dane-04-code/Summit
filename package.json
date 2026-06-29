@@ -78,9 +78,9 @@
     ],
     "testPathIgnorePatterns": [
       "/node_modules/",
-      "/relay/",
-      "/connector/",
-      "/protocol/"
+      "<rootDir>/relay/",
+      "<rootDir>/connector/",
+      "<rootDir>/protocol/"
     ],
     "moduleNameMapper": {
       "^@testing-library/react-native/extend-expect$": "<rootDir>/node_modules/@testing-library/react-native/dist/matchers/extend-expect"
