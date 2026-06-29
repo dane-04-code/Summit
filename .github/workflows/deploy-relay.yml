@@ -2,7 +2,7 @@ name: Deploy Relay
 
 on:
   push:
-    branches: [main]
+    branches: [main, build/first-pages]
     paths:
       - 'relay/**'
       - 'protocol/**'
