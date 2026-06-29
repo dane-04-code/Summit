@@ -1,3 +1,6 @@
 Task: Scaffold — complete (commit 9426f61, branch build/first-pages, test+tsc green)
 Task: Connect screen — complete (commit 3b6e36f, design-system faithful, tsc+test green)
 Task: Agent screen — complete (commit d55b9bf, hybrid layout, FlashList, faithful, tsc+test green)
+Task: Agent connection + persistence backend — complete (docs/AGENTS.md + src/agents/ + src/db/; SecureStore secrets, expo-sqlite store, adapter abstraction (Hermes real / OpenClaw stub), AgentProvider rehydrates on boot; tsc+lint+test green, 28 tests). Not yet wired into chat screen (stub stream remains).
+Task: Wiring core loop — complete (direct-mode connect helper + tests; Connect screen + no-agent route guard; stream reducer + tests; chat screen wired to live Hermes adapter + SQLite persistence; tsc+test green). App now works end-to-end against a real Hermes server.
+Task: Relay walking skeleton (slice 3a) — complete (commits 8b195d2→670c046; monorepo layout /relay/ /connector/ /protocol/; Cloudflare Worker + PairingChannel Durable Object relay; Go connector (written, not yet deployed); RelayClient + RelayAdapter + pair screen as primary onboarding; tsc+test green: 79 app tests + 9 relay logic tests). Relay deploy to Cloudflare + connector install script are slice 3c.

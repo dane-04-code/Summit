@@ -1,6 +1,6 @@
 # Connection Architecture
 
-**Status:** Direction set, infra unbuilt | Supersedes the "direct API client" assumption in PRD §6 | Last updated 2026-06-25
+**Status:** Slice 3a built — relay + connector + pair screen wired | Cloudflare deploy + install script are slice 3c | Last updated 2026-06-29
 
 ---
 
@@ -58,6 +58,10 @@ relay we operate; the direct-API-host model survives only as an optional advance
   token), then enters a **6-digit pairing code** in the app. Done.
 - **Reach:** works anywhere, on cellular, immediately. Nothing on the user's end is exposed.
 - **Cost to us:** we build and run relay infra (it becomes a critical path).
+
+**Production domain convention:** hosted relay services live under `summitapp.dev`:
+`relay.summitapp.dev` for WebSocket relay traffic, `api.summitapp.dev` for pairing/API requests, and
+`get.summitapp.dev` for the connector installer.
 
 ### Mode B — Direct (advanced / no-middleman)
 - **Setup:** user pastes a globally reachable host + API key (their domain, Cloudflare/ngrok tunnel,
@@ -131,13 +135,13 @@ The agent does the plumbing; the human just relays a code.
 
 **Example prompt (Hermes):**
 ```
-You're connecting yourself to the Agent Messenger mobile app so I can reach you
+You're connecting yourself to the Summit mobile app so I can reach you
 from my phone. Run this exact command, then tell me the 6-digit code it prints:
 
-    curl -fsSL https://get.agentmsgr.app/connect | sh
+    curl -fsSL https://get.summitapp.dev/connect | sh
 
 It installs a small background connector that bridges your local Hermes API to the
-Agent Messenger relay. It reads your API key from ~/.hermes/.env and runs as a
+Summit relay. It reads your API key from ~/.hermes/.env and runs as a
 service. If anything errors, paste the full output back to me.
 ```
 
