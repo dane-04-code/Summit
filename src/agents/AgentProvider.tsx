@@ -23,6 +23,8 @@ type AgentContextValue = {
   activeAgent: Agent | null;
   /** Persist a new agent + its secret, make it active, return it. */
   addAgent: (input: NewAgentInput, secret: string) => Promise<Agent>;
+  /** Update the secret for an existing agent and drop its cached adapter. */
+  repairAgent: (id: string, secret: string) => Promise<void>;
   removeAgent: (id: string) => Promise<void>;
   selectAgent: (id: string) => Promise<void>;
   /** Build the adapter for an agent (lazy Keychain read for its secret). */
@@ -76,6 +78,11 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     return agent;
   };
 
+  const repairAgent = async (id: string, secret: string): Promise<void> => {
+    await setAgentSecret(id, secret);
+    adapterCache.current.delete(id);
+  };
+
   const removeAgent = async (id: string): Promise<void> => {
     await deleteAgentSecret(id);
     await repo.deleteAgent(id);
@@ -113,6 +120,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     agents,
     activeAgent: resolveActive(agents, activeId),
     addAgent,
+    repairAgent,
     removeAgent,
     selectAgent,
     adapterFor,
