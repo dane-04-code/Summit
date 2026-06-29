@@ -30,7 +30,7 @@ import { AgentMessage } from '@/ui/chat/AgentMessage';
 import { ApprovalCard } from '@/ui/chat/ApprovalCard';
 import { Sidebar } from '@/ui/chat/Sidebar';
 import { MdReader } from '@/ui/chat/MdReader';
-import { RECENT_CHATS, ACTIVE_CHAT_ID, ACCOUNT } from '@/ui/chat/seed';
+import { useAuth } from '@/context/AuthContext';
 import type { Message, AgentBlock, RunState, MarkdownFile } from '@/ui/chat/types';
 import { useAgents } from '@/agents/AgentProvider';
 import { initialTurn, reduceTurn, turnToBlocks } from '@/ui/chat/streamReducer';
@@ -104,6 +104,9 @@ function MessageRow({
 
 export default function AgentScreen() {
   const { activeAgent, adapterFor, repo } = useAgents();
+  const { user } = useAuth();
+  const accountName = user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'You';
+  const account = { name: accountName, initial: accountName[0]?.toUpperCase() ?? '?' };
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<RunState>('idle');
@@ -403,9 +406,9 @@ export default function AgentScreen() {
 
       <Sidebar
         visible={sidebarOpen}
-        groups={RECENT_CHATS}
-        activeId={ACTIVE_CHAT_ID}
-        account={ACCOUNT}
+        groups={[]}
+        activeId=""
+        account={account}
         onClose={() => setSidebarOpen(false)}
         onNewChat={handleNewChat}
         onSelectChat={handleSelectChat}

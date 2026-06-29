@@ -57,8 +57,10 @@ export class PairingChannel {
       ? handleConnectorMessage(this.state, frame)
       : handleAppMessage(this.state, frame);
 
-    this.state = result.state;
-    await this.doState.storage.put('state', this.state);
+    if (result.state !== this.state) {
+      this.state = result.state;
+      await this.doState.storage.put('state', this.state);
+    }
     this.dispatch(result.effects);
   }
 
