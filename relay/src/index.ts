@@ -1,4 +1,5 @@
 import { PairingChannel } from './channel';
+import { INSTALL_SCRIPT } from './install-script';
 
 export { PairingChannel };
 
@@ -8,11 +9,19 @@ export interface Env {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+
+    // Serve the connector install script at get.summitapp.dev/connect
+    if (url.hostname === 'get.summitapp.dev' && url.pathname === '/connect') {
+      return new Response(INSTALL_SCRIPT, {
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      });
+    }
+
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('Summit Relay — WebSocket only', { status: 200 });
     }
 
-    const url = new URL(request.url);
     const code = url.searchParams.get('code');
 
     if (code) {

@@ -1,0 +1,41 @@
+name: Release Connector
+
+on:
+  push:
+    branches: [main, build/first-pages]
+    paths:
+      - 'connector/**'
+      - '.github/workflows/release-connector.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build connectors
+        run: |
+          cd connector
+          GOOS=linux GOARCH=amd64 go build -o connector-linux-amd64 .
+          GOOS=linux GOARCH=arm64 go build -o connector-linux-arm64 .
+          GOOS=darwin GOARCH=amd64 go build -o connector-darwin-amd64 .
+          GOOS=darwin GOARCH=arm64 go build -o connector-darwin-arm64 .
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: connector-latest
+          name: Connector (latest build)
+          prerelease: true
+          files: |
+            connector/connector-linux-amd64
+            connector/connector-linux-arm64
+            connector/connector-darwin-amd64
+            connector/connector-darwin-arm64
