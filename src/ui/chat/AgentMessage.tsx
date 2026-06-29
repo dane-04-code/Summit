@@ -11,12 +11,15 @@ import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 
 import { colors, radius, space, typography } from '../../theme';
+import { MdFileCard } from './MdFileCard';
+import { RichMarkdown } from './richMarkdown';
 import {
   type AgentBlock,
   type RunState,
   type ServiceRow,
   type Span,
   type CodeLine,
+  type MarkdownFile,
   codeToText,
 } from './types';
 
@@ -135,7 +138,13 @@ function ToolChip({ state, label }: { state: RunState; label: string }) {
 
 // ── Block dispatcher ────────────────────────────────────────────────────────
 
-export function AgentMessage({ blocks }: { blocks: AgentBlock[] }) {
+export function AgentMessage({
+  blocks,
+  onOpenFile,
+}: {
+  blocks: AgentBlock[];
+  onOpenFile?: (file: MarkdownFile) => void;
+}) {
   return (
     <View style={styles.message}>
       {blocks.map((block, i) => {
@@ -154,6 +163,12 @@ export function AgentMessage({ blocks }: { blocks: AgentBlock[] }) {
             return <CodeBlock key={i} lines={block.lines} />;
           case 'chip':
             return <ToolChip key={i} state={block.state} label={block.label} />;
+          case 'file':
+            return (
+              <MdFileCard key={i} file={block.file} onOpen={() => onOpenFile?.(block.file)} />
+            );
+          case 'markdown':
+            return <RichMarkdown key={i} source={block.source} onOpenMdFile={onOpenFile} />;
         }
       })}
     </View>
