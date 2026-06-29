@@ -128,12 +128,21 @@ runs from the phone.
 
 - **Slice 1 — direct mode.** `src/app/(app)/connect.tsx`: host + API key, calls Hermes directly.
   Works only where the host is reachable (LAN / Tailscale / tunnel). (`ONBOARDING.md`)
-- **Slice 3a — relay mode.** `src/app/(app)/pair.tsx` is the **primary onboarding** path. A Go
-  **connector sidecar** (`/connector/`) runs next to Hermes and dials outbound to a Cloudflare Worker
-  relay (`/relay/`); the app pairs with a **6-digit code** over WebSocket. Shared frame types are in
-  `/protocol/`. `RELAY_WS_URL` in `src/config.ts` is `ws://localhost:8787` in dev and
-  `wss://relay.summitapp.dev` in prod. **Not yet deployed** to Cloudflare (`wrangler deploy` is
-  slice 3c), and the agent-assisted install script (`get.summitapp.dev/connect`) is not yet built.
+- **Slice 3a/3b/3c — relay mode** (fully deployed). `src/app/(app)/pair.tsx` is the **primary
+  onboarding** path — a 3-step screen: copyable agent prompt → copyable curl command → 6-digit code
+  entry. A Go **connector sidecar** (`/connector/`) runs next to Hermes and dials outbound to a
+  Cloudflare Worker relay (`/relay/`). Shared frame types in `/protocol/`. Key details:
+  - **Relay live** at `wss://relay.summitapp.dev` (Cloudflare Worker + Durable Object).
+  - **Install script live** at `https://get.summitapp.dev/connect` — served by the same relay Worker
+    (`relay/src/install-script.ts`). `curl -fsSL https://get.summitapp.dev/connect | sh` detects
+    arch, reads Hermes API key from `~/.hermes/.env`, daemonizes via systemd or nohup, prints code.
+  - **Connector binaries** on GitHub Releases (`connector-latest` tag) for linux/darwin amd64+arm64,
+    built by `.github/workflows/release-connector.yml` on every push.
+  - **CI deploy** via `.github/workflows/deploy-relay.yml` — runs `wrangler deploy` on push.
+  - **Cloudflare gotchas:** free plan requires `new_sqlite_classes` (not `new_classes`) in
+    `relay/wrangler.toml`; wrangler@4 required (v3 doesn't support it); custom domains must be
+    attached manually in the dashboard (API token from "Edit Cloudflare Workers" template lacks DNS
+    permissions). `RELAY_WS_URL` in `src/config.ts` is `ws://localhost:8787` dev / `wss://relay.summitapp.dev` prod.
 
 The no-agent guard in `src/app/(app)/_layout.tsx` redirects to `/pair` (relay-first). The connect
 screen is the "advanced" escape hatch, linked from the pair screen.

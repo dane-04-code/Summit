@@ -1,6 +1,6 @@
 # Connection Architecture
 
-**Status:** Slice 3a built — relay + connector + pair screen wired | Cloudflare deploy + install script are slice 3c | Last updated 2026-06-29
+**Status:** Slices 3a–3c complete — relay deployed, install script live, pair screen shipped | Last updated 2026-06-29
 
 ---
 
