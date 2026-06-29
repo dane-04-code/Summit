@@ -12,7 +12,15 @@ import type { AnyFrame } from '../../protocol/protocol';
 export class PairingChannel {
   private state: ChannelState = makeInitialState();
 
-  constructor(private readonly doState: DurableObjectState) {}
+  constructor(private readonly doState: DurableObjectState) {
+    // Reload persisted state on every wake — the DO hibernates between messages
+    // and loses all in-memory state. Without this, connectorInfo is always null
+    // when the app sends its pair frame.
+    this.doState.blockConcurrencyWhile(async () => {
+      const stored = await this.doState.storage.get<ChannelState>('state');
+      if (stored) this.state = stored;
+    });
+  }
 
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get('Upgrade') !== 'websocket') {
@@ -30,6 +38,7 @@ export class PairingChannel {
       const result = handleConnectorOpen(this.state, code);
       if (result.occupied) return new Response('Already occupied', { status: 409 });
       this.state = result.state;
+      await this.doState.storage.put('state', this.state);
       this.doState.acceptWebSocket(server, ['connector']);
     } else {
       this.doState.acceptWebSocket(server, ['app']);
@@ -49,6 +58,7 @@ export class PairingChannel {
       : handleAppMessage(this.state, frame);
 
     this.state = result.state;
+    await this.doState.storage.put('state', this.state);
     this.dispatch(result.effects);
   }
 
@@ -58,6 +68,7 @@ export class PairingChannel {
       ? handleConnectorClose(this.state)
       : handleAppClose(this.state);
     this.state = result.state;
+    await this.doState.storage.put('state', this.state);
     this.dispatch(result.effects);
   }
 
