@@ -1,0 +1,12 @@
+name = "summit-relay"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[[durable_objects.bindings]]
+name = "PAIRING_CHANNEL"
+class_name = "PairingChannel"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["PairingChannel"]
