@@ -18,7 +18,9 @@ export function makeInitialState(): ChannelState {
 }
 
 export function handleConnectorOpen(state: ChannelState, code: string): HandleResult {
-  if (state.code !== null) {
+  // Occupied only when a connector is actively connected right now.
+  // A code left over from a previous (now-closed) connection is not occupied.
+  if (state.connectorInfo !== null) {
     return { state, effects: [], occupied: true };
   }
   // Store the code; wait for hello before replying with it

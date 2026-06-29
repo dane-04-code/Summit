@@ -56,10 +56,26 @@ func main() {
 	}
 }
 
-func run(relayURL, hermesBase, apiKey string) error {
-	conn, _, err := websocket.DefaultDialer.Dial(relayURL, nil)
+func savedPairingCode() string {
+	home, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("dial relay %s: %w", relayURL, err)
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".summit", "pairing_code"))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+func run(relayURL, hermesBase, apiKey string) error {
+	target := relayURL
+	if code := savedPairingCode(); code != "" {
+		target += "?claim=" + code
+	}
+	conn, _, err := websocket.DefaultDialer.Dial(target, nil)
+	if err != nil {
+		return fmt.Errorf("dial relay %s: %w", target, err)
 	}
 	defer conn.Close()
 	log.Printf("connected to relay %s", relayURL)

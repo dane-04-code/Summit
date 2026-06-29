@@ -23,6 +23,7 @@ export default {
     }
 
     const code = url.searchParams.get('code');
+    const claim = url.searchParams.get('claim');
 
     if (code) {
       // App connecting: route by existing code
@@ -32,7 +33,16 @@ export default {
       return env.PAIRING_CHANNEL.get(id).fetch(new Request(url2.toString(), request));
     }
 
-    // Connector connecting: mint a unique 6-digit code
+    if (claim) {
+      // Connector reconnecting: reclaim its saved code so the pairing code stays stable.
+      const id = env.PAIRING_CHANNEL.idFromName(claim);
+      const url2 = new URL(request.url);
+      url2.searchParams.set('code', claim);
+      url2.searchParams.set('role', 'connector');
+      return env.PAIRING_CHANNEL.get(id).fetch(new Request(url2.toString(), request));
+    }
+
+    // Connector connecting for the first time: mint a unique 6-digit code
     for (let i = 0; i < 5; i++) {
       const newCode = String(Math.floor(100000 + Math.random() * 900000));
       const id = env.PAIRING_CHANNEL.idFromName(newCode);
