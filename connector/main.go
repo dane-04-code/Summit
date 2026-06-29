@@ -86,12 +86,13 @@ func run(relayURL, hermesBase, apiKey string) error {
 		return fmt.Errorf("send hello: %w", err)
 	}
 
-	// Keep the Cloudflare connection alive — it drops idle WebSockets after ~2 min.
+	// Keep the Cloudflare connection alive with application-level heartbeats.
+	// Cloudflare's idle timer resets on JSON messages, not WebSocket control pings.
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(10*time.Second)); err != nil {
+			if err := conn.WriteJSON(Frame{T: "ping"}); err != nil {
 				return
 			}
 		}
@@ -119,6 +120,8 @@ func run(relayURL, hermesBase, apiKey string) error {
 			go handleChat(conn, f, f.SessionID, f.SessionKey, hermesBase, apiKey)
 		case "peer_gone":
 			fmt.Println("App disconnected — waiting for reconnect.")
+		case "pong":
+			// heartbeat reply — nothing to do
 		default:
 			log.Printf("unknown frame %q", f.T)
 		}

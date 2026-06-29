@@ -37,6 +37,11 @@ export function handleConnectorMessage(state: ChannelState, frame: AnyFrame): Ha
       effects: [{ to: 'connector', frame: { t: 'code', code: state.code! } }],
     };
   }
+  if (frame.t === 'ping') {
+    // Application-level heartbeat — reply immediately so Cloudflare's idle timer
+    // resets. Control-frame pings don't reset it; JSON messages do.
+    return { state, effects: [{ to: 'connector', frame: { t: 'pong' } }] };
+  }
   // chunk / done / error — forward to app
   return { state, effects: [{ to: 'app', frame }] };
 }

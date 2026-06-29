@@ -6,6 +6,8 @@ export type PairFrame       = { t: 'pair'; code: string };
 export type PairedFrame     = { t: 'paired'; framework: string; agentName: string; agentVersion: string };
 export type PairErrorFrame  = { t: 'pair_error'; reason: 'not_found' | 'expired' | 'already_paired' };
 export type PeerGoneFrame   = { t: 'peer_gone' };
+export type PingFrame       = { t: 'ping' };
+export type PongFrame       = { t: 'pong' };
 export type ChatMessage     = { role: 'user' | 'assistant' | 'system'; content: string };
 export type ChatFrame       = { t: 'chat'; reqId: string; messages: ChatMessage[]; sessionId?: string; sessionKey?: string };
 export type ChunkFrame      = { t: 'chunk'; reqId: string; delta: string };
@@ -14,4 +16,4 @@ export type ErrorFrame      = { t: 'error'; reqId?: string; message: string };
 
 export type AnyFrame =
   | HelloFrame | CodeFrame | PairFrame | PairedFrame | PairErrorFrame
-  | PeerGoneFrame | ChatFrame | ChunkFrame | DoneFrame | ErrorFrame;
+  | PeerGoneFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | DoneFrame | ErrorFrame;
