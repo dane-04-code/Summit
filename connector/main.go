@@ -23,6 +23,8 @@ type Frame struct {
 	Delta        string        `json:"delta,omitempty"`
 	Message      string        `json:"message,omitempty"`
 	Messages     []ChatMessage `json:"messages,omitempty"`
+	SessionID    string        `json:"sessionId,omitempty"`
+	SessionKey   string        `json:"sessionKey,omitempty"`
 }
 
 // ChatMessage matches the OpenAI messages array shape.
@@ -98,7 +100,7 @@ func run(relayURL, hermesBase, apiKey string) error {
 				os.WriteFile(filepath.Join(dir, "pairing_code"), []byte(f.Code+"\n"), 0600)
 			}
 		case "chat":
-			go handleChat(conn, f, hermesBase, apiKey)
+			go handleChat(conn, f, f.SessionID, f.SessionKey, hermesBase, apiKey)
 		case "peer_gone":
 			fmt.Println("App disconnected — waiting for reconnect.")
 		default:
@@ -107,8 +109,8 @@ func run(relayURL, hermesBase, apiKey string) error {
 	}
 }
 
-func handleChat(conn *websocket.Conn, f Frame, hermesBase, apiKey string) {
-	for frame := range streamChat(f.Messages, hermesBase, apiKey) {
+func handleChat(conn *websocket.Conn, f Frame, sessionID, sessionKey, hermesBase, apiKey string) {
+	for frame := range streamChat(f.Messages, sessionID, sessionKey, hermesBase, apiKey) {
 		frame.ReqID = f.ReqID
 		if err := conn.WriteJSON(frame); err != nil {
 			log.Printf("write frame: %v", err)

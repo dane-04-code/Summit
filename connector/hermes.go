@@ -12,7 +12,7 @@ import (
 
 // streamChat calls Hermes /v1/chat/completions with stream:true and returns a
 // channel of frames (chunk per token, then done; error on any failure).
-func streamChat(messages []ChatMessage, baseURL, apiKey string) <-chan Frame {
+func streamChat(messages []ChatMessage, sessionID, sessionKey, baseURL, apiKey string) <-chan Frame {
 	ch := make(chan Frame, 64)
 	go func() {
 		defer close(ch)
@@ -34,6 +34,12 @@ func streamChat(messages []ChatMessage, baseURL, apiKey string) <-chan Frame {
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+apiKey)
+		if sessionID != "" {
+			req.Header.Set("X-Hermes-Session-Id", sessionID)
+		}
+		if sessionKey != "" {
+			req.Header.Set("X-Hermes-Session-Key", sessionKey)
+		}
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {

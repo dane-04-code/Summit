@@ -45,9 +45,9 @@ export class RelayClient {
     });
   }
 
-  async *chat(messages: ChatMessage[], reqId: string): AsyncIterable<StreamEvent> {
+  async *chat(messages: ChatMessage[], reqId: string, sessionId?: string, sessionKey?: string): AsyncIterable<StreamEvent> {
     const ws = this.getWs();
-    ws.send(JSON.stringify({ t: 'chat', reqId, messages }));
+    ws.send(JSON.stringify({ t: 'chat', reqId, messages, sessionId, sessionKey }));
 
     const queue: StreamEvent[] = [];
     let notify: (() => void) | null = null;

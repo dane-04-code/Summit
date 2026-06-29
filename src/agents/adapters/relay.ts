@@ -28,7 +28,7 @@ export class RelayAdapter implements AgentAdapter {
     const client = await this.ensureConnected();
     const messages: ChatMessage[] = [{ role: 'user', content }];
     const reqId = opts?.sessionId ?? String(Date.now());
-    yield* client.chat(messages, reqId);
+    yield* client.chat(messages, reqId, opts?.sessionId, opts?.sessionKey);
   }
 
   async testConnection(): Promise<AgentCapabilities> {
