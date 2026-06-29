@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -44,9 +46,18 @@ func main() {
 		hermesBase = "http://" + hermesBase
 	}
 
+	for {
+		if err := run(relayURL, hermesBase, apiKey); err != nil {
+			log.Printf("disconnected: %v — reconnecting in 5s", err)
+		}
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func run(relayURL, hermesBase, apiKey string) error {
 	conn, _, err := websocket.DefaultDialer.Dial(relayURL, nil)
 	if err != nil {
-		log.Fatalf("dial relay %s: %v", relayURL, err)
+		return fmt.Errorf("dial relay %s: %w", relayURL, err)
 	}
 	defer conn.Close()
 	log.Printf("connected to relay %s", relayURL)
@@ -54,14 +65,24 @@ func main() {
 	if err := conn.WriteJSON(Frame{
 		T: "hello", Framework: "hermes", AgentName: "Hermes", AgentVersion: "1.0",
 	}); err != nil {
-		log.Fatalf("send hello: %v", err)
+		return fmt.Errorf("send hello: %w", err)
 	}
+
+	// Keep the Cloudflare connection alive — it drops idle WebSockets after ~2 min.
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(10*time.Second)); err != nil {
+				return
+			}
+		}
+	}()
 
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			log.Printf("relay closed: %v", err)
-			return
+			return fmt.Errorf("relay closed: %w", err)
 		}
 		var f Frame
 		if err := json.Unmarshal(msg, &f); err != nil {
@@ -70,7 +91,12 @@ func main() {
 		}
 		switch f.T {
 		case "code":
-			fmt.Printf("\n  Pairing code: %s\n\n  Enter this code in the Summit app.\n\n", f.Code)
+			fmt.Printf("\n┌──────────────────────────┐\n│   Pairing code: %-6s   │\n└──────────────────────────┘\n\nEnter this code in the Summit app.\n\n", f.Code)
+			if home, err := os.UserHomeDir(); err == nil {
+				dir := filepath.Join(home, ".summit")
+				os.MkdirAll(dir, 0700)
+				os.WriteFile(filepath.Join(dir, "pairing_code"), []byte(f.Code+"\n"), 0600)
+			}
 		case "chat":
 			go handleChat(conn, f, hermesBase, apiKey)
 		case "peer_gone":

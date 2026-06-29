@@ -6,7 +6,12 @@ set -e
 RELAY_URL="wss://relay.summitapp.dev"
 REPO="dane-04-code/agentchat"
 TAG="connector-latest"
-INSTALL_PATH="/usr/local/bin/summit-connector"
+if [ -w "/usr/local/bin" ]; then
+  INSTALL_PATH="/usr/local/bin/summit-connector"
+else
+  mkdir -p "${HOME}/.local/bin"
+  INSTALL_PATH="${HOME}/.local/bin/summit-connector"
+fi
 CONFIG_DIR="${HOME}/.summit"
 LOG_FILE="${CONFIG_DIR}/connector.log"
 SERVICE_NAME="summit-connector"

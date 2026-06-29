@@ -14,6 +14,6 @@ export const SIGNUP_ENABLED = __DEV__;
  * WebSocket base URL for the relay. Pairing code is appended as ?code=NNNNNN.
  * In dev, `wrangler dev` runs locally on 8787.
  */
-export const RELAY_WS_URL = __DEV__
-  ? 'ws://localhost:8787'
-  : 'wss://relay.summitapp.dev';
+export const RELAY_WS_URL =
+  process.env.EXPO_PUBLIC_RELAY_URL ||
+  (__DEV__ ? 'ws://localhost:8787' : 'wss://relay.summitapp.dev');
