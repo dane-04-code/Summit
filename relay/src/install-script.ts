@@ -4,7 +4,7 @@ export const INSTALL_SCRIPT = `#!/bin/sh
 set -e
 
 RELAY_URL="wss://relay.summitapp.dev"
-REPO="dane-04-code/agentchat"
+REPO="dane-04-code/Summit"
 TAG="connector-latest"
 if [ -w "/usr/local/bin" ]; then
   INSTALL_PATH="/usr/local/bin/summit-connector"
