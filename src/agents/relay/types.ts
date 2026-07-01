@@ -13,7 +13,12 @@ export type ChatFrame       = { t: 'chat'; reqId: string; messages: ChatMessage[
 export type ChunkFrame      = { t: 'chunk'; reqId: string; delta: string };
 export type DoneFrame       = { t: 'done'; reqId: string };
 export type ErrorFrame      = { t: 'error'; reqId?: string; message: string };
+// Allow-listed REST proxy over the relay (jobs, run approval/stop). `body` is a
+// JSON string. The connector enforces which method+path pairs are permitted.
+export type ApiReqFrame     = { t: 'api_req'; reqId: string; method: string; path: string; body?: string };
+export type ApiResFrame     = { t: 'api_res'; reqId: string; status: number; body: string };
 
 export type AnyFrame =
   | HelloFrame | CodeFrame | PairFrame | PairedFrame | PairErrorFrame
-  | PeerGoneFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | DoneFrame | ErrorFrame;
+  | PeerGoneFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | DoneFrame | ErrorFrame
+  | ApiReqFrame | ApiResFrame;

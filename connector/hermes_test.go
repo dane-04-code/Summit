@@ -23,7 +23,7 @@ func TestStreamChat_parsesDeltas(t *testing.T) {
 	defer srv.Close()
 
 	msgs := []ChatMessage{{Role: "user", Content: "hi"}}
-	frames := streamChat(msgs, srv.URL, "test-key")
+	frames := streamChat(msgs, "", "", srv.URL, "test-key")
 
 	var got []Frame
 	for f := range frames {
@@ -51,7 +51,7 @@ func TestStreamChat_propagatesHTTPError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	frames := streamChat([]ChatMessage{{Role: "user", Content: "hi"}}, srv.URL, "bad")
+	frames := streamChat([]ChatMessage{{Role: "user", Content: "hi"}}, "", "", srv.URL, "bad")
 	var got []Frame
 	for f := range frames {
 		got = append(got, f)

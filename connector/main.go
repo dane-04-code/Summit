@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -25,6 +26,10 @@ type Frame struct {
 	Messages     []ChatMessage `json:"messages,omitempty"`
 	SessionID    string        `json:"sessionId,omitempty"`
 	SessionKey   string        `json:"sessionKey,omitempty"`
+	Method       string        `json:"method,omitempty"`
+	Path         string        `json:"path,omitempty"`
+	Status       int           `json:"status,omitempty"`
+	Body         string        `json:"body,omitempty"`
 }
 
 // ChatMessage matches the OpenAI messages array shape.
@@ -78,9 +83,10 @@ func run(relayURL, hermesBase, apiKey string) error {
 		return fmt.Errorf("dial relay %s: %w", target, err)
 	}
 	defer conn.Close()
+	var writeMu sync.Mutex
 	log.Printf("connected to relay %s", relayURL)
 
-	if err := conn.WriteJSON(Frame{
+	if err := writeFrame(conn, &writeMu, Frame{
 		T: "hello", Framework: "hermes", AgentName: "Hermes", AgentVersion: "1.0",
 	}); err != nil {
 		return fmt.Errorf("send hello: %w", err)
@@ -92,7 +98,7 @@ func run(relayURL, hermesBase, apiKey string) error {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			if err := conn.WriteJSON(Frame{T: "ping"}); err != nil {
+			if err := writeFrame(conn, &writeMu, Frame{T: "ping"}); err != nil {
 				return
 			}
 		}
@@ -117,7 +123,9 @@ func run(relayURL, hermesBase, apiKey string) error {
 				os.WriteFile(filepath.Join(dir, "pairing_code"), []byte(f.Code+"\n"), 0600)
 			}
 		case "chat":
-			go handleChat(conn, f, f.SessionID, f.SessionKey, hermesBase, apiKey)
+			go handleChat(conn, &writeMu, f, f.SessionID, f.SessionKey, hermesBase, apiKey)
+		case "api_req":
+			go handleApiReq(conn, &writeMu, f, hermesBase, apiKey)
 		case "peer_gone":
 			fmt.Println("App disconnected — waiting for reconnect.")
 		case "pong":
@@ -128,12 +136,27 @@ func run(relayURL, hermesBase, apiKey string) error {
 	}
 }
 
-func handleChat(conn *websocket.Conn, f Frame, sessionID, sessionKey, hermesBase, apiKey string) {
+func writeFrame(conn *websocket.Conn, writeMu *sync.Mutex, frame Frame) error {
+	writeMu.Lock()
+	defer writeMu.Unlock()
+	return conn.WriteJSON(frame)
+}
+
+func handleChat(conn *websocket.Conn, writeMu *sync.Mutex, f Frame, sessionID, sessionKey, hermesBase, apiKey string) {
 	for frame := range streamChat(f.Messages, sessionID, sessionKey, hermesBase, apiKey) {
 		frame.ReqID = f.ReqID
-		if err := conn.WriteJSON(frame); err != nil {
+		if err := writeFrame(conn, writeMu, frame); err != nil {
 			log.Printf("write frame: %v", err)
 			return
 		}
+	}
+}
+
+// handleApiReq proxies a single allow-listed Hermes REST call (jobs, run
+// approval/stop) and returns the status + raw body to the app.
+func handleApiReq(conn *websocket.Conn, writeMu *sync.Mutex, f Frame, hermesBase, apiKey string) {
+	status, body := doAPI(f.Method, f.Path, f.Body, hermesBase, apiKey)
+	if err := writeFrame(conn, writeMu, Frame{T: "api_res", ReqID: f.ReqID, Status: status, Body: body}); err != nil {
+		log.Printf("write api_res: %v", err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 )
 
@@ -81,4 +82,58 @@ func streamChat(messages []ChatMessage, sessionID, sessionKey, baseURL, apiKey s
 		ch <- Frame{T: "done"}
 	}()
 	return ch
+}
+
+// apiAllow is the fixed set of Hermes endpoints the app may reach through the
+// connector. The connector holds the API key, so this list is the trust
+// boundary: anything not matched here is refused, no matter what the app or a
+// compromised relay sends. `[^/]+` stands in for an opaque id (no slashes).
+var apiAllow = []struct {
+	method string
+	re     *regexp.Regexp
+}{
+	{"GET", regexp.MustCompile(`^/api/jobs$`)},
+	{"GET", regexp.MustCompile(`^/api/jobs/[^/]+$`)},
+	{"POST", regexp.MustCompile(`^/api/jobs/[^/]+/(run|pause|resume)$`)},
+	{"POST", regexp.MustCompile(`^/v1/runs/[^/]+/(approval|stop)$`)},
+	{"GET", regexp.MustCompile(`^/v1/capabilities$`)},
+	{"GET", regexp.MustCompile(`^/health$`)},
+}
+
+func apiAllowed(method, path string) bool {
+	for _, a := range apiAllow {
+		if a.method == method && a.re.MatchString(path) {
+			return true
+		}
+	}
+	return false
+}
+
+// doAPI performs one allow-listed REST call against local Hermes and returns the
+// HTTP status plus the raw response body. Transport failures map to 502 so the
+// app always sees a meaningful status.
+func doAPI(method, path, body, baseURL, apiKey string) (int, string) {
+	if !apiAllowed(method, path) {
+		return http.StatusForbidden, `{"error":"path not allowed"}`
+	}
+
+	var reader io.Reader
+	if body != "" {
+		reader = strings.NewReader(body)
+	}
+	req, err := http.NewRequest(method, baseURL+path, reader)
+	if err != nil {
+		return http.StatusBadGateway, fmt.Sprintf(`{"error":%q}`, err.Error())
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return http.StatusBadGateway, fmt.Sprintf(`{"error":%q}`, err.Error())
+	}
+	defer resp.Body.Close()
+
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(b)
 }
