@@ -27,7 +27,10 @@ export default function AppLayout() {
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="pair" options={{ headerShown: false }} />
         <Stack.Screen name="connect" options={{ headerShown: false }} />
-        <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+        <Stack.Screen name="settings" options={{ headerShown: false }} />
+        <Stack.Screen name="account" options={{ headerShown: false }} />
+        <Stack.Screen name="connection" options={{ headerShown: false }} />
+        <Stack.Screen name="data" options={{ headerShown: false }} />
         <Stack.Screen name="cron" options={{ headerShown: false }} />
       </Stack>
     </>

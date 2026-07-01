@@ -1,217 +1,146 @@
-import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  StyleSheet,
-  ActivityIndicator,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, router } from 'expo-router';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import React from 'react';
+import { ScrollView, View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import { router } from 'expo-router';
+import Constants from 'expo-constants';
+import { Bot, Clock, ChevronRight } from 'lucide-react-native';
+
+import { useAuth } from '@/context/AuthContext';
 import { useAgents } from '@/agents/AgentProvider';
-import { RelayClient } from '@/agents/relay/client';
-import { RELAY_WS_URL } from '@/config';
-import { colors, space, radius, typography } from '@/theme';
+import { accountName, accountInitial } from '@/lib/account';
+import { SettingsScreen, SectionLabel, Card, Row } from '@/ui/settings';
+import { colors, typography } from '@/theme';
 
-export default function SettingsScreen() {
-  const { activeAgent, repairAgent } = useAgents();
-  const [repairing, setRepairing] = useState(false);
-  const [code, setCode] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
-  const clientRef = useRef<RelayClient | null>(null);
+const FRAMEWORK_LABEL: Record<string, string> = { hermes: 'Hermes', openclaw: 'OpenClaw' };
+const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
-  async function handleRepair() {
-    if (!activeAgent) return;
-    setError(null);
-    setLoading(true);
-    const trimmed = code.trim();
-    try {
-      const wsUrl = `${RELAY_WS_URL}?code=${encodeURIComponent(trimmed)}`;
-      const client = new RelayClient(wsUrl);
-      clientRef.current = client;
-      await client.pair(trimmed);
-      client.disconnect();
-      clientRef.current = null;
-      await repairAgent(activeAgent.id, trimmed);
-      setDone(true);
-      setTimeout(() => router.back(), 1200);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Pairing failed — check the code and try again.');
-    } finally {
-      setLoading(false);
-    }
-  }
+export default function Settings() {
+  const { user, signOut } = useAuth();
+  const { activeAgent } = useAgents();
+
+  const name = accountName(user);
+  const email = user?.email ?? '';
+
+  const confirmSignOut = () => {
+    Alert.alert('Sign out', 'Sign out of Summit on this device?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: () => void signOut() },
+    ]);
+  };
 
   return (
-    <>
-      <Stack.Screen options={{ headerShown: false }} />
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <View style={styles.header}>
-          <Pressable style={styles.backBtn} onPress={() => router.back()} hitSlop={8}>
-            <ChevronLeft size={22} color={colors.muted} strokeWidth={1.9} />
-          </Pressable>
-          <Text style={styles.headerTitle}>Settings</Text>
-        </View>
-
-        <View style={styles.body}>
-          <Text style={styles.sectionLabel}>Agent</Text>
-
-          {!repairing ? (
-            <Pressable
-              style={styles.row}
-              onPress={() => { setRepairing(true); setCode(''); setError(null); setDone(false); }}
-            >
-              <Text style={styles.rowLabel}>Re-pair agent</Text>
-              <ChevronRight size={18} color={colors.muted} strokeWidth={1.5} />
-            </Pressable>
-          ) : (
-            <View style={styles.repairCard}>
-              <Text style={styles.repairHint}>
-                Ask your agent for a fresh 6-digit code, then enter it below.
+    <SettingsScreen title="Settings">
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Account card */}
+        <Pressable
+          onPress={() => router.push('/(app)/account' as '/')}
+          style={({ pressed }) => [styles.accountCard, pressed && styles.accountPressed]}
+          accessibilityRole="button"
+          accessibilityLabel={`${name}, account settings`}
+        >
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{accountInitial(name)}</Text>
+          </View>
+          <View style={styles.accountText}>
+            <Text style={styles.accountName} numberOfLines={1}>
+              {name}
+            </Text>
+            {email ? (
+              <Text style={styles.accountEmail} numberOfLines={1}>
+                {email}
               </Text>
-              <TextInput
-                style={[styles.codeInput, error ? styles.codeInputError : null]}
-                placeholder="••••••"
-                placeholderTextColor={colors.line}
-                value={code}
-                onChangeText={(t) => { setError(null); setCode(t.replace(/\D/g, '').slice(0, 6)); }}
-                keyboardType="number-pad"
-                maxLength={6}
-                autoFocus
-                returnKeyType="go"
-                onSubmitEditing={() => code.trim().length === 6 && !loading && handleRepair()}
-              />
-              {error ? <Text style={styles.error}>{error}</Text> : null}
-              <Pressable
-                style={[styles.pairBtn, (code.trim().length < 6 || loading) && styles.btnDisabled]}
-                onPress={handleRepair}
-                disabled={code.trim().length < 6 || loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color={colors.bg} />
-                ) : done ? (
-                  <Text style={styles.pairBtnText}>Paired</Text>
-                ) : (
-                  <Text style={styles.pairBtnText}>Pair agent</Text>
-                )}
-              </Pressable>
-              <Pressable onPress={() => setRepairing(false)} hitSlop={8}>
-                <Text style={styles.cancel}>Cancel</Text>
-              </Pressable>
-            </View>
-          )}
+            ) : null}
+          </View>
+          <ChevronRight size={18} color={colors.muted} strokeWidth={1.5} />
+        </Pressable>
+
+        {/* Agent */}
+        <View style={styles.group}>
+          <SectionLabel>Agent</SectionLabel>
+          <Card>
+            <Row
+              icon={<Bot size={17} color={colors.ink} strokeWidth={1.5} />}
+              label="Connected agent"
+              value={activeAgent ? FRAMEWORK_LABEL[activeAgent.framework] ?? activeAgent.name : 'None'}
+              onPress={() =>
+                router.push((activeAgent ? '/(app)/connection' : '/(app)/pair') as '/')
+              }
+            />
+          </Card>
         </View>
-      </SafeAreaView>
-    </>
+
+        {/* Data */}
+        <View style={styles.group}>
+          <SectionLabel>Data</SectionLabel>
+          <Card>
+            <Row
+              icon={<Clock size={17} color={colors.ink} strokeWidth={1.5} />}
+              label="History & data"
+              onPress={() => router.push('/(app)/data' as '/')}
+            />
+          </Card>
+        </View>
+
+        {/* Sign out */}
+        <Pressable
+          onPress={confirmSignOut}
+          style={({ pressed }) => [styles.signOut, pressed && styles.signOutPressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Sign out"
+        >
+          <Text style={styles.signOutText}>Sign out</Text>
+        </Pressable>
+
+        <Text style={styles.version}>Summit · v{APP_VERSION}</Text>
+      </ScrollView>
+    </SettingsScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  scroll: { flex: 1 },
+  content: { padding: 16, paddingBottom: 32, gap: 24 },
 
-  header: {
+  accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.ink,
-    letterSpacing: -0.2,
-  },
-
-  body: {
-    padding: space.lg,
-    gap: space.sm,
-  },
-  sectionLabel: {
-    ...typography.caption,
-    color: colors.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    paddingHorizontal: 4,
-    paddingBottom: 2,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: 52,
-    backgroundColor: colors.surface,
-    borderRadius: radius.input,
-    paddingHorizontal: space.md + 2,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
-  rowLabel: {
-    ...typography.body,
-    color: colors.ink,
-  },
-
-  repairCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.input,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: space.md + 2,
-    gap: space.md,
-  },
-  repairHint: {
-    ...typography.small,
-    color: colors.muted,
-    lineHeight: 20,
-  },
-  codeInput: {
-    height: 58,
+    gap: 13,
     backgroundColor: colors.drawer,
     borderWidth: 1,
     borderColor: colors.line,
-    borderRadius: radius.input,
-    textAlign: 'center',
-    fontFamily: 'Menlo',
-    fontSize: 28,
-    fontWeight: '600',
-    letterSpacing: 10,
-    color: colors.ink,
+    borderRadius: 14,
+    padding: 14,
   },
-  codeInputError: { borderColor: colors.error },
-  error: {
-    ...typography.caption,
-    color: colors.error,
-  },
-  pairBtn: {
-    height: 50,
-    borderRadius: radius.input,
-    backgroundColor: colors.ink,
+  accountPressed: { backgroundColor: colors.surface },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 9999,
+    backgroundColor: colors.surface2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  btnDisabled: { opacity: 0.4 },
-  pairBtnText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.bg,
+  avatarText: { fontSize: 19, fontWeight: '600', color: colors.ink },
+  accountText: { flex: 1, minWidth: 0 },
+  accountName: { fontSize: 17, fontWeight: '600', color: colors.ink, lineHeight: 21 },
+  accountEmail: { ...typography.small, color: colors.muted, marginTop: 1 },
+
+  group: { gap: 0 },
+
+  signOut: {
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.drawer,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 14,
   },
-  cancel: {
-    ...typography.small,
-    color: colors.muted,
-    textAlign: 'center',
-    paddingVertical: space.xs,
-  },
+  signOutPressed: { backgroundColor: colors.surface },
+  signOutText: { fontSize: 16, fontWeight: '500', color: colors.error },
+
+  version: { ...typography.caption, color: colors.faint, textAlign: 'center' },
 });

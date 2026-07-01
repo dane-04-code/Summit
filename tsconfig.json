@@ -22,6 +22,7 @@
     "node_modules",
     "relay",
     "connector",
-    "protocol"
+    "protocol",
+    "supabase"
   ]
 }
