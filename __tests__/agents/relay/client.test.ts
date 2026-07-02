@@ -1,4 +1,5 @@
 import { RelayClient } from '@/agents/relay/client';
+import { RelayError } from '@/agents/relay/errors';
 
 // Models a real WebSocket's open handshake: it starts in CONNECTING and only
 // becomes usable once `openNow()` fires `onopen`. The client awaits that event
@@ -53,14 +54,36 @@ describe('pair()', () => {
     expect(info).toEqual({ framework: 'hermes', agentName: 'My Agent', agentVersion: '2.1' });
   });
 
-  it('rejects on pair_error', async () => {
+  it.each([
+    ['not_found', 'code_not_found'],
+    ['expired', 'code_expired'],
+    ['already_paired', 'already_paired'],
+  ] as const)('classifies pair_error %s as RelayError %s', async (reason, code) => {
     client = new RelayClient('ws://localhost:8787?code=badcode');
     const promise = client.pair('badcode');
     mockWs.openNow();
     await flush();
 
-    mockWs.receive({ t: 'pair_error', reason: 'not_found' });
-    await expect(promise).rejects.toThrow('not_found');
+    mockWs.receive({ t: 'pair_error', reason });
+    await expect(promise).rejects.toBeInstanceOf(RelayError);
+    await expect(promise).rejects.toMatchObject({ code });
+  });
+
+  it('classifies peer_gone during pairing as agent_disconnected', async () => {
+    client = new RelayClient('ws://localhost:8787?code=111111');
+    const promise = client.pair('111111');
+    mockWs.openNow();
+    await flush();
+
+    mockWs.receive({ t: 'peer_gone' });
+    await expect(promise).rejects.toMatchObject({ code: 'agent_disconnected' });
+  });
+
+  it('classifies a socket error before open as relay_unreachable', async () => {
+    client = new RelayClient('ws://localhost:8787?code=111111');
+    const promise = client.pair('111111');
+    mockWs.onerror?.({} as Event);
+    await expect(promise).rejects.toMatchObject({ code: 'relay_unreachable' });
   });
 });
 

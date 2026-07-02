@@ -50,8 +50,10 @@ Goal: pairing and chat stay alive through normal mobile/relay/connector interrup
 - Soak-test pairing with Hermes: app restart, connector restart, relay restart, background/foreground,
   wrong code, duplicate app, connector dies mid-stream.
 - Fix any cases where `peer_gone`, reconnect, or re-pair leaves the app stuck.
-- Make relay/client errors user-readable: "agent disconnected", "pairing code not found",
-  "relay unavailable", "stream failed".
+- [x] Make relay/client errors user-readable: `RelayClient` now throws typed `RelayError`s
+      (`relay_unreachable`, `code_not_found`, `code_expired`, `already_paired`, `agent_disconnected`)
+      with plain-language copy from `src/agents/relay/errors.ts`; the pair screen shows the message
+      and only flags the code field when the code itself is the problem.
 - Decide whether the current pairing code-as-device-token is acceptable for beta, or whether a real
   persistent device token is required before external testing.
 
@@ -193,9 +195,13 @@ Exit gate: no blank screens, no fake data, no unclear failure messages.
 
 ## Next Action
 
-Cron-over-relay (Pass 2) and the real-session sidebar (Pass 3) are done, and the suite is green
-(`tsc --noEmit` + `npm test`, 94 passing). The biggest remaining gap on the make-or-break first-run
-path is **pair-screen error states**: `RelayClient` still throws bare "WebSocket error" /
-"WebSocket closed", so the pair screen can't tell the user whether the relay is unreachable, the
-pairing code expired, or the connector is offline. Build those specific states next (Pass 1 /
-Frontend Pages priority #1), then run the pairing QA matrix manually.
+Cron-over-relay (Pass 2), the real-session sidebar (Pass 3), and **pair-screen error states**
+(Pass 1 / Frontend Pages #1) are done; the suite is green (`tsc --noEmit` + `npm test`, 104 passing).
+`RelayClient` now classifies pairing failures into typed `RelayError`s with user-readable copy, and
+the pair screen surfaces them.
+
+The remaining Pass 1 work is **verification, not code**: run the pairing QA matrix against a real
+Hermes + relay (app restart, connector restart, relay restart, background/foreground, wrong code,
+duplicate app, connector dies mid-stream) and confirm each failure now shows the right message and
+recovers. Fix any reconnect/re-pair case that leaves the app stuck. After that, move to Pass 4
+(rich-output polish) and Pass 5 (auth/production states + settings actions).

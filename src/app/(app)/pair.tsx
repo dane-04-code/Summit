@@ -14,6 +14,7 @@ import * as Clipboard from 'expo-clipboard';
 import { ChevronLeft, Copy, Check } from 'lucide-react-native';
 import { useAgents } from '@/agents/AgentProvider';
 import { RelayClient } from '@/agents/relay/client';
+import { RelayError, isPairingCodeError } from '@/agents/relay/errors';
 import { RELAY_WS_URL } from '@/config';
 import { colors, space, radius, typography } from '@/theme';
 
@@ -25,9 +26,13 @@ const CURL_COMMAND = `curl -fsSL https://get.summitapp.dev/connect | sh`;
 export default function PairScreen() {
   const { addAgent } = useAgents();
   const router = useRouter();
+  const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // When set, the failure is about the entered code (not the relay/connector),
+  // so the code field is highlighted.
+  const [codeError, setCodeError] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
   const [curlCopied, setCurlCopied] = useState(false);
   const clientRef = useRef<RelayClient | null>(null);
@@ -42,6 +47,7 @@ export default function PairScreen() {
 
   async function handlePair() {
     setError(null);
+    setCodeError(false);
     setLoading(true);
     const trimmed = code.trim();
     try {
@@ -54,7 +60,7 @@ export default function PairScreen() {
 
       await addAgent(
         {
-          name: info.agentName || 'Hermes',
+          name: name.trim() || info.agentName || 'Hermes',
           framework: 'hermes',
           transport: 'relay',
           baseUrl: null,
@@ -64,9 +70,15 @@ export default function PairScreen() {
       );
       router.replace('/(app)');
     } catch (e) {
-      setError(
-        e instanceof Error ? e.message : 'Pairing failed — check the code and try again.',
-      );
+      if (e instanceof RelayError) {
+        setError(e.message);
+        setCodeError(isPairingCodeError(e.code));
+      } else {
+        setError(
+          e instanceof Error ? e.message : 'Pairing failed — check the code and try again.',
+        );
+        setCodeError(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -170,24 +182,35 @@ export default function PairScreen() {
             <View style={styles.stepNum}>
               <Text style={styles.stepNumText}>3</Text>
             </View>
-            <Text style={styles.stepTitle}>Enter the pairing code</Text>
+            <Text style={styles.stepTitle}>Name and pair</Text>
           </View>
           <Text style={styles.stepSubtitle}>
-            Your agent will reply with a 6-digit code. Enter it to finish pairing.
+            Pick the name Summit should show, then enter the 6-digit code your agent gives you.
           </Text>
 
           <TextInput
-            style={[styles.codeInput, error ? styles.codeInputError : null]}
+            style={styles.nameInput}
+            placeholder="Agent name"
+            placeholderTextColor={colors.faint}
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+            returnKeyType="next"
+            autoFocus
+          />
+
+          <TextInput
+            style={[styles.codeInput, codeError ? styles.codeInputError : null]}
             placeholder="••••••"
             placeholderTextColor={colors.line}
             value={code}
             onChangeText={(t) => {
               setError(null);
+              setCodeError(false);
               setCode(t.replace(/\D/g, '').slice(0, 6));
             }}
             keyboardType="number-pad"
             maxLength={6}
-            autoFocus
             returnKeyType="go"
             onSubmitEditing={() => canSubmit && handlePair()}
           />
@@ -337,6 +360,16 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
 
+  nameInput: {
+    ...typography.body,
+    height: 50,
+    backgroundColor: colors.drawer,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.input,
+    color: colors.ink,
+    paddingHorizontal: space.lg,
+  },
   codeInput: {
     height: 62,
     backgroundColor: colors.drawer,

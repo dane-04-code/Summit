@@ -1,5 +1,12 @@
-import type { AnyFrame, ChatMessage } from './types';
+import type { AnyFrame, ChatMessage, PairErrorFrame } from './types';
 import type { StreamEvent } from '../adapters/types';
+import { RelayError, type RelayErrorCode } from './errors';
+
+const PAIR_ERROR_CODE: Record<PairErrorFrame['reason'], RelayErrorCode> = {
+  not_found: 'code_not_found',
+  expired: 'code_expired',
+  already_paired: 'already_paired',
+};
 
 export type RelayAgentInfo = { framework: string; agentName: string; agentVersion: string };
 
@@ -27,14 +34,17 @@ export class RelayClient {
       };
       ws.onerror = () => {
         this.opening = null;
-        reject(new Error('WebSocket error'));
+        reject(new RelayError('relay_unreachable'));
       };
       ws.onclose = () => {
         this.opening = null;
         this.stopHeartbeat();
         this.paired = false;
         if (this.ws === ws) this.ws = null;
-        reject(new Error('WebSocket closed'));
+        // Only wins the opening promise if the socket closed before it opened —
+        // i.e. we never reached the relay. A mid-session drop settles this reject
+        // as a no-op and instead reaches live handlers via the peer_gone below.
+        reject(new RelayError('relay_unreachable'));
         for (const h of this.handlers) h({ t: 'peer_gone' });
       };
       ws.onmessage = (e) => {
@@ -71,10 +81,10 @@ export class RelayClient {
           resolve({ framework: frame.framework, agentName: frame.agentName, agentVersion: frame.agentVersion });
         } else if (frame.t === 'pair_error') {
           this.handlers = this.handlers.filter((h) => h !== handler);
-          reject(new Error(frame.reason));
+          reject(new RelayError(PAIR_ERROR_CODE[frame.reason]));
         } else if (frame.t === 'peer_gone') {
           this.handlers = this.handlers.filter((h) => h !== handler);
-          reject(new Error('Agent disconnected.'));
+          reject(new RelayError('agent_disconnected'));
         }
       };
       this.handlers.push(handler);
