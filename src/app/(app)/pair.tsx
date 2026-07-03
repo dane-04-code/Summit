@@ -7,6 +7,8 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -90,149 +92,148 @@ export default function PairScreen() {
       {/* Header */}
       <ScreenHeader title="Connect your agent" onBack={() => router.replace('/(app)/connect')} />
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Intro */}
-        <Text style={styles.intro}>
-          Pair Summit with your agent in two steps. Paste the prompt into your agent, then enter the code it gives you back.
-        </Text>
-
-        {/* Step 1 — agent prompt */}
-        <View style={styles.section}>
-          <View style={styles.stepHeader}>
-            <View style={styles.stepNum}>
-              <Text style={styles.stepNumText}>1</Text>
-            </View>
-            <Text style={styles.stepTitle}>Feed this prompt to your agent</Text>
-          </View>
-          <View style={styles.card}>
-            <ScrollView
-              style={styles.codeScroll}
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}
-            >
-              <Text style={styles.codeText}>{AGENT_PROMPT}</Text>
-            </ScrollView>
-            <Pressable
-              style={styles.copyRow}
-              onPress={() => copyText(AGENT_PROMPT, setPromptCopied)}
-            >
-              {promptCopied ? (
-                <>
-                  <Check size={16} color={colors.success} strokeWidth={1.7} />
-                  <Text style={styles.copiedLabel}>Copied</Text>
-                </>
-              ) : (
-                <>
-                  <Copy size={16} color={colors.muted} strokeWidth={1.5} />
-                  <Text style={styles.copyLabel}>Copy prompt</Text>
-                </>
-              )}
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Step 2 — curl command */}
-        <View style={styles.section}>
-          <View style={styles.stepHeader}>
-            <View style={styles.stepNum}>
-              <Text style={styles.stepNumText}>2</Text>
-            </View>
-            <Text style={styles.stepTitle}>Or run this in your terminal</Text>
-          </View>
-          <View style={styles.card}>
-            <Text style={[styles.codeText, styles.curlLine]}>{CURL_COMMAND}</Text>
-            <Pressable
-              style={styles.copyRow}
-              onPress={() => copyText(CURL_COMMAND, setCurlCopied)}
-            >
-              {curlCopied ? (
-                <>
-                  <Check size={16} color={colors.success} strokeWidth={1.7} />
-                  <Text style={styles.copiedLabel}>Copied</Text>
-                </>
-              ) : (
-                <>
-                  <Copy size={16} color={colors.muted} strokeWidth={1.5} />
-                  <Text style={styles.copyLabel}>Copy command</Text>
-                </>
-              )}
-            </Pressable>
-          </View>
-        </View>
-
-        {/* Divider */}
-        <View style={styles.divider} />
-
-        {/* Step 3 — pairing code */}
-        <View style={styles.section}>
-          <View style={styles.stepHeader}>
-            <View style={styles.stepNum}>
-              <Text style={styles.stepNumText}>3</Text>
-            </View>
-            <Text style={styles.stepTitle}>Name and pair</Text>
-          </View>
-          <Text style={styles.stepSubtitle}>
-            Pick the name Summit should show, then enter the 6-digit code your agent gives you.
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Intro */}
+          <Text style={styles.intro}>
+            Pair Summit with your agent in two steps. Paste the prompt into your agent, then enter
+            the code it gives you back.
           </Text>
 
-          <TextInput
-            style={styles.nameInput}
-            placeholder="Agent name"
-            placeholderTextColor={colors.faint}
-            value={name}
-            onChangeText={setName}
-            autoCapitalize="words"
-            returnKeyType="next"
-            autoFocus
-          />
+          {/* Step 1 — install the connector */}
+          <View style={styles.section}>
+            <View style={styles.stepHeader}>
+              <View style={styles.stepNum}>
+                <Text style={styles.stepNumText}>1</Text>
+              </View>
+              <Text style={styles.stepTitle}>Install the connector</Text>
+            </View>
+            <Text style={styles.stepSubtitle}>Feed this prompt to your agent.</Text>
+            <View style={styles.card}>
+              <ScrollView
+                style={styles.codeScroll}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={false}
+              >
+                <Text style={styles.codeText}>{AGENT_PROMPT}</Text>
+              </ScrollView>
+              <Pressable
+                style={styles.copyRow}
+                onPress={() => copyText(AGENT_PROMPT, setPromptCopied)}
+              >
+                {promptCopied ? (
+                  <>
+                    <Check size={16} color={colors.success} strokeWidth={1.7} />
+                    <Text style={styles.copiedLabel}>Copied</Text>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={16} color={colors.muted} strokeWidth={1.5} />
+                    <Text style={styles.copyLabel}>Copy prompt</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
 
-          <TextInput
-            style={[styles.codeInput, codeError ? styles.codeInputError : null]}
-            placeholder="••••••"
-            placeholderTextColor={colors.line}
-            value={code}
-            onChangeText={(t) => {
-              setError(null);
-              setCodeError(false);
-              setCode(t.replace(/\D/g, '').slice(0, 6));
-            }}
-            keyboardType="number-pad"
-            maxLength={6}
-            returnKeyType="go"
-            onSubmitEditing={() => canSubmit && handlePair()}
-          />
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <Pressable
-            style={[styles.pairBtn, !canSubmit && styles.btnDisabled]}
-            onPress={handlePair}
-            disabled={!canSubmit}
-          >
-            {loading ? (
-              <ActivityIndicator color={colors.bg} />
-            ) : (
-              <Text style={styles.pairBtnText}>Pair agent</Text>
-            )}
-          </Pressable>
-
-          <View style={styles.expiryRow}>
-            <Check size={14} color={colors.faint} strokeWidth={1.5} />
-            <Text style={styles.expiryText}>Codes expire after 10 minutes</Text>
+            <Text style={styles.altLabel}>Or run it yourself in a terminal</Text>
+            <View style={styles.card}>
+              <Text style={[styles.codeText, styles.curlLine]}>{CURL_COMMAND}</Text>
+              <Pressable
+                style={styles.copyRow}
+                onPress={() => copyText(CURL_COMMAND, setCurlCopied)}
+              >
+                {curlCopied ? (
+                  <>
+                    <Check size={16} color={colors.success} strokeWidth={1.7} />
+                    <Text style={styles.copiedLabel}>Copied</Text>
+                  </>
+                ) : (
+                  <>
+                    <Copy size={16} color={colors.muted} strokeWidth={1.5} />
+                    <Text style={styles.copyLabel}>Copy command</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
           </View>
-        </View>
-      </ScrollView>
+
+          {/* Divider */}
+          <View style={styles.divider} />
+
+          {/* Step 2 — name and pair */}
+          <View style={styles.section}>
+            <View style={styles.stepHeader}>
+              <View style={styles.stepNum}>
+                <Text style={styles.stepNumText}>2</Text>
+              </View>
+              <Text style={styles.stepTitle}>Name and pair</Text>
+            </View>
+            <Text style={styles.stepSubtitle}>
+              Pick the name Summit should show, then enter the 6-digit code your agent gives you.
+            </Text>
+
+            <TextInput
+              style={styles.nameInput}
+              placeholder="Agent name"
+              placeholderTextColor={colors.faint}
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+              returnKeyType="next"
+            />
+
+            <TextInput
+              style={[styles.codeInput, codeError ? styles.codeInputError : null]}
+              placeholder="••••••"
+              placeholderTextColor={colors.line}
+              value={code}
+              onChangeText={(t) => {
+                setError(null);
+                setCodeError(false);
+                setCode(t.replace(/\D/g, '').slice(0, 6));
+              }}
+              keyboardType="number-pad"
+              maxLength={6}
+              returnKeyType="go"
+              onSubmitEditing={() => canSubmit && handlePair()}
+            />
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <Pressable
+              style={[styles.pairBtn, !canSubmit && styles.btnDisabled]}
+              onPress={handlePair}
+              disabled={!canSubmit}
+            >
+              {loading ? (
+                <ActivityIndicator color={colors.bg} />
+              ) : (
+                <Text style={styles.pairBtnText}>Pair agent</Text>
+              )}
+            </Pressable>
+
+            <View style={styles.expiryRow}>
+              <Check size={14} color={colors.faint} strokeWidth={1.5} />
+              <Text style={styles.expiryText}>Codes expire after 10 minutes</Text>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
+  flex: { flex: 1 },
 
   scroll: { flex: 1 },
   scrollContent: {
@@ -281,6 +282,12 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 20,
     paddingHorizontal: 4,
+  },
+  altLabel: {
+    ...typography.caption,
+    color: colors.muted,
+    paddingHorizontal: 4,
+    marginTop: space.sm,
   },
 
   card: {
