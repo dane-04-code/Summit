@@ -14,6 +14,10 @@ import {
   StyleSheet,
   Animated,
   useWindowDimensions,
+  Modal,
+  Platform,
+  ActionSheetIOS,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PanelLeftClose, Search, Plus, Settings, CalendarClock } from 'lucide-react-native';
@@ -39,6 +43,8 @@ interface SidebarProps {
   onClose: () => void;
   onNewChat: () => void;
   onSelectChat: (id: string) => void;
+  onRenameChat: (id: string, title: string) => void;
+  onDeleteChat: (id: string) => void;
   onOpenSettings: () => void;
   onOpenCron: () => void;
 }
@@ -49,14 +55,17 @@ function ChatRow({
   chat,
   active,
   onPress,
+  onLongPress,
 }: {
   chat: ChatSummary;
   active: boolean;
   onPress: () => void;
+  onLongPress: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
       accessibilityRole="button"
       accessibilityLabel={chat.title}
       style={({ pressed }) => [
@@ -88,6 +97,8 @@ export function Sidebar({
   onClose,
   onNewChat,
   onSelectChat,
+  onRenameChat,
+  onDeleteChat,
   onOpenSettings,
   onOpenCron,
 }: SidebarProps) {
@@ -97,6 +108,8 @@ export function Sidebar({
 
   const [progress] = useState(() => new Animated.Value(visible ? 1 : 0));
   const [query, setQuery] = useState('');
+  const [renameTarget, setRenameTarget] = useState<ChatSummary | null>(null);
+  const [renameText, setRenameText] = useState('');
 
   // Drive the slide/fade from `visible`; clear the search once fully closed.
   // (The panel stays mounted but off-screen + non-interactive when closed.)
@@ -128,6 +141,46 @@ export function Sidebar({
     (id: string) => () => onSelectChat(id),
     [onSelectChat],
   );
+
+  const handleChatActions = useCallback(
+    (chat: ChatSummary) => {
+      const openRename = () => {
+        setRenameTarget(chat);
+        setRenameText(chat.title);
+      };
+      const confirmDelete = () =>
+        Alert.alert('Delete chat', 'This removes the conversation from this device.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: () => onDeleteChat(chat.id) },
+        ]);
+      if (Platform.OS === 'ios') {
+        ActionSheetIOS.showActionSheetWithOptions(
+          {
+            title: chat.title,
+            options: ['Cancel', 'Rename', 'Delete'],
+            destructiveButtonIndex: 2,
+            cancelButtonIndex: 0,
+          },
+          (i) => {
+            if (i === 1) openRename();
+            if (i === 2) confirmDelete();
+          },
+        );
+      } else {
+        Alert.alert(chat.title, undefined, [
+          { text: 'Rename', onPress: openRename },
+          { text: 'Delete', style: 'destructive', onPress: confirmDelete },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+      }
+    },
+    [onDeleteChat],
+  );
+
+  const commitRename = useCallback(() => {
+    if (renameTarget) onRenameChat(renameTarget.id, renameText);
+    setRenameTarget(null);
+  }, [renameTarget, renameText, onRenameChat]);
 
   const translateX = progress.interpolate({
     inputRange: [0, 1],
@@ -222,6 +275,7 @@ export function Sidebar({
                     chat={chat}
                     active={chat.id === activeId}
                     onPress={handleSelect(chat.id)}
+                    onLongPress={() => handleChatActions(chat)}
                   />
                 ))}
               </View>
@@ -260,6 +314,51 @@ export function Sidebar({
           </Pressable>
         </View>
       </Animated.View>
+
+      {/* rename modal */}
+      <Modal
+        visible={renameTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setRenameTarget(null)}
+      >
+        <View style={styles.modalRoot}>
+          <Pressable style={styles.modalScrim} onPress={() => setRenameTarget(null)} />
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Rename chat</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={renameText}
+              onChangeText={setRenameText}
+              autoFocus
+              selectTextOnFocus
+              returnKeyType="done"
+              onSubmitEditing={commitRename}
+              accessibilityLabel="Chat name"
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                onPress={() => setRenameTarget(null)}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.modalBtn, pressed && styles.pressable]}
+              >
+                <Text style={styles.modalBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={commitRename}
+                accessibilityRole="button"
+                style={({ pressed }) => [
+                  styles.modalBtn,
+                  styles.modalBtnPrimary,
+                  pressed && styles.modalBtnPrimaryPressed,
+                ]}
+              >
+                <Text style={styles.modalBtnPrimaryText}>Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -478,5 +577,74 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.muted,
     lineHeight: 16,
+  },
+
+  // rename modal
+  modalRoot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: space.xl,
+  },
+  modalScrim: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.scrim,
+    opacity: SCRIM_OPACITY,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: colors.drawer,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.input,
+    padding: space.lg,
+    gap: space.md,
+  },
+  modalTitle: {
+    ...typography.small,
+    fontWeight: '600',
+    color: colors.ink,
+  },
+  modalInput: {
+    ...typography.body,
+    color: colors.ink,
+    height: 44,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.control,
+    paddingHorizontal: space.md,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: space.sm,
+  },
+  modalBtn: {
+    height: 38,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.control,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalBtnPrimary: {
+    backgroundColor: colors.ink,
+  },
+  modalBtnPrimaryPressed: {
+    opacity: 0.9,
+  },
+  modalBtnText: {
+    ...typography.small,
+    color: colors.muted,
+  },
+  modalBtnPrimaryText: {
+    ...typography.small,
+    fontWeight: '600',
+    color: colors.onAccentBtn,
   },
 });

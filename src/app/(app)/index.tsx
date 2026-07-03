@@ -35,6 +35,7 @@ import { MdReader } from '@/ui/chat/MdReader';
 import { CopiedToast } from '@/ui/chat/CopiedToast';
 import { useAuth } from '@/context/AuthContext';
 import { messageToText } from '@/ui/chat/types';
+import { renameSession } from '@/ui/chat/sessionActions';
 import type { Message, AgentBlock, RunState, MarkdownFile, ChatGroup } from '@/ui/chat/types';
 import { useAgents } from '@/agents/AgentProvider';
 import { initialTurn, reduceTurn, turnToBlocks, settleBlocks, shouldFlush } from '@/ui/chat/streamReducer';
@@ -336,6 +337,29 @@ export default function AgentScreen() {
     [loadSession, repo],
   );
 
+  const handleRenameChat = useCallback(
+    async (id: string, title: string) => {
+      const ok = await renameSession(repo, id, title);
+      if (ok) await loadSessionSummaries();
+    },
+    [repo, loadSessionSummaries],
+  );
+
+  const handleDeleteChat = useCallback(
+    async (id: string) => {
+      await repo.deleteSession(id);
+      if (sessionRef.current?.id === id) {
+        sessionRef.current = null;
+        setActiveSessionId('');
+        setMessages([]);
+        setStreaming(false);
+        setStatus('idle');
+      }
+      await loadSessionSummaries();
+    },
+    [repo, loadSessionSummaries],
+  );
+
   const handleOpenSettings = useCallback(() => {
     setSidebarOpen(false);
     router.push('/(app)/settings');
@@ -627,6 +651,8 @@ export default function AgentScreen() {
         onClose={() => setSidebarOpen(false)}
         onNewChat={handleNewChat}
         onSelectChat={handleSelectChat}
+        onRenameChat={handleRenameChat}
+        onDeleteChat={handleDeleteChat}
         onOpenSettings={handleOpenSettings}
         onOpenCron={handleOpenCron}
       />
