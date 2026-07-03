@@ -335,8 +335,8 @@ export function RichMarkdown({
 const MONO = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' });
 
 const mdStyles = StyleSheet.create({
-  body: { color: colors.ink, fontSize: 16, lineHeight: 24 },
-  paragraph: { marginTop: 0, marginBottom: space.md, fontSize: 16, lineHeight: 24, color: colors.ink },
+  body: { color: colors.ink, fontSize: 17, lineHeight: 24 },
+  paragraph: { marginTop: 0, marginBottom: space.md, fontSize: 17, lineHeight: 24, color: colors.ink },
   heading1: {
     fontSize: 24,
     lineHeight: 30,
@@ -347,13 +347,13 @@ const mdStyles = StyleSheet.create({
     marginBottom: space.sm + 1,
   },
   heading2: {
-    fontSize: 13,
+    fontSize: 20,
+    lineHeight: 26,
     fontWeight: '600',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    color: colors.muted,
-    marginTop: space.lg + 2,
-    marginBottom: space.sm + 2,
+    letterSpacing: -0.2,
+    color: colors.ink,
+    marginTop: space.lg,
+    marginBottom: space.sm,
   },
   heading3: {
     fontSize: 17,
@@ -428,11 +428,11 @@ const s = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.faint,
     marginTop: 9,
     marginRight: space.md - 1,
   },
-  olMarker: { fontSize: 16, lineHeight: 24, color: colors.muted, marginRight: space.sm },
+  olMarker: { fontSize: 17, lineHeight: 24, color: colors.muted, marginRight: space.sm },
 
   // task list
   taskCard: {
