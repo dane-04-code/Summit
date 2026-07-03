@@ -31,6 +31,8 @@ export const colors = {
   ink2: '#C9C9CE', // secondary ink — quieter than `ink` (mono call text, completed nodes)
   faint: '#5B5B62', // dimmest legible grey — cron pills, durations, glyphs, separators
   error: '#FF6B6B',
+  success: '#7BD88F', // confirmation moments ("Copied", paired) — same green family as mdString
+  scrim: '#000000', // overlay scrim behind the drawer / modals (applied at partial opacity)
   errorSurface: '#1B1617', // error-tinted card fill (a failed run)
   errorLine: '#3A2526', // error-tinted card hairline
   fileGlyph: '#202127', // .md file-icon fill in the attachment card
@@ -65,6 +67,7 @@ export const radius = {
   code: 10,
   input: 14,
   appMark: 16,
+  control: 10, // small controls: icon/back buttons, small pills, list rows
 } as const;
 
 // ---------------------------------------------------------------------------

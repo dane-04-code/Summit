@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     backgroundColor: colors.surface,
   },
-  error: { ...typography.caption, color: '#FF6B6B' },
+  error: { ...typography.caption, color: colors.error },
   btn: {
     height: 48,
     borderRadius: radius.input,

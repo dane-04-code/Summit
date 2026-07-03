@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Bot } from 'lucide-react-native';
+import { Mountain } from 'lucide-react-native';
 import { useAgents } from '@/agents/AgentProvider';
 import { connectDirectAgent } from '@/agents/connect';
 import { ConnectionError } from '@/agents/adapters/types';
@@ -66,7 +66,7 @@ export default function ConnectScreen() {
           <View style={styles.container}>
             <View style={styles.brandArea}>
               <View style={styles.brandMark}>
-                <Bot size={30} color={colors.bg} strokeWidth={1.7} />
+                <Mountain size={30} color={colors.bg} strokeWidth={1.7} />
               </View>
               <Text style={[styles.title, styles.brandTitle]}>Connect your agent</Text>
               <Text style={[styles.subtitle, styles.brandSubtitle]}>

@@ -131,7 +131,7 @@ export default function PairScreen() {
             >
               {promptCopied ? (
                 <>
-                  <Check size={16} color="#4ADE80" strokeWidth={1.7} />
+                  <Check size={16} color={colors.success} strokeWidth={1.7} />
                   <Text style={styles.copiedLabel}>Copied</Text>
                 </>
               ) : (
@@ -160,7 +160,7 @@ export default function PairScreen() {
             >
               {curlCopied ? (
                 <>
-                  <Check size={16} color="#4ADE80" strokeWidth={1.7} />
+                  <Check size={16} color={colors.success} strokeWidth={1.7} />
                   <Text style={styles.copiedLabel}>Copied</Text>
                 </>
               ) : (
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   copiedLabel: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#4ADE80',
+    color: colors.success,
   },
 
   divider: {
