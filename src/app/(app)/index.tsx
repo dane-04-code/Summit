@@ -20,7 +20,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
-import { ArrowUp } from 'lucide-react-native';
+import { ArrowUp, Square } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 import { colors, space, radius, typography, screenPadding } from '@/theme';
@@ -164,6 +164,8 @@ export default function AgentScreen() {
   const inputRef = useRef<TextInput>(null);
   const sessionRef = useRef<ChatSession | null>(null);
   const cancelledRef = useRef(false);
+  // Set by the stop button; the stream loop checks it and ends the turn early.
+  const stopRef = useRef(false);
   const insets = useSafeAreaInsets();
   const sendAnim = usePressAnim({ scale: 0.9 });
 
@@ -364,9 +366,15 @@ export default function AgentScreen() {
     return session;
   }, [activeAgent, repo]);
 
+  const handleStopStream = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    stopRef.current = true;
+  }, []);
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || streaming || !activeAgent) return;
+    stopRef.current = false;
     setInput('');
     setComposerHeight(COMPOSER_MIN_HEIGHT);
 
@@ -396,6 +404,7 @@ export default function AgentScreen() {
         sessionKey: session.remoteSessionKey ?? undefined,
       });
       for await (const event of stream) {
+        if (stopRef.current) break;
         turn = reduceTurn(turn, event);
         if (cancelledRef.current) return;
         const now = Date.now();
@@ -415,6 +424,13 @@ export default function AgentScreen() {
 
     if (cancelledRef.current) return;
     setStreaming(false);
+
+    // A reply stopped before any text arrived just disappears — nothing to keep.
+    if (stopRef.current && turn.text.trim() === '') {
+      setStatus('idle');
+      setMessages((prev) => prev.filter((m) => m.id !== agentId));
+      return;
+    }
 
     if (turn.status === 'error') {
       setStatus('error');
@@ -548,22 +564,35 @@ export default function AgentScreen() {
             </Animated.View>
 
             <Pressable
-              onPress={handleSend}
+              onPress={streaming ? handleStopStream : handleSend}
               onPressIn={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                 sendAnim.onPressIn();
               }}
               onPressOut={sendAnim.onPressOut}
-              disabled={!canSend}
+              disabled={!streaming && !canSend}
               hitSlop={8}
               accessibilityRole="button"
-              accessibilityLabel="Send message"
-              accessibilityState={{ disabled: !canSend }}
+              accessibilityLabel={streaming ? 'Stop reply' : 'Send message'}
+              accessibilityState={{ disabled: !streaming && !canSend }}
             >
               <Animated.View
-                style={[styles.sendBtn, sendAnim.animStyle, !canSend && styles.sendBtnDisabled]}
+                style={[
+                  styles.sendBtn,
+                  sendAnim.animStyle,
+                  !streaming && !canSend && styles.sendBtnDisabled,
+                ]}
               >
-                <ArrowUp size={20} color={colors.onAccentBtn} strokeWidth={2.5} />
+                {streaming ? (
+                  <Square
+                    size={14}
+                    color={colors.onAccentBtn}
+                    fill={colors.onAccentBtn}
+                    strokeWidth={2}
+                  />
+                ) : (
+                  <ArrowUp size={20} color={colors.onAccentBtn} strokeWidth={2.5} />
+                )}
               </Animated.View>
             </Pressable>
           </View>
