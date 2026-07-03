@@ -1,0 +1,63 @@
+/**
+ * The one interface that hides every Hermes/OpenClaw difference from the rest
+ * of the app. Storage, registry, and UI never branch on framework — they hold
+ * an `AgentAdapter`. See `docs/AGENTS.md` §3 and `FRAMEWORKS.md`.
+ */
+
+import type { AgentCapabilities, AgentFramework } from '../types';
+import type { CronJob, CronRun } from '@/ui/cron/types';
+
+export type AgentStatus = 'idle' | 'running' | 'error';
+
+/** A normalized event from a streamed turn — same shape across frameworks. */
+export type StreamEvent =
+  | { type: 'delta'; text: string }
+  | { type: 'tool'; label: string }
+  | { type: 'done' }
+  | { type: 'error'; message: string };
+
+export type SendOptions = {
+  /** X-Hermes-Session-Id — transcript-scoped, rotates on a new chat. */
+  sessionId?: string;
+  /** X-Hermes-Session-Key — stable channel identity, ties into memory. */
+  sessionKey?: string;
+};
+
+export type ConnectionErrorKind =
+  | 'unreachable' // never got a response (offline / wrong host / server down)
+  | 'unauthorized' // 401/403 — key rejected
+  | 'wrong-shape' // responded, but not a recognizable agent server
+  | 'server-error'; // other non-2xx
+
+/** Typed connect failure so the connect screen can show a specific message. */
+export class ConnectionError extends Error {
+  constructor(
+    public readonly kind: ConnectionErrorKind,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ConnectionError';
+  }
+}
+
+export interface AgentAdapter {
+  readonly framework: AgentFramework;
+
+  /** Probe the server and return its capability snapshot. Throws ConnectionError. */
+  testConnection(): Promise<AgentCapabilities>;
+
+  /** Stream one turn. Yields normalized events until `done` or `error`. */
+  sendMessage(content: string, opts?: SendOptions): AsyncIterable<StreamEvent>;
+
+  getStatus(): Promise<AgentStatus>;
+
+  // Runs API — Hermes only in v1 (gate on capabilities.hasRunApproval).
+  approveRun(runId: string, approved: boolean): Promise<void>;
+  stopRun(runId: string): Promise<void>;
+
+  listJobs(): Promise<CronJob[]>;
+  getJobRun(jobId: string): Promise<CronRun | null>;
+  pauseJob(jobId: string): Promise<void>;
+  resumeJob(jobId: string): Promise<void>;
+  triggerJob(jobId: string): Promise<void>;
+}

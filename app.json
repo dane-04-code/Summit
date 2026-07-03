@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Agent Messenger",
+    "name": "Summit",
     "slug": "agent-messenger",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,7 +11,13 @@
       "icon": "./assets/expo.icon",
       "bundleIdentifier": "com.dane04code.agentmessenger",
       "entitlements": {
-        "com.apple.developer.applesignin": ["Default"]
+        "com.apple.developer.applesignin": [
+          "Default",
+          "Default"
+        ]
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -40,7 +46,9 @@
         }
       ],
       "expo-secure-store",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "expo-sqlite",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

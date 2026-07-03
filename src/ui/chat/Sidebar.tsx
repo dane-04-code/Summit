@@ -1,7 +1,7 @@
 /**
  * Conversation drawer — slides in from the left over a dimmed thread.
  * App identity · search · New chat · grouped recents · account footer,
- * per the Agent Messenger sidebar design.
+ * per the Summit sidebar design.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -16,7 +16,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Bot, PanelLeftClose, Search, Plus, Settings } from 'lucide-react-native';
+import { PanelLeftClose, Search, Plus, Settings, CalendarClock } from 'lucide-react-native';
 
 import { colors, radius, space, typography } from '../../theme';
 import type { ChatGroup, ChatSummary, RunState } from './types';
@@ -33,11 +33,14 @@ interface SidebarProps {
   visible: boolean;
   groups: ChatGroup[];
   activeId: string;
+  title: string;
+  subtitle: string;
   account: { name: string; initial: string };
   onClose: () => void;
   onNewChat: () => void;
   onSelectChat: (id: string) => void;
   onOpenSettings: () => void;
+  onOpenCron: () => void;
 }
 
 // ── Recent conversation row ─────────────────────────────────────────────────
@@ -79,11 +82,14 @@ export function Sidebar({
   visible,
   groups,
   activeId,
+  title,
+  subtitle,
   account,
   onClose,
   onNewChat,
   onSelectChat,
   onOpenSettings,
+  onOpenCron,
 }: SidebarProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -148,15 +154,12 @@ export function Sidebar({
       >
         {/* identity header */}
         <View style={[styles.header, { paddingTop: insets.top + space.md }]}>
-          <View style={styles.logo}>
-            <Bot size={18} color={colors.bg} strokeWidth={1.7} />
-          </View>
           <View style={styles.identity}>
             <Text style={styles.appName} numberOfLines={1}>
-              Agent Messenger
+              {title}
             </Text>
             <Text style={styles.workspace} numberOfLines={1}>
-              Personal workspace
+              {subtitle}
             </Text>
           </View>
           <Pressable
@@ -184,9 +187,6 @@ export function Sidebar({
               returnKeyType="search"
               accessibilityLabel="Search chats"
             />
-            <View style={styles.kbd}>
-              <Text style={styles.kbdText}>⌘K</Text>
-            </View>
           </View>
         </View>
 
@@ -231,6 +231,16 @@ export function Sidebar({
 
         {/* account footer */}
         <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>
+          <Pressable
+            onPress={onOpenCron}
+            accessibilityRole="button"
+            accessibilityLabel="Cron Drops"
+            style={({ pressed }) => [styles.navRow, pressed && styles.pressable]}
+          >
+            <CalendarClock size={18} color={colors.muted} strokeWidth={1.6} />
+            <Text style={styles.navLabel}>Cron Drops</Text>
+          </Pressable>
+
           <Pressable
             onPress={onOpenSettings}
             accessibilityRole="button"
@@ -277,17 +287,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md - 1,
     paddingHorizontal: space.lg + 2,
     paddingBottom: space.md + 2,
-  },
-  logo: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.code,
-    backgroundColor: colors.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   identity: {
     flex: 1,
@@ -340,17 +341,6 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.ink,
     padding: 0,
-  },
-  kbd: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 5,
-    paddingHorizontal: space.xs + 1,
-    paddingVertical: 1,
-  },
-  kbdText: {
-    fontSize: 11,
-    color: colors.muted,
   },
 
   // new chat
@@ -444,6 +434,19 @@ const styles = StyleSheet.create({
     borderTopColor: colors.line,
     paddingHorizontal: space.md,
     paddingTop: space.md,
+  },
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md - 1,
+    borderRadius: radius.input - 2,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.sm + 2,
+    marginBottom: space.xs,
+  },
+  navLabel: {
+    ...typography.small,
+    color: colors.ink,
   },
   account: {
     flexDirection: 'row',

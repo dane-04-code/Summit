@@ -1,4 +1,4 @@
-# Cron Job Composition Ladder — Design
+ye# Cron Job Composition Ladder — Design
 
 **Date:** 2026-07-01
 **Status:** Approved (brainstorm), pending implementation plan

@@ -31,9 +31,9 @@ import { ApprovalCard } from '@/ui/chat/ApprovalCard';
 import { Sidebar } from '@/ui/chat/Sidebar';
 import { MdReader } from '@/ui/chat/MdReader';
 import { useAuth } from '@/context/AuthContext';
-import type { Message, AgentBlock, RunState, MarkdownFile } from '@/ui/chat/types';
+import type { Message, AgentBlock, RunState, MarkdownFile, ChatGroup } from '@/ui/chat/types';
 import { useAgents } from '@/agents/AgentProvider';
-import { initialTurn, reduceTurn, turnToBlocks } from '@/ui/chat/streamReducer';
+import { initialTurn, reduceTurn, turnToBlocks, settleBlocks } from '@/ui/chat/streamReducer';
 import type { ChatSession } from '@/agents/types';
 
 // ---------------------------------------------------------------------------
@@ -43,6 +43,10 @@ import type { ChatSession } from '@/agents/types';
 const AGENT_NAME = 'Hermes';
 const RUNNING_HINT = 'working…';
 
+const COMPOSER_MIN_HEIGHT = 24;
+const COMPOSER_MAX_HEIGHT = 120;
+const COMPOSER_VERTICAL_CHROME = 20;
+
 function genId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
@@ -51,6 +55,44 @@ function genId(): string {
 function agentText(id: string, text: string): Message {
   const blocks: AgentBlock[] = [{ kind: 'text', spans: [{ text }] }];
   return { id, role: 'agent', blocks };
+}
+
+function previewText(message: Message | null): string {
+  if (!message) return 'No messages yet';
+  if (message.role === 'user') return message.text;
+  if (message.role === 'action') return message.command;
+  const first = message.blocks[0];
+  if (!first) return 'Agent reply';
+  if (first.kind === 'markdown') return first.source.replace(/\s+/g, ' ').trim() || 'Agent reply';
+  if (first.kind === 'text') return first.spans.map((s) => s.text).join('').trim() || 'Agent reply';
+  if (first.kind === 'heading') return first.text;
+  if (first.kind === 'code') return 'Code snippet';
+  if (first.kind === 'table') return 'Table';
+  if (first.kind === 'file') return first.file.name;
+  if (first.kind === 'chip') return first.label;
+  return 'Agent reply';
+}
+
+function formatSessionTime(timestamp: number): string {
+  const diff = Math.max(0, Date.now() - timestamp);
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  if (diff < minute) return 'now';
+  if (diff < hour) return `${Math.floor(diff / minute)}m`;
+  if (diff < day) return `${Math.floor(diff / hour)}h`;
+  if (diff < 7 * day) return `${Math.floor(diff / day)}d`;
+  return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function sessionGroupLabel(timestamp: number): string {
+  const d = new Date(timestamp);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
 // ---------------------------------------------------------------------------
@@ -114,8 +156,12 @@ export default function AgentScreen() {
   const [streaming, setStreaming] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [openFile, setOpenFile] = useState<MarkdownFile | null>(null);
+  const [chatGroups, setChatGroups] = useState<ChatGroup[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState('');
+  const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
 
   const flashListRef = useRef<FlashListRef<Message>>(null);
+  const inputRef = useRef<TextInput>(null);
   const sessionRef = useRef<ChatSession | null>(null);
   const cancelledRef = useRef(false);
   const insets = useSafeAreaInsets();
@@ -146,23 +192,74 @@ export default function AgentScreen() {
     };
   }, []);
 
+  const loadSessionSummaries = useCallback(async () => {
+    if (!activeAgent) {
+      setChatGroups([]);
+      return;
+    }
+    const sessions = await repo.listSessions(activeAgent.id);
+    const summaries = await Promise.all(
+      sessions.map(async (session) => {
+        const stored = await repo.listMessages(session.id);
+        const first = stored[0]?.message ?? null;
+        const last = stored[stored.length - 1]?.message ?? null;
+        return {
+          session,
+          chat: {
+            id: session.id,
+            title: session.title ?? previewText(first).slice(0, 40),
+            preview: previewText(last),
+            time: formatSessionTime(session.updatedAt),
+            state: 'idle' as const,
+          },
+        };
+      }),
+    );
+    const nextGroups: ChatGroup[] = [];
+    for (const { session, chat } of summaries) {
+      const label = sessionGroupLabel(session.updatedAt);
+      const group = nextGroups.find((g) => g.label === label);
+      if (group) group.chats.push(chat);
+      else nextGroups.push({ label, chats: [chat] });
+    }
+    setChatGroups(nextGroups);
+  }, [activeAgent, repo]);
+
+  const loadSession = useCallback(
+    async (session: ChatSession | null) => {
+      sessionRef.current = session;
+      setActiveSessionId(session?.id ?? '');
+      if (!session) {
+        setMessages([]);
+        return;
+      }
+      const stored = await repo.listMessages(session.id);
+      setMessages(stored.map((s) => s.message));
+    },
+    [repo],
+  );
+
   // Restore the most recent thread for the active agent (docs/AGENTS.md §6).
   useEffect(() => {
-    if (!activeAgent) return;
     let cancelled = false;
     (async () => {
+      if (!activeAgent) {
+        if (!cancelled) {
+          await loadSession(null);
+          setChatGroups([]);
+        }
+        return;
+      }
       const sessions = await repo.listSessions(activeAgent.id); // newest-first
       const latest = sessions[0] ?? null;
-      if (!latest || cancelled) return;
-      const stored = await repo.listMessages(latest.id); // oldest-first
       if (cancelled) return;
-      sessionRef.current = latest;
-      setMessages(stored.map((s) => s.message));
+      await loadSession(latest);
+      if (!cancelled) await loadSessionSummaries();
     })();
     return () => {
       cancelled = true;
     };
-  }, [activeAgent, repo]);
+  }, [activeAgent, repo, loadSession, loadSessionSummaries]);
 
   // Scroll to newest content whenever the thread changes (including mid-stream)
   useEffect(() => {
@@ -175,15 +272,39 @@ export default function AgentScreen() {
 
   const statusLabel =
     status === 'running' ? 'running' : status === 'error' ? 'connection error' : 'ready';
+  const sidebarTitle = activeAgent?.name ?? 'Summit';
+  const sidebarSubtitle = activeAgent
+    ? activeAgent.framework === 'hermes' ? 'Hermes' : 'OpenClaw'
+    : 'No agent connected';
 
   const handleNewChat = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
     sessionRef.current = null;
+    setActiveSessionId('');
     setMessages([]);
     setInput('');
+    setComposerHeight(COMPOSER_MIN_HEIGHT);
     setStreaming(false);
     setStatus('idle');
     setSidebarOpen(false);
+  }, []);
+
+  // Web auto-grow. react-native-web reports `textarea.scrollHeight` for
+  // `onContentSizeChange`, and scrollHeight is `max(content, clientHeight)` —
+  // so measuring while our own height is applied makes the box ratchet to its
+  // cap and never shrink. Collapse to 0 first to read the true content height.
+  const measureComposer = useCallback((text: string) => {
+    setInput(text);
+    if (Platform.OS !== 'web') return;
+    const node = inputRef.current as unknown as HTMLTextAreaElement | null;
+    if (!node) return;
+    const applied = node.style.height;
+    node.style.height = '0px';
+    const contentHeight = node.scrollHeight;
+    node.style.height = applied;
+    setComposerHeight(
+      Math.min(COMPOSER_MAX_HEIGHT, Math.max(COMPOSER_MIN_HEIGHT, contentHeight)),
+    );
   }, []);
 
   const handleMenu = useCallback(() => {
@@ -196,10 +317,16 @@ export default function AgentScreen() {
     setOpenFile(file);
   }, []);
 
-  const handleSelectChat = useCallback((_id: string) => {
-    // ponytail: load the selected conversation's history when the history slice lands
-    setSidebarOpen(false);
-  }, []);
+  const handleSelectChat = useCallback(
+    async (id: string) => {
+      const session = await repo.getSession(id);
+      if (!session) return;
+      Haptics.selectionAsync().catch(() => {});
+      await loadSession(session);
+      setSidebarOpen(false);
+    },
+    [loadSession, repo],
+  );
 
   const handleOpenSettings = useCallback(() => {
     setSidebarOpen(false);
@@ -242,6 +369,7 @@ export default function AgentScreen() {
     };
     await repo.upsertSession(session);
     sessionRef.current = session;
+    setActiveSessionId(session.id);
     return session;
   }, [activeAgent, repo]);
 
@@ -249,6 +377,7 @@ export default function AgentScreen() {
     const text = input.trim();
     if (!text || streaming || !activeAgent) return;
     setInput('');
+    setComposerHeight(COMPOSER_MIN_HEIGHT);
 
     const session = await ensureSession();
     const now = Date.now();
@@ -289,30 +418,40 @@ export default function AgentScreen() {
 
     if (turn.status === 'error') {
       setStatus('error');
+      const errorMsg: Message = {
+        id: agentId,
+        role: 'agent',
+        blocks: [
+          { kind: 'text', spans: [{ text: turn.error ?? 'Something went wrong.' }], tone: 'muted' },
+        ],
+      };
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === agentId
-            ? {
-                id: agentId,
-                role: 'agent',
-                blocks: [
-                  { kind: 'text', spans: [{ text: turn.error ?? 'Something went wrong.' }], tone: 'muted' },
-                ],
-              }
-            : m,
+          m.id === agentId ? errorMsg : m,
         ),
       );
+      await repo.appendMessage({ id: agentId, sessionId: session.id, message: errorMsg, createdAt: Date.now() });
+      const title = session.title ?? text.slice(0, 40);
+      const updated: ChatSession = { ...session, title, updatedAt: Date.now() };
+      await repo.upsertSession(updated);
+      sessionRef.current = updated;
+      setActiveSessionId(updated.id);
+      await loadSessionSummaries();
       return;
     }
 
     setStatus('idle');
-    const settled: Message = { id: agentId, role: 'agent', blocks: turnToBlocks(turn) };
+    const settled: Message = { id: agentId, role: 'agent', blocks: settleBlocks(turn.text) };
+    // Snap from streaming markdown to the settled form (file card for pasted .md content, etc.)
+    setMessages((prev) => prev.map((m) => (m.id === agentId ? settled : m)));
     await repo.appendMessage({ id: agentId, sessionId: session.id, message: settled, createdAt: Date.now() });
     const title = session.title ?? text.slice(0, 40);
     const updated: ChatSession = { ...session, title, updatedAt: Date.now() };
     await repo.upsertSession(updated);
     sessionRef.current = updated;
-  }, [input, streaming, activeAgent, adapterFor, repo, ensureSession]);
+    setActiveSessionId(updated.id);
+    await loadSessionSummaries();
+  }, [input, streaming, activeAgent, adapterFor, repo, ensureSession, loadSessionSummaries]);
 
   return (
     <>
@@ -325,7 +464,7 @@ export default function AgentScreen() {
        */}
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
         <Header
-          name={AGENT_NAME}
+          name={activeAgent?.name ?? AGENT_NAME}
           status={status}
           statusLabel={statusLabel}
           hint={RUNNING_HINT}
@@ -363,20 +502,47 @@ export default function AgentScreen() {
           <View
             style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, space.md) }]}
           >
-            <Animated.View style={[styles.fieldWrap, { borderColor: fieldBorderColor }]}>
+            <Animated.View
+              style={[
+                styles.fieldWrap,
+                {
+                  borderColor: fieldBorderColor,
+                  height: Math.max(44, composerHeight + COMPOSER_VERTICAL_CHROME),
+                },
+              ]}
+            >
               <TextInput
-                style={styles.textField}
+                ref={inputRef}
+                style={[styles.textField, { height: composerHeight }]}
                 value={input}
-                onChangeText={setInput}
+                onChangeText={measureComposer}
                 placeholder="Message…"
                 placeholderTextColor={colors.muted}
-                returnKeyType="send"
-                onSubmitEditing={handleSend}
                 onFocus={() => animateFocus(1)}
                 onBlur={() => animateFocus(0)}
-                blurOnSubmit={false}
                 autoCorrect
-                multiline={false}
+                multiline
+                scrollEnabled={composerHeight >= COMPOSER_MAX_HEIGHT}
+                // Native only: iOS/Android report a frame-independent content
+                // size, so this settles. Web is handled in `measureComposer` —
+                // wiring it here would re-introduce the scrollHeight ratchet.
+                onContentSizeChange={
+                  Platform.OS === 'web'
+                    ? undefined
+                    : (event) => {
+                        // Small buffer so the last line never clips the frame.
+                        setComposerHeight(
+                          Math.min(
+                            COMPOSER_MAX_HEIGHT,
+                            Math.max(
+                              COMPOSER_MIN_HEIGHT,
+                              event.nativeEvent.contentSize.height + 2,
+                            ),
+                          ),
+                        );
+                      }
+                }
+                textAlignVertical="top"
                 accessibilityLabel="Message input"
               />
             </Animated.View>
@@ -406,8 +572,10 @@ export default function AgentScreen() {
 
       <Sidebar
         visible={sidebarOpen}
-        groups={[]}
-        activeId=""
+        groups={chatGroups}
+        activeId={activeSessionId}
+        title={sidebarTitle}
+        subtitle={sidebarSubtitle}
         account={account}
         onClose={() => setSidebarOpen(false)}
         onNewChat={handleNewChat}
@@ -467,7 +635,7 @@ const styles = StyleSheet.create({
   // ── Input bar ─────────────────────────────────────────────────────────────
   inputBar: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end', // keep Send pinned to the bottom as the field grows
     gap: space.sm + 2,
     paddingHorizontal: space.lg,
     paddingTop: space.sm + 2,
@@ -478,15 +646,19 @@ const styles = StyleSheet.create({
   // Box chrome lives on the wrapper so its border colour can animate on focus.
   fieldWrap: {
     flex: 1,
-    height: 44,
-    justifyContent: 'center',
+    minHeight: 44,
+    justifyContent: 'flex-start',
     borderWidth: 1,
     borderRadius: radius.input,
     paddingHorizontal: space.md + 3,
+    paddingVertical: space.sm,
     backgroundColor: colors.surface,
   },
   textField: {
     ...typography.body,
+    width: '100%',
+    minWidth: 0,
+    flexShrink: 1,
     color: colors.ink,
     padding: 0, // strip RN's default vertical padding so text sits dead-centre
   },

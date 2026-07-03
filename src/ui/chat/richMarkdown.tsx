@@ -14,7 +14,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Linking, Platform } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Linking, Platform } from 'react-native';
 import Markdown, {
   MarkdownIt,
   hasParents,
@@ -228,6 +228,19 @@ export function RichMarkdown({
       </Text>
     ),
 
+    // Wide tables scroll horizontally instead of squishing/clipping on a phone
+    // (cells get a minWidth floor so columns stay readable — see mdStyles.th/td).
+    table: (node, children) => (
+      <ScrollView
+        key={node.key}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        testID="md-table-scroll"
+      >
+        <View style={mdStyles.table}>{children}</View>
+      </ScrollView>
+    ),
+
     bullet_list: (node, children, parent, styles) => {
       if (isTaskList(node)) {
         return (
@@ -383,6 +396,7 @@ const mdStyles = StyleSheet.create({
   thead: { backgroundColor: colors.drawer },
   tr: { borderBottomWidth: 1, borderColor: colors.line, flexDirection: 'row' },
   th: {
+    minWidth: 88,
     paddingVertical: space.sm + 1,
     paddingHorizontal: space.md + 1,
     fontSize: 11,
@@ -392,6 +406,7 @@ const mdStyles = StyleSheet.create({
     color: colors.muted,
   },
   td: {
+    minWidth: 88,
     paddingVertical: space.sm + 2,
     paddingHorizontal: space.md + 1,
     fontSize: 15,

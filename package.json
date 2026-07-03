@@ -80,7 +80,8 @@
       "/node_modules/",
       "<rootDir>/relay/",
       "<rootDir>/connector/",
-      "<rootDir>/protocol/"
+      "<rootDir>/protocol/",
+      "<rootDir>/__tests__/fixtures/"
     ],
     "moduleNameMapper": {
       "^@testing-library/react-native/extend-expect$": "<rootDir>/node_modules/@testing-library/react-native/dist/matchers/extend-expect"

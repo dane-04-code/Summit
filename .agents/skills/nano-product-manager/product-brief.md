@@ -1,4 +1,4 @@
-# Agent Messenger — Product Brief
+# Summit — Product Brief
 
 *The single source of product truth for the nano product manager. Synthesizes `PRD.md`,
 `FRAMEWORKS.md`, and `docs/CONNECTION.md`. When those change, update this. Last synced: 2026-06-25.*
@@ -7,13 +7,13 @@
 
 ## 1. What it is (in one breath)
 
-**Agent Messenger** — a React Native (iOS-first, Expo) mobile app that gives people running
+**Summit** — a React Native (iOS-first, Expo) mobile app that gives people running
 self-hosted AI agents (Hermes today, OpenClaw later) a **first-class mobile client** for their
 agent: reach it from anywhere, message it fluidly, see its status, and act on blocking decisions
 with one tap. It is *not* a replacement for Telegram/Discord as everyday messengers — it fixes the
 specific things those break when you're working with an agent on your phone.
 
-**Codename:** Agent Messenger · **Stage:** pre-build, PRD v0.2 · **Author:** Dane
+**Codename:** Summit · **Stage:** iOS development build running, PRD v0.3 draft · **Author:** Dane
 
 ## 2. The positioning thesis (memorize this — it's the spine)
 
@@ -50,7 +50,7 @@ A self-hosted Hermes is **inbound-only** and sits behind NAT, so a phone off hom
 it directly. Making the app a "direct API client" would only work on WiFi and be *harder to set up
 than the Telegram bot we replace* — disqualifying.
 
-**Solution: relay-first, mirroring Telegram's shape.**
+**Solution: relay-mandatory for MVP, mirroring Telegram's shape.**
 - A small **connector sidecar** runs next to Hermes (Hermes can't dial out itself), talks to
   `localhost:8642`, and dials **outbound** to a relay we operate. The app connects to the relay.
   The relay is the meeting point — nothing on the user's network is exposed.
@@ -58,10 +58,13 @@ than the Telegram bot we replace* — disqualifying.
 - **Agent-assisted onboarding (headline path):** the user pastes a prompt to their agent; the agent
   installs its own connector (deterministic one-liner, daemonized as a service) and reads back the
   6-digit code. The agent gives itself a phone.
-- **Direct mode (advanced fallback):** paste a reachable host + API key (Tailscale/tunnel/domain).
-  For the no-middleman crowd, and for sandboxed agents that can't run the installer.
+- **Direct mode (advanced fallback/dev path):** paste a reachable host + API key
+  (Tailscale/tunnel/domain). Useful for development and no-middleman users, but not sufficient for
+  MVP because it makes the user solve reachability.
 - **Bonuses of the relay:** API key never leaves the server; app reads WebSocket (not brittle RN
   SSE); push notifications fall out of the same channel (connection relay = push relay).
+- **Production domain:** `summitapp.dev`, with `relay.summitapp.dev` for WebSocket relay traffic,
+  `api.summitapp.dev` for pairing/API requests, and `get.summitapp.dev` for the connector installer.
 
 *The one cost:* relay infra to run, and the connector to install (made trivial via agent-assisted
 onboarding). Mitigations: thin/self-hostable relay (open-core), direct mode bypasses it.
@@ -104,8 +107,8 @@ manual, not magic).
 
 ## 8. Open decisions (live — good territory for PM thinking)
 
-1. **Connection transport sub-decisions:** hosted vs self-host-only relay for v1; ship direct mode
-   in v1 or relay-only first; E2E encryption vs TLS-to-relay.
+1. **Connection transport sub-decisions:** hosted vs self-host-only relay for v1; how visible direct
+   mode should be as an advanced fallback; E2E encryption vs TLS-to-relay.
 2. **Monetization:** open-core (free app + paid hosted relay) vs paid tier vs none — in tension with
    the community's OSS/free preference. Validate appetite before investing.
 3. **Community validation:** post in Hermes/OpenClaw Discord to confirm real demand before building.

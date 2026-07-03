@@ -161,6 +161,43 @@ service. If anything errors, paste the full output back to me.
 - **Fallbacks:** if the agent is sandboxed (no outbound shell / can't install a service), fall back
   to (a) the human running the same one-liner manually, or (b) direct mode (host + key).
 
+## 5b. What actually happens at the relay (implementation notes)
+
+These are the non-obvious implementation details that only surfaced during live testing.
+
+### Durable Object state must be persisted to storage
+
+The relay uses Cloudflare Durable Objects with the **Hibernation API** (`acceptWebSocket`). This lets
+the DO sleep between messages — Cloudflare keeps the WebSocket connections alive, but **all in-memory
+state is lost on hibernation.** The DO's constructor runs fresh on every wake.
+
+The consequence: if `connectorInfo` lives only in `this.state` (an in-memory field), it will be null
+by the time the app sends its `pair` frame — even seconds later. The DO hibernated between the
+connector's `hello` and the app's `pair`.
+
+**Fix:** every state mutation is now written to `doState.storage` immediately, and the constructor
+reloads from storage via `blockConcurrencyWhile`. See `relay/src/channel.ts`.
+
+### The connector must send WebSocket pings
+
+Cloudflare closes idle WebSocket connections after roughly 2 minutes with close 1006 (abnormal
+closure). The connector sends a `PingMessage` control frame every 30 seconds to keep the connection
+alive. Cloudflare's Hibernation API handles pong responses automatically on the relay side — no
+relay-side ping handler needed.
+
+### The connector must reconnect on drop
+
+Even with pings, network hiccups happen. The connector wraps its entire connect-and-read loop in an
+outer retry loop that waits 5 seconds and reconnects on any error. On reconnect, the relay mints a
+new pairing code, which is written to `~/.summit/pairing_code` so the agent (or user) can always
+`cat` the current code without digging through logs.
+
+### Non-root install fallback
+
+The install script defaults to `~/.local/bin/summit-connector` when `/usr/local/bin` isn't writable.
+Most Hermes users run as a non-root user. The original script hardcoded `/usr/local/bin` and failed
+silently — the config file was written but the binary was never installed.
+
 ## 6. Security & privacy
 
 - **Pairing codes:** short-lived, single-use, rate-limited.

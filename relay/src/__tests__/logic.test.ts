@@ -64,6 +64,11 @@ describe('handleAppMessage — pair', () => {
 });
 
 describe('handleAppMessage — passthrough', () => {
+  it('replies to app heartbeat without forwarding to connector', () => {
+    const { effects } = handleAppMessage(makeInitialState(), { t: 'ping' });
+    expect(effects).toEqual([{ to: 'app', frame: { t: 'pong' } }]);
+  });
+
   it('forwards chat to connector', () => {
     const chat = { t: 'chat' as const, reqId: 'r1', messages: [{ role: 'user' as const, content: 'hi' }] };
     const { effects } = handleAppMessage(makeInitialState(), chat);

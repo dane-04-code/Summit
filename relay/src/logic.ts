@@ -5,6 +5,7 @@ export type ConnectorInfo = { framework: string; agentName: string; agentVersion
 export type ChannelState = {
   code: string | null;
   connectorInfo: ConnectorInfo | null;
+  connectorConnected: boolean;
 };
 
 export type SideEffect =
@@ -14,17 +15,17 @@ export type SideEffect =
 export type HandleResult = { state: ChannelState; effects: SideEffect[]; occupied?: boolean };
 
 export function makeInitialState(): ChannelState {
-  return { code: null, connectorInfo: null };
+  return { code: null, connectorInfo: null, connectorConnected: false };
 }
 
 export function handleConnectorOpen(state: ChannelState, code: string): HandleResult {
   // Occupied only when a connector is actively connected right now.
   // A code left over from a previous (now-closed) connection is not occupied.
-  if (state.connectorInfo !== null) {
+  if (state.connectorConnected) {
     return { state, effects: [], occupied: true };
   }
   // Store the code; wait for hello before replying with it
-  return { state: { ...state, code }, effects: [] };
+  return { state: { ...state, code, connectorConnected: true }, effects: [] };
 }
 
 export function handleConnectorMessage(state: ChannelState, frame: AnyFrame): HandleResult {
@@ -47,6 +48,10 @@ export function handleConnectorMessage(state: ChannelState, frame: AnyFrame): Ha
 }
 
 export function handleAppMessage(state: ChannelState, frame: AnyFrame): HandleResult {
+  if (frame.t === 'ping') {
+    return { state, effects: [{ to: 'app', frame: { t: 'pong' } }] };
+  }
+
   if (frame.t === 'pair') {
     if (!state.connectorInfo) {
       const reply: PairErrorFrame = { t: 'pair_error', reason: 'not_found' };
@@ -61,7 +66,7 @@ export function handleAppMessage(state: ChannelState, frame: AnyFrame): HandleRe
 
 export function handleConnectorClose(state: ChannelState): HandleResult {
   const gone: PeerGoneFrame = { t: 'peer_gone' };
-  return { state: { ...state, connectorInfo: null }, effects: [{ to: 'app', frame: gone }] };
+  return { state: { ...state, connectorInfo: null, connectorConnected: false }, effects: [{ to: 'app', frame: gone }] };
 }
 
 export function handleAppClose(state: ChannelState): HandleResult {

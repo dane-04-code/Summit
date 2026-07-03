@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Link } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { SIGNUP_ENABLED } from '@/config';
 import { colors, space, radius, typography, screenPadding } from '@/theme';
 
 export default function SignInScreen() {
@@ -35,7 +36,7 @@ export default function SignInScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.container}>
-          <Text style={styles.title}>Agent Messenger</Text>
+          <Text style={styles.title}>Summit</Text>
           <Text style={styles.subtitle}>Sign in to continue</Text>
 
           <View style={styles.form}>
@@ -74,15 +75,19 @@ export default function SignInScreen() {
             </Pressable>
           </View>
 
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
-          </View>
+          {SIGNUP_ENABLED && (
+            <>
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
 
-          <Link href="/(auth)/sign-up" style={styles.link}>
-            <Text style={styles.linkText}>No account? Sign up</Text>
-          </Link>
+              <Link href="/(auth)/sign-up" style={styles.link}>
+                <Text style={styles.linkText}>No account? Sign up</Text>
+              </Link>
+            </>
+          )}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

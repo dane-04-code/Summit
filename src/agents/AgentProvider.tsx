@@ -25,6 +25,7 @@ type AgentContextValue = {
   addAgent: (input: NewAgentInput, secret: string) => Promise<Agent>;
   /** Update the secret for an existing agent and drop its cached adapter. */
   repairAgent: (id: string, secret: string) => Promise<void>;
+  renameAgent: (id: string, name: string) => Promise<void>;
   removeAgent: (id: string) => Promise<void>;
   selectAgent: (id: string) => Promise<void>;
   /** Build the adapter for an agent (lazy Keychain read for its secret). */
@@ -83,6 +84,16 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     adapterCache.current.delete(id);
   };
 
+  const renameAgent = async (id: string, name: string): Promise<void> => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const target = agents.find((a) => a.id === id);
+    if (!target) return;
+    const updated = { ...target, name: trimmed };
+    await repo.upsertAgent(updated);
+    setAgents((prev) => upsertAgent(prev, updated));
+  };
+
   const removeAgent = async (id: string): Promise<void> => {
     await deleteAgentSecret(id);
     await repo.deleteAgent(id);
@@ -121,6 +132,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     activeAgent: resolveActive(agents, activeId),
     addAgent,
     repairAgent,
+    renameAgent,
     removeAgent,
     selectAgent,
     adapterFor,

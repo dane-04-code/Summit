@@ -1,4 +1,4 @@
-# Design System — Agent Messenger
+# Design System — Summit
 
 **Dark, clean, and quiet.** A dark chat app that feels calm and premium — not stark, not
 busy. Lots of breathing room, system font, one restrained accent. The UI recedes so the
@@ -66,7 +66,7 @@ System font for everything. Built-in monospace only inside code blocks.
 
 ### App mark
 A small rounded-square mark (light `ink` fill, dark glyph) at the top of the Connect
-screen, with the wordmark "Agent Messenger" (muted, uppercase, tracked) — basic identity,
+screen, with the wordmark "Summit" (muted, uppercase, tracked) — basic identity,
 not branding theatre.
 
 ### Message rows (hybrid layout)

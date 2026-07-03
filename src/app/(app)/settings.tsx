@@ -1,5 +1,5 @@
-import React from 'react';
-import { ScrollView, View, Text, Pressable, StyleSheet, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ScrollView, View, Text, Pressable, StyleSheet, Alert, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import Constants from 'expo-constants';
 import { Bot, Clock, ChevronRight } from 'lucide-react-native';
@@ -10,15 +10,26 @@ import { accountName, accountInitial } from '@/lib/account';
 import { SettingsScreen, SectionLabel, Card, Row } from '@/ui/settings';
 import { colors, typography } from '@/theme';
 
-const FRAMEWORK_LABEL: Record<string, string> = { hermes: 'Hermes', openclaw: 'OpenClaw' };
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
 export default function Settings() {
   const { user, signOut } = useAuth();
-  const { activeAgent } = useAgents();
+  const { activeAgent, renameAgent } = useAgents();
+  const [agentName, setAgentName] = useState(activeAgent?.name ?? '');
 
   const name = accountName(user);
   const email = user?.email ?? '';
+
+  useEffect(() => {
+    setAgentName(activeAgent?.name ?? '');
+  }, [activeAgent?.id, activeAgent?.name]);
+
+  const saveAgentName = () => {
+    if (!activeAgent) return;
+    const trimmed = agentName.trim();
+    if (!trimmed || trimmed === activeAgent.name) return;
+    void renameAgent(activeAgent.id, trimmed);
+  };
 
   const confirmSignOut = () => {
     Alert.alert('Sign out', 'Sign out of Summit on this device?', [
@@ -61,10 +72,29 @@ export default function Settings() {
         <View style={styles.group}>
           <SectionLabel>Agent</SectionLabel>
           <Card>
+            {activeAgent ? (
+              <View style={styles.nameRow}>
+                <View style={styles.nameMain}>
+                  <Text style={styles.nameLabel}>Display name</Text>
+                  <Text style={styles.nameSub}>Shown in the chat header and sidebar</Text>
+                </View>
+                <TextInput
+                  style={styles.nameInput}
+                  value={agentName}
+                  onChangeText={setAgentName}
+                  placeholder="Hermes"
+                  placeholderTextColor={colors.faint}
+                  autoCapitalize="words"
+                  returnKeyType="done"
+                  onSubmitEditing={saveAgentName}
+                  onBlur={saveAgentName}
+                />
+              </View>
+            ) : null}
             <Row
               icon={<Bot size={17} color={colors.ink} strokeWidth={1.5} />}
               label="Connected agent"
-              value={activeAgent ? FRAMEWORK_LABEL[activeAgent.framework] ?? activeAgent.name : 'None'}
+              value={activeAgent ? activeAgent.name : 'None'}
               onPress={() =>
                 router.push((activeAgent ? '/(app)/connection' : '/(app)/pair') as '/')
               }
@@ -129,6 +159,28 @@ const styles = StyleSheet.create({
   accountEmail: { ...typography.small, color: colors.muted, marginTop: 1 },
 
   group: { gap: 0 },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  nameMain: { flex: 1, minWidth: 0 },
+  nameLabel: { fontSize: 16, color: colors.ink },
+  nameSub: { ...typography.caption, color: colors.muted, marginTop: 1 },
+  nameInput: {
+    minWidth: 116,
+    maxWidth: 150,
+    height: 38,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    color: colors.ink,
+    backgroundColor: colors.bg,
+    textAlign: 'right',
+  },
 
   signOut: {
     height: 48,

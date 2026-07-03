@@ -1,5 +1,5 @@
 /**
- * Design-system tokens for Agent Messenger.
+ * Design-system tokens for Summit.
  * Single source of truth — import from here, never use raw hex / magic numbers.
  *
  * Note: the type-scale export is named `typography` instead of `type` to avoid
@@ -24,9 +24,23 @@ export const colors = {
   codeBg: '#1A1B1E',
   line: '#2A2B2F',
   lineFocus: '#3E3F45', // input border when focused — a gentle lift, still grey
+  raised: '#1C1D20', // a card lifted just above `surface` (e.g. the cron "drop" artifact)
   accent: '#5B9DFF',
+  accentLine: '#2F3A4A', // accent-tinted hairline (credential / auth steps)
   onAccentBtn: '#0F1012',
+  ink2: '#C9C9CE', // secondary ink — quieter than `ink` (mono call text, completed nodes)
+  faint: '#5B5B62', // dimmest legible grey — cron pills, durations, glyphs, separators
   error: '#FF6B6B',
+  errorSurface: '#1B1617', // error-tinted card fill (a failed run)
+  errorLine: '#3A2526', // error-tinted card hairline
+  fileGlyph: '#202127', // .md file-icon fill in the attachment card
+  frontmatterBg: '#15161A', // YAML front-matter card fill in the doc reader
+  mdString: '#7BD88F', // front-matter string values / code strings (green)
+  mdDate: '#E0A37E', // front-matter date / number values / code numbers (amber)
+  codeBlockBg: '#141519', // code-block body fill (a touch below `surface`)
+  codeFunc: '#C9A6F0', // syntax: function / def names (violet)
+  codeBuiltin: '#6FC8D6', // syntax: built-ins (cyan)
+  highlightBg: '#2C3A55', // ==highlight== mark background (accent-tinted)
 } as const;
 
 // ---------------------------------------------------------------------------

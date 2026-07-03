@@ -90,13 +90,17 @@ Goal: the app keeps the conversation understandable across restarts and long ses
 
 Goal: output looks first-class for the real things Hermes sends.
 
+- [x] Add fixtures/tests for the exact output shapes we care about — `__tests__/fixtures/markdown.ts`
+      (wide table, nested lists, unbreakable URL, wide code, mixed doc, huge doc) driven through the
+      real renderer by `__tests__/markdownRender.test.tsx`.
+- [x] Improve table behavior when wide columns overflow — wide tables now scroll horizontally
+      (`table` render rule in `richMarkdown.tsx`) instead of clipping/squishing; `CodeBlock` already
+      scrolls long lines.
 - Keep code snippets as-is if testing confirms they hold up.
-- Test long tables, wide tables, nested lists, links, headings, partial markdown while streaming,
-  pasted `.md` files, and very long responses.
-- Improve table behavior if wide columns overflow badly on phones.
+- Still to test: nested lists, links, headings, partial markdown while streaming, pasted `.md`
+  files, and very long responses — visually, on-device.
 - Verify graph output expectation. If "graphs" means markdown/image output from Hermes, render that;
   if it means custom charts, define the minimal supported JSON/markdown shape before building.
-- Add fixtures/tests for the exact output shapes we care about.
 
 ### 5. Auth, Loading, And Error Screens
 

@@ -1,4 +1,4 @@
-# Agent Messenger — Product Brief
+# Summit — Product Brief
 
 *The single source of product truth for the nano product manager. Synthesizes `PRD.md`,
 `FRAMEWORKS.md`, and `docs/CONNECTION.md`. When those change, update this. Last synced: 2026-06-25.*
@@ -7,13 +7,13 @@
 
 ## 1. What it is (in one breath)
 
-**Agent Messenger** — a React Native (iOS-first, Expo) mobile app that gives people running
+**Summit** — a React Native (iOS-first, Expo) mobile app that gives people running
 self-hosted AI agents (Hermes today, OpenClaw later) a **first-class mobile client** for their
 agent: reach it from anywhere, message it fluidly, see its status, and act on blocking decisions
 with one tap. It is *not* a replacement for Telegram/Discord as everyday messengers — it fixes the
 specific things those break when you're working with an agent on your phone.
 
-**Codename:** Agent Messenger · **Stage:** pre-build, PRD v0.2 · **Author:** Dane
+**Codename:** Summit · **Stage:** pre-build, PRD v0.2 · **Author:** Dane
 
 ## 2. The positioning thesis (memorize this — it's the spine)
 
@@ -54,7 +54,7 @@ than the Telegram bot we replace* — disqualifying.
 - A small **connector sidecar** runs next to Hermes (Hermes can't dial out itself), talks to
   `localhost:8642`, and dials **outbound** to a relay we operate. The app connects to the relay.
   The relay is the meeting point — nothing on the user's network is exposed.
-- **Pairing = a 6-digit code.** No host URL, no API key on the phone, no accounts.
+- **Pairing = a 6-digit code.** No host URL, no API key on the phone.
 - **Agent-assisted onboarding (headline path):** the user pastes a prompt to their agent; the agent
   installs its own connector (deterministic one-liner, daemonized as a service) and reads back the
   6-digit code. The agent gives itself a phone.
@@ -112,6 +112,27 @@ manual, not magic).
 4. **OpenClaw API shape:** unresearched; don't assume Hermes parity.
 5. **Demo/launch plan:** short screen recording — lead with the *flow* (pair → fluid chat → one-tap
    approve), not just markdown.
+
+## 8a. Decided: accounts (closed 2026-06-27)
+
+**Accounts are in.** Every user creates an account — required for relay routing, subscriptions, and
+scaling to a real user base. Key decisions:
+
+- **Created in-app**, not on a website. No mid-onboarding redirect to a browser — that kills the
+  mobile-first discovery flow (user finds the app on Reddit on their phone, downloads it, must
+  complete setup without leaving the app).
+- **Sign in with Apple** is the primary path (iOS-first, one tap, no password, private relay email
+  option). Email magic link is the fallback for users who don't want Apple involved.
+- **The website** is a management portal (billing, multiple agents, usage) — not a required setup
+  step.
+- **Security:** in relay mode we never see the user's Hermes API key. The key stays on their server;
+  the connector forwards messages to our relay. The account holds relay routing identity and billing
+  only — low-sensitivity data.
+- **Mental model:** we are building the relay infrastructure (the "Telegram" in this picture, not the
+  bot). The connector is the bot client; our relay is the platform. Hermes connects to our relay with
+  a connector token (like a bot token) tied to the user's account. The 6-digit pairing code then
+  links a specific connector session to a specific app/device — these are two distinct layers; the
+  account doesn't replace the pairing flow, it sits above it.
 
 ## 9. Design direction (for grounding feature ideas — full system TBD in `docs/DESIGN.md`)
 

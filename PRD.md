@@ -1,6 +1,16 @@
 # Product Requirements Document
-## Mobile Companion App for Personal AI Agents
-**Codename: Agent Messenger** | Version 0.2 | June 2026
+## Summit
+**Mobile command for personal AI agents** | Version 0.3 draft | June 2026
+
+> **v0.3 draft (2026-06-28):** Relay is mandatory for MVP. Direct host+key mode is useful for
+> development, Tailscale, tunnels, and no-middleman users, but it does not satisfy the product
+> promise because it requires the user to solve reachability themselves. Summit ships as an MVP when
+> the default path is connector -> relay -> app pairing.
+>
+> **Current build reality:** The Expo/iOS app is running as a development build. Direct-mode
+> groundwork, auth/onboarding pieces, chat UI, rich markdown rendering, local storage, and the
+> Hermes adapter foundation exist. The product is not MVP-complete until relay pairing, connector
+> install, and app-to-agent messaging through the relay work end to end.
 
 > **v0.2 reframe (2026-06-25):** Connection model changed from *direct API client* to
 > *relay-first* (outbound, Telegram-shaped). A direct client requires the user to expose their
@@ -30,7 +40,18 @@ A React Native (iOS first) mobile app that connects to self-hosted AI agent fram
 
 **UI direction:** Dark by default — clean, calm, premium. **Not white/stark.** One restrained accent, system font, generous spacing. Full tokens in [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md). (Light mode is a possible later option; dark is the product's look.)
 
-**Connection model:** Relay-first, like Telegram. A small **connector** next to Hermes dials outbound to a relay (Hermes is inbound-only and can't dial out itself); the user pairs the app with a **6-digit code** — no host URL, no exposed server, no accounts, works on cellular. The connector can be installed by the agent itself (agent-assisted onboarding). A **direct host+key mode** remains available as an advanced option for the Tailscale / no-middleman crowd. Full rationale in [`docs/CONNECTION.md`](docs/CONNECTION.md).
+**Connection model:** Relay-first, like Telegram. A small **connector** next to Hermes dials outbound to a relay (Hermes is inbound-only and can't dial out itself); the user pairs the app with a **6-digit code** — no host URL, no exposed server, works on cellular. The connector can be installed by the agent itself (agent-assisted onboarding). A **direct host+key mode** remains available as an advanced option for the Tailscale / no-middleman crowd. Full rationale in [`docs/CONNECTION.md`](docs/CONNECTION.md).
+
+**MVP stance:** Relay is mandatory. Direct mode can exist in the app and is valuable for development
+and advanced users, but a direct-mode-only build is not the product. MVP means a user can install or
+trigger the connector, pair with a short code, and message/control Hermes through the relay from a
+phone off the local network.
+
+**Production domain:** `summitapp.dev` is the product domain. Planned service names:
+`relay.summitapp.dev` for WebSocket relay traffic, `api.summitapp.dev` for pairing/account relay
+API, and `get.summitapp.dev` for the connector installer.
+
+**Accounts:** Users create an account via **Apple Sign-In, Google Sign-In, or email/password** (Supabase Auth). The account ties the device token to a user identity on the relay, enabling multi-device support and future cloud features.
 
 ---
 
@@ -49,8 +70,10 @@ A React Native (iOS first) mobile app that connects to self-hosted AI agent fram
 
 ### Goals
 - **Deliver a fluent, first-class mobile flow** — pairing in seconds, smooth messaging, quick transitions; the experience is the product
+- **Make relay pairing the MVP path** — connector installed next to Hermes, outbound relay connection, 6-digit app pairing, works off WiFi
+- **User accounts** — Apple Sign-In, Google Sign-In, or email/password via Supabase Auth; account ties device to user identity on the relay
 - Let users connect to their self-hosted Hermes instance in under 2 minutes (agent-assisted pairing)
-- Render markdown output (tables, headings, code blocks with syntax highlighting) properly — the most visible part of that experience
+- Render markdown output (tables, headings, code blocks, diffs) properly — the most visible part of that experience
 - Enable approve/stop actions on running agent tasks from the phone
 - Provide a meaningful status view (idle / running / error) per agent
 - Lay groundwork for multi-framework support via a clean adapter pattern
@@ -62,27 +85,31 @@ A React Native (iOS first) mobile app that connects to self-hosted AI agent fram
 - Multi-agent management (v2+)
 - OpenClaw integration (v2, needs its own research pass)
 - Fully automated adapter layer for arbitrary new frameworks (v2+)
+- Direct-mode-only MVP
 
 ---
 
 ## 5. Feature Scope
 
-### MVP (Phase 1 + 2 — build these first)
+### MVP (relay-first, Hermes-first)
 
 | # | Feature | Notes |
 |---|---------|-------|
-| 1 | **Onboarding (agent-assisted pairing)** | User pastes a prompt to their agent → the agent installs its own connector and reads back a **6-digit code** → user types it in the app. No host/key on the phone; relay device token in Keychain. Fallbacks: run the one-liner manually, or **direct mode** (host + key). See `docs/CONNECTION.md` §5/§5a. |
-| 2 | **Chat with agent** | `POST /v1/chat/completions`, SSE streaming, `X-Hermes-Session-Id` + `X-Hermes-Session-Key` headers for continuity |
-| 3 | **Proper markdown rendering** | Real tables, headings, code blocks with syntax highlighting. Handles partial/streaming markdown gracefully. A core part of the "real client" experience (see §2) — the most *visible* upgrade over a raw Telegram bot, but in service of the overall flow, not the whole point. |
-| 4 | **Agent status indicator** | Idle / running / error — via polling `/health` or `/v1/runs/{id}` |
-| 5 | **Reply from app** | Standard message send; nothing fancy in v1 |
-| 6 | **Approve / Stop actions** | `POST /v1/runs/{run_id}/approval`, `POST /v1/runs/{run_id}/stop` — ⚠️ UNVERIFIED, must confirm these endpoints exist before building UI |
+| 1 | **Connector sidecar** | Small process installed next to Hermes, reads local Hermes config/API key, connects outbound to Summit relay, and translates Hermes REST/SSE into relay WebSocket frames. Mandatory for MVP. |
+| 2 | **Relay pairing** | Connector gets a short-lived 6-digit code; user enters it in the app; relay binds device to agent; device token stored in Keychain. No host/key on the phone in the default path. |
+| 3 | **Agent-assisted onboarding** | App shows a copyable prompt; user pastes it to their existing agent; agent runs a deterministic installer and returns the pairing code. Manual one-liner fallback exists. |
+| 4 | **Chat with Hermes through relay** | App sends/receives WebSocket frames via relay; connector talks to Hermes using `/v1/chat/completions` or Runs API as appropriate. |
+| 5 | **Proper markdown rendering** | Real tables, headings, code blocks, diffs, and partial-stream-safe rendering. The most visible upgrade over raw chat bots, but in service of the flow. |
+| 6 | **Agent status indicator** | Idle / running / blocked / error from relay-forwarded Hermes health/run state. |
+| 7 | **Reply from app** | Standard message send with visible streaming response. |
+| 8 | **Approve / Stop actions** | Use confirmed Hermes Runs API: `POST /v1/runs/{run_id}/approval` and `POST /v1/runs/{run_id}/stop`; gate approval UI on `run_approval` from `/v1/capabilities`. |
+| 9 | **Direct mode (advanced/dev)** | Host URL + API key path remains available for Tailscale/tunnel/no-middleman users and development, but it is not MVP completion by itself. |
 
 ### Phase 2 (after MVP validates)
 
 | # | Feature | Notes |
 |---|---------|-------|
-| 7 | **Push notifications** | Requires a relay server — Hermes can't push to APNs directly. Decide: build relay now, or ship polling-only in v1? |
+| 7 | **Push notifications** | Built on the relay channel; Hermes cannot push to APNs directly. |
 | 8 | **Smart notification types** | Finished / needs input / errored, with per-type mute |
 | 9 | **Quick-reply from notification** | Approve / retry / pause without opening app |
 | 10 | **Multi-agent support** | Multiple host+key pairs; Hermes is one-server-one-agent, so no shortcut |
@@ -93,7 +120,7 @@ A React Native (iOS first) mobile app that connects to self-hosted AI agent fram
 - "Last result" pin per agent
 - Cost/usage glance per agent (if API exposes it)
 - Agent-defined status widgets (JSON from agent → rendered card)
-- OpenClaw integration (second adapter)
+- OpenClaw integration (second adapter after dedicated protocol research)
 - Formal adapter abstraction layer (built from real cases, not guessed in advance)
 
 ---
@@ -121,6 +148,7 @@ advanced, zero-infra option for users who refuse a middleman.
 ### Stack
 - **React Native** (iOS first, Android to follow)
 - **Expo** recommended for faster iteration and OTA updates
+- **Auth:** Supabase Auth — Apple Sign-In, Google Sign-In, email/password; session stored in `expo-secure-store`
 - **Secure storage:** `expo-secure-store` (iOS Keychain)
 - **SSE streaming:** `react-native-sse` or `EventSource` polyfill (native `fetch` doesn't stream well on RN)
 - **Markdown rendering:** Custom solution on top of `react-native-markdown-display` or similar, with special handling for partial/streaming content

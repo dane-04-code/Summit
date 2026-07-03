@@ -5,8 +5,8 @@
  * with copy, and a tool-status chip.
  */
 
-import React, { useCallback, useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
+import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 
@@ -136,6 +136,35 @@ function ToolChip({ state, label }: { state: RunState; label: string }) {
   );
 }
 
+// ── Typing indicator (shown while a reply is streaming but still empty) ──────
+
+function TypingDots() {
+  const dots = useRef([0, 1, 2].map(() => new Animated.Value(0.3))).current;
+
+  useEffect(() => {
+    const loops = dots.map((d, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 160),
+          Animated.timing(d, { toValue: 1, duration: 320, useNativeDriver: true }),
+          Animated.timing(d, { toValue: 0.3, duration: 320, useNativeDriver: true }),
+          Animated.delay((2 - i) * 160),
+        ]),
+      ),
+    );
+    loops.forEach((l) => l.start());
+    return () => loops.forEach((l) => l.stop());
+  }, [dots]);
+
+  return (
+    <View style={styles.typing} accessibilityLabel="Agent is replying">
+      {dots.map((d, i) => (
+        <Animated.View key={i} style={[styles.typingDot, { opacity: d }]} />
+      ))}
+    </View>
+  );
+}
+
 // ── Block dispatcher ────────────────────────────────────────────────────────
 
 export function AgentMessage({
@@ -168,7 +197,11 @@ export function AgentMessage({
               <MdFileCard key={i} file={block.file} onOpen={() => onOpenFile?.(block.file)} />
             );
           case 'markdown':
-            return <RichMarkdown key={i} source={block.source} onOpenMdFile={onOpenFile} />;
+            return block.source.trim() === '' ? (
+              <TypingDots key={i} />
+            ) : (
+              <RichMarkdown key={i} source={block.source} onOpenMdFile={onOpenFile} />
+            );
         }
       })}
     </View>
@@ -286,6 +319,20 @@ const styles = StyleSheet.create({
   codeLine: {
     ...typography.mono,
     color: colors.ink,
+  },
+
+  // Typing indicator
+  typing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs + 2,
+    height: typography.body.lineHeight, // hold a line's height so layout is stable
+  },
+  typingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.muted,
   },
 
   // Chip

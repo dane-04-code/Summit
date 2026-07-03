@@ -1,11 +1,103 @@
 /**
- * Seeded opening thread — reproduces the Agent Messenger design's conversation
+ * Seeded opening thread — reproduces the Summit design's conversation
  * (cluster-status exchange → deploy request → approval card). Replaced by real
  * session history once Hermes streaming lands.
  * ponytail: drop this seed when hermes session restore is wired.
  */
 
-import type { Message, ChatGroup } from './types';
+import type { Message, ChatGroup, MarkdownFile } from './types';
+
+/**
+ * The markdown file the agent "wrote" — rendered collapsed in the thread and
+ * expanded in the reader. Source matches the MD File design; `sizeLabel` and
+ * `lineCount` are the design's meta (the source is an excerpt of a longer doc).
+ * ponytail: replace with the real file the agent returns once files land.
+ */
+const RESEARCH_SOURCE = `---
+title: Trades Market Research
+author: Hermes
+date: 2026-06-28
+---
+
+# Trades Market Research
+
+Five UK trades ranked by lead value and the gap each one has online. Builders carry the highest project value; painters convert fastest.
+
+## Top opportunities
+
+| Trade | Lead £ |
+| --- | --- |
+| Builder | 15,000 |
+| Landscaper | 4,500 |
+| Electrician | 2,500 |
+
+## Recommendation
+
+- Lead with **builders** — highest value, weakest web presence.
+- Ship a portfolio template with built-in reviews.
+- Remove booking friction for plumbers next.
+
+> The best marketing tool for a tradesman is a customer they can point to and say 'I did that.'
+>
+> — Dane, probably
+`;
+
+export const RESEARCH_FILE: MarkdownFile = {
+  name: 'trades-market-research.md',
+  sizeLabel: '12 KB',
+  lineCount: 240,
+  source: RESEARCH_SOURCE,
+};
+
+// ── Rich-rendering showcase sources (Rich Rendering design, frames 1–4) ──────
+// These exercise the markdown renderer: inline styles, task lists, code +
+// syntax highlighting, math, tables, link chips, and a blockquote.
+
+const MD_FORMATTING = `**Bold**, *italic*, ~~strikethrough~~, \`inline code\`, and ==highlighted== text.
+
+## This week
+
+- [x] SEO free-tools audit
+- [x] Facebook Pixel wired on MyTradeLink
+- [ ] Push Stripe test-mode end-to-end
+- [ ] Daydreamer creative brief
+- [!] GitHub deploy key`;
+
+const MD_CODE_MATH = `Here's a compact generator:
+
+\`\`\`python
+def fibonacci(n):
+    a, b = 0, 1
+    while a < n:
+        print(a, end=' ')
+        a, b = b, a + b
+    return a
+# 0 1 1 2 3 5 8 13 …
+\`\`\`
+
+Inline math like $E = mc^2$ renders too. The roots of $ax^2 + bx + c$:
+
+$$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$`;
+
+const MD_TABLE = `Here's the market snapshot:
+
+| Trade | Jobs | Lead £ |
+| --- | ---: | ---: |
+| Electrician | 12–15 | 2,500 |
+| Plumber | 10–12 | 2,000 |
+| Builder | 3–5 | 15,000 |
+| Landscaper | 6–8 | 4,500 |
+| Painter | 8–10 | 1,200 |
+
+Builder leads carry the highest project value. Sources:
+
+[MyTradeLink](https://mytradelink.example) [Hermes Docs](https://hermes.example) [github.com](https://github.com)`;
+
+const MD_QUOTE = `Pipeline snapshot from the last briefing — three workstreams active, two queued.
+
+> The best marketing tool for a tradesman is a customer they can point to and say 'I did that.'
+>
+> — Dane, probably`;
 
 export const SEED_THREAD: Message[] = [
   {
@@ -82,6 +174,31 @@ export const SEED_THREAD: Message[] = [
     title: 'Run a shell command on the production host?',
     command: './deploy.sh api --prod',
   },
+  {
+    id: 'seed-u3',
+    role: 'user',
+    text: 'Can you save that research as a doc?',
+  },
+  {
+    id: 'seed-a3',
+    role: 'agent',
+    blocks: [
+      { kind: 'text', spans: [{ text: 'Done — wrote it to a Markdown file:' }] },
+      { kind: 'file', file: RESEARCH_FILE },
+    ],
+  },
+
+  { id: 'seed-u4', role: 'user', text: 'Show me every text style you support.' },
+  { id: 'seed-a4', role: 'agent', blocks: [{ kind: 'markdown', source: MD_FORMATTING }] },
+
+  { id: 'seed-u5', role: 'user', text: 'Fibonacci snippet, and the quadratic formula.' },
+  { id: 'seed-a5', role: 'agent', blocks: [{ kind: 'markdown', source: MD_CODE_MATH }] },
+
+  { id: 'seed-u6', role: 'user', text: 'Compare the trades by opportunity.' },
+  { id: 'seed-a6', role: 'agent', blocks: [{ kind: 'markdown', source: MD_TABLE }] },
+
+  { id: 'seed-u7', role: 'user', text: 'Where are we on the roadmap?' },
+  { id: 'seed-a7', role: 'agent', blocks: [{ kind: 'markdown', source: MD_QUOTE }] },
 ];
 
 /** Id of the conversation currently open in the thread (the seeded one). */
