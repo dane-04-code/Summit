@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useAgents } from '@/agents/AgentProvider';
 import { accountName, accountInitial } from '@/lib/account';
 import { SettingsScreen, SectionLabel, Card, Row } from '@/ui/settings';
-import { colors, typography } from '@/theme';
+import { colors, radius, typography } from '@/theme';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -170,12 +170,12 @@ const styles = StyleSheet.create({
   nameLabel: { fontSize: 16, color: colors.ink },
   nameSub: { ...typography.caption, color: colors.muted, marginTop: 1 },
   nameInput: {
-    minWidth: 116,
-    maxWidth: 150,
+    flex: 1,
+    maxWidth: 190,
     height: 38,
     borderWidth: 1,
     borderColor: colors.line,
-    borderRadius: 10,
+    borderRadius: radius.control,
     paddingHorizontal: 10,
     color: colors.ink,
     backgroundColor: colors.bg,

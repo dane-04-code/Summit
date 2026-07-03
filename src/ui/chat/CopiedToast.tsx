@@ -4,13 +4,15 @@
  * driven by a fresh `shownAt` timestamp, so back-to-back copies restart it.
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Animated, StyleSheet, Text } from 'react-native';
 
 import { colors, radius, space, typography } from '../../theme';
 
 export function CopiedToast({ shownAt }: { shownAt: number }) {
-  const opacity = useRef(new Animated.Value(0)).current;
+  // useState lazy-init (not useRef.current) — reading a ref during render
+  // trips react-hooks/refs; matches the StatusDot/Sidebar animation pattern.
+  const [opacity] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (!shownAt) return;

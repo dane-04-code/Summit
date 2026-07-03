@@ -8,7 +8,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Menu, SquarePen } from 'lucide-react-native';
 
-import { colors, space, typography } from '../../theme';
+import { colors, radius, space, typography } from '../../theme';
 import type { RunState } from './types';
 
 const DOT: Record<RunState, string> = {
@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
   iconBtn: {
     width: 38,
     height: 38,
-    borderRadius: 11,
+    borderRadius: radius.control,
     alignItems: 'center',
     justifyContent: 'center',
   },
