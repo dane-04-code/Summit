@@ -1,5 +1,5 @@
 import type { AnyFrame, ChatMessage, PairErrorFrame } from './types';
-import type { StreamEvent } from '../adapters/types';
+import type { ConnectionState, StreamEvent } from '../adapters/types';
 import { RelayError, type RelayErrorCode } from './errors';
 
 const PAIR_ERROR_CODE: Record<PairErrorFrame['reason'], RelayErrorCode> = {
@@ -14,26 +14,49 @@ export class RelayClient {
   private ws: WebSocket | null = null;
   private opening: Promise<WebSocket> | null = null;
   private handlers: Array<(frame: AnyFrame) => void> = [];
+  private stateHandlers: Array<(state: ConnectionState) => void> = [];
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private pairCode: string | null = null;
   private paired = false;
+  private state: ConnectionState = 'unknown';
 
   constructor(private readonly wsUrl: string) {}
+
+  getConnectionState(): ConnectionState {
+    return this.state;
+  }
+
+  subscribeConnectionState(listener: (state: ConnectionState) => void): () => void {
+    this.stateHandlers.push(listener);
+    listener(this.state);
+    return () => {
+      this.stateHandlers = this.stateHandlers.filter((h) => h !== listener);
+    };
+  }
+
+  private setState(state: ConnectionState): void {
+    if (this.state === state) return;
+    this.state = state;
+    for (const h of this.stateHandlers) h(state);
+  }
 
   private connect(): Promise<WebSocket> {
     if (this.ws?.readyState === WebSocket.OPEN) return Promise.resolve(this.ws);
     if (this.opening) return this.opening;
 
+    this.setState(this.paired ? 'reconnecting' : 'connecting');
     const ws = new WebSocket(this.wsUrl);
     this.ws = ws;
     this.opening = new Promise((resolve, reject) => {
       ws.onopen = () => {
         this.opening = null;
         this.startHeartbeat();
+        this.setState('connected');
         resolve(ws);
       };
       ws.onerror = () => {
         this.opening = null;
+        this.setState('disconnected');
         reject(new RelayError('relay_unreachable'));
       };
       ws.onclose = () => {
@@ -41,6 +64,7 @@ export class RelayClient {
         this.stopHeartbeat();
         this.paired = false;
         if (this.ws === ws) this.ws = null;
+        this.setState('disconnected');
         // Only wins the opening promise if the socket closed before it opened —
         // i.e. we never reached the relay. A mid-session drop settles this reject
         // as a no-op and instead reaches live handlers via the peer_gone below.
@@ -49,6 +73,12 @@ export class RelayClient {
       };
       ws.onmessage = (e) => {
         const frame = JSON.parse(e.data as string) as AnyFrame;
+        // Track connector liveness at the socket level so `chat()` re-pairs
+        // correctly even when no handler is registered (idle app).
+        if (frame.t === 'peer_gone') {
+          this.paired = false;
+          this.setState('disconnected');
+        }
         for (const h of this.handlers) h(frame);
       };
     });
@@ -78,12 +108,15 @@ export class RelayClient {
         if (frame.t === 'paired') {
           this.handlers = this.handlers.filter((h) => h !== handler);
           this.paired = true;
+          this.setState('connected');
           resolve({ framework: frame.framework, agentName: frame.agentName, agentVersion: frame.agentVersion });
         } else if (frame.t === 'pair_error') {
           this.handlers = this.handlers.filter((h) => h !== handler);
+          this.setState(frame.reason === 'expired' ? 'pairing_expired' : 'disconnected');
           reject(new RelayError(PAIR_ERROR_CODE[frame.reason]));
         } else if (frame.t === 'peer_gone') {
           this.handlers = this.handlers.filter((h) => h !== handler);
+          this.setState('disconnected');
           reject(new RelayError('agent_disconnected'));
         }
       };
@@ -113,6 +146,7 @@ export class RelayClient {
         queue.push({ type: 'error', message: frame.message });
         done = true;
       } else if (frame.t === 'peer_gone') {
+        this.setState('disconnected');
         queue.push({ type: 'error', message: 'Agent disconnected.' });
         done = true;
       } else {
@@ -169,6 +203,7 @@ export class RelayClient {
           reject(new Error(frame.message));
         } else if (frame.t === 'peer_gone') {
           cleanup();
+          this.setState('disconnected');
           reject(new Error('Agent disconnected.'));
         }
       };
@@ -191,5 +226,6 @@ export class RelayClient {
     this.ws = null;
     this.opening = null;
     this.paired = false;
+    this.setState('disconnected');
   }
 }

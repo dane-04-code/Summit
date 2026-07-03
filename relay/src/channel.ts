@@ -84,7 +84,7 @@ export class PairingChannel {
         // Connector is not connected — tell the app rather than silently dropping.
         const app = sockets.find((s) => this.doState.getTags(s)[0] === 'app');
         const reqId = (effect.frame as Record<string, unknown>).reqId as string | undefined;
-        app?.send(JSON.stringify({ t: 'error', reqId, message: 'Agent is offline. Ask it to re-run the install command.' }));
+        app?.send(JSON.stringify({ t: 'error', reqId, message: 'Agent is offline. Tap Retry in the app to reconnect.' }));
       }
     }
   }
