@@ -23,6 +23,8 @@ import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { ArrowUp, Square } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
+import * as Clipboard from 'expo-clipboard';
+
 import { colors, space, radius, typography, screenPadding } from '@/theme';
 import { usePressAnim } from '@/ui/usePressAnim';
 import { Header } from '@/ui/chat/Header';
@@ -30,7 +32,9 @@ import { AgentMessage } from '@/ui/chat/AgentMessage';
 import { ApprovalCard } from '@/ui/chat/ApprovalCard';
 import { Sidebar } from '@/ui/chat/Sidebar';
 import { MdReader } from '@/ui/chat/MdReader';
+import { CopiedToast } from '@/ui/chat/CopiedToast';
 import { useAuth } from '@/context/AuthContext';
+import { messageToText } from '@/ui/chat/types';
 import type { Message, AgentBlock, RunState, MarkdownFile, ChatGroup } from '@/ui/chat/types';
 import { useAgents } from '@/agents/AgentProvider';
 import { initialTurn, reduceTurn, turnToBlocks, settleBlocks, shouldFlush } from '@/ui/chat/streamReducer';
@@ -104,18 +108,20 @@ function MessageRow({
   onApprove,
   onStop,
   onOpenFile,
+  onCopy,
 }: {
   message: Message;
   onApprove: (id: string) => void;
   onStop: (id: string) => void;
   onOpenFile: (file: MarkdownFile) => void;
+  onCopy: (message: Message) => void;
 }) {
   if (message.role === 'user') {
     return (
       <View style={styles.userRow}>
-        <View style={styles.userBubble}>
+        <Pressable onLongPress={() => onCopy(message)} style={styles.userBubble}>
           <Text style={styles.userText}>{message.text}</Text>
-        </View>
+        </Pressable>
       </View>
     );
   }
@@ -134,9 +140,9 @@ function MessageRow({
   }
 
   return (
-    <View style={styles.block}>
+    <Pressable onLongPress={() => onCopy(message)} style={styles.block}>
       <AgentMessage blocks={message.blocks} onOpenFile={onOpenFile} />
-    </View>
+    </Pressable>
   );
 }
 
@@ -159,6 +165,7 @@ export default function AgentScreen() {
   const [chatGroups, setChatGroups] = useState<ChatGroup[]>([]);
   const [activeSessionId, setActiveSessionId] = useState('');
   const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
+  const [copiedAt, setCopiedAt] = useState(0);
 
   const flashListRef = useRef<FlashListRef<Message>>(null);
   const inputRef = useRef<TextInput>(null);
@@ -308,6 +315,14 @@ export default function AgentScreen() {
   const handleOpenFile = useCallback((file: MarkdownFile) => {
     Haptics.selectionAsync().catch(() => {});
     setOpenFile(file);
+  }, []);
+
+  const handleCopyMessage = useCallback((message: Message) => {
+    const text = messageToText(message);
+    if (!text) return;
+    Clipboard.setStringAsync(text).catch(() => {});
+    Haptics.selectionAsync().catch(() => {});
+    setCopiedAt(Date.now());
   }, []);
 
   const handleSelectChat = useCallback(
@@ -501,6 +516,7 @@ export default function AgentScreen() {
                 onApprove={handleApprove}
                 onStop={handleStop}
                 onOpenFile={handleOpenFile}
+                onCopy={handleCopyMessage}
               />
             )}
             keyExtractor={(item) => item.id}
@@ -597,6 +613,8 @@ export default function AgentScreen() {
             </Pressable>
           </View>
         </KeyboardAvoidingView>
+
+        <CopiedToast shownAt={copiedAt} />
       </SafeAreaView>
 
       <Sidebar

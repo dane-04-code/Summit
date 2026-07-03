@@ -83,6 +83,38 @@ export function codeToText(lines: CodeLine[]): string {
   return lines.map((l) => l.segments.map((s) => s.text).join('')).join('\n');
 }
 
+/** Flatten agent blocks to plain copyable text. */
+export function blocksToText(blocks: AgentBlock[]): string {
+  return blocks
+    .map((b) => {
+      switch (b.kind) {
+        case 'heading':
+          return b.text;
+        case 'text':
+          return b.spans.map((s) => s.text).join('');
+        case 'table':
+          return b.rows.map((r) => `${r.service}  ${r.statusLabel}  ${r.p95}`).join('\n');
+        case 'code':
+          return codeToText(b.lines);
+        case 'chip':
+          return b.label;
+        case 'file':
+          return b.file.source;
+        case 'markdown':
+          return b.source;
+      }
+    })
+    .filter((t) => t.trim().length > 0)
+    .join('\n\n');
+}
+
+/** Plain copyable text for any thread message (long-press copy). */
+export function messageToText(message: Message): string {
+  if (message.role === 'user') return message.text;
+  if (message.role === 'action') return `${message.title}\n${message.command}`;
+  return blocksToText(message.blocks);
+}
+
 // ── Markdown document helpers ───────────────────────────────────────────────
 // Pure string utilities shared by the file card (preview) and the reader
 // (front-matter card). Kept here, parser-free, so they're unit-testable.
