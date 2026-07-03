@@ -41,6 +41,17 @@ export function reduceTurn(turn: LiveTurn, event: StreamEvent): LiveTurn {
   }
 }
 
+/** Minimum interval between streaming UI flushes — keeps long replies smooth. */
+export const STREAM_FLUSH_MS = 60;
+
+/**
+ * Gate for streaming UI updates: terminal events always flush; otherwise
+ * rate-limit so each SSE chunk doesn't force a full markdown re-render.
+ */
+export function shouldFlush(lastFlushAt: number, now: number, done: boolean): boolean {
+  return done || now - lastFlushAt >= STREAM_FLUSH_MS;
+}
+
 /** The agent message body for a turn: a single markdown block of accumulated text. */
 export function turnToBlocks(turn: LiveTurn): AgentBlock[] {
   return [{ kind: 'markdown', source: turn.text }];

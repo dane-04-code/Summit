@@ -33,7 +33,7 @@ import { MdReader } from '@/ui/chat/MdReader';
 import { useAuth } from '@/context/AuthContext';
 import type { Message, AgentBlock, RunState, MarkdownFile, ChatGroup } from '@/ui/chat/types';
 import { useAgents } from '@/agents/AgentProvider';
-import { initialTurn, reduceTurn, turnToBlocks, settleBlocks } from '@/ui/chat/streamReducer';
+import { initialTurn, reduceTurn, turnToBlocks, settleBlocks, shouldFlush } from '@/ui/chat/streamReducer';
 import type { ChatSession } from '@/agents/types';
 
 // ---------------------------------------------------------------------------
@@ -261,15 +261,6 @@ export default function AgentScreen() {
     };
   }, [activeAgent, repo, loadSession, loadSessionSummaries]);
 
-  // Scroll to newest content whenever the thread changes (including mid-stream)
-  useEffect(() => {
-    if (messages.length === 0) return;
-    const timer = setTimeout(() => {
-      flashListRef.current?.scrollToEnd({ animated: true });
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [messages]);
-
   const statusLabel =
     status === 'running' ? 'running' : status === 'error' ? 'connection error' : 'ready';
   const sidebarTitle = activeAgent?.name ?? 'Summit';
@@ -392,8 +383,13 @@ export default function AgentScreen() {
     ]);
     setStreaming(true);
     setStatus('running');
+    // One deliberate scroll to the send; while streaming, FlashList's
+    // maintainVisibleContentPosition follows the bottom only when the reader
+    // is already there — scrolling up to read is never fought.
+    setTimeout(() => flashListRef.current?.scrollToEnd({ animated: true }), 50);
 
     let turn = initialTurn;
+    let lastFlushAt = 0;
     try {
       const stream = adapterFor(activeAgent).sendMessage(text, {
         sessionId: session.id,
@@ -402,11 +398,15 @@ export default function AgentScreen() {
       for await (const event of stream) {
         turn = reduceTurn(turn, event);
         if (cancelledRef.current) return;
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === agentId ? { id: agentId, role: 'agent', blocks: turnToBlocks(turn) } : m,
-          ),
-        );
+        const now = Date.now();
+        if (shouldFlush(lastFlushAt, now, turn.done)) {
+          lastFlushAt = now;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === agentId ? { id: agentId, role: 'agent', blocks: turnToBlocks(turn) } : m,
+            ),
+          );
+        }
         if (turn.done) break;
       }
     } catch {
