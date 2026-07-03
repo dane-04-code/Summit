@@ -11,11 +11,11 @@ import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router, useFocusEffect } from 'expo-router';
 import { FlashList } from '@shopify/flash-list';
-import { ChevronLeft } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 import { useAgents } from '@/agents/AgentProvider';
-import { colors, space, typography } from '@/theme';
+import { ScreenHeader } from '@/ui/ScreenHeader';
+import { colors, radius, space, typography } from '@/theme';
 import { DropCard } from '@/ui/cron/DropCard';
 import { CronDetail } from '@/ui/cron/CronDetail';
 import { formatNext, type CronJob, type CronRun } from '@/ui/cron/types';
@@ -162,26 +162,25 @@ export default function CronScreen() {
           />
         ) : (
           <View style={styles.flex}>
-            <View style={styles.header}>
-              <View style={styles.titleRow}>
-                <Pressable
-                  onPress={handleLeave}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Back"
-                  style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
-                >
-                  <ChevronLeft size={22} color={colors.muted} strokeWidth={1.9} />
-                </Pressable>
-                <Text style={styles.title}>Cron Drops</Text>
-              </View>
-              <View style={styles.subtitleRow}>
-                <View style={styles.summaryDot} />
-                <Text style={styles.subtitle}>
-                  {loading ? 'loading schedules' : `${summary.count} active schedules · ${summary.due}`}
-                </Text>
-              </View>
-            </View>
+            <ScreenHeader
+              title="Cron Drops"
+              onBack={handleLeave}
+              subtitle={
+                <View style={styles.subtitleRow}>
+                  <View
+                    style={[
+                      styles.summaryDot,
+                      jobs.some((j) => j.state === 'running') && styles.summaryDotRunning,
+                    ]}
+                  />
+                  <Text style={styles.subtitle}>
+                    {loading
+                      ? 'loading schedules'
+                      : `${summary.count} active schedules · ${summary.due}`}
+                  </Text>
+                </View>
+              }
+            />
 
             {loading ? (
               <StateMessage title="Loading cron jobs" body="Checking the active agent." loading />
@@ -267,46 +266,22 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: space.lg + 2,
-    paddingTop: space.sm,
-    paddingBottom: space.md + 2,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs + 2,
-  },
-  backBtn: {
-    width: 34,
-    height: 34,
-    marginLeft: -6,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   pressed: {
     backgroundColor: colors.surface,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: '600',
-    lineHeight: 28,
-    color: colors.ink,
   },
   subtitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.xs + 2,
-    marginTop: space.sm,
-    paddingLeft: 28,
+    marginTop: 2,
   },
   summaryDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
+    backgroundColor: colors.muted,
+  },
+  summaryDotRunning: {
     backgroundColor: colors.accent,
   },
   subtitle: {
@@ -343,7 +318,7 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
     paddingHorizontal: space.lg,
     height: 38,
-    borderRadius: 11,
+    borderRadius: radius.control,
     borderWidth: 1,
     borderColor: colors.line,
     alignItems: 'center',

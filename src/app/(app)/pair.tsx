@@ -11,7 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import { ChevronLeft, Copy, Check } from 'lucide-react-native';
+import { Copy, Check } from 'lucide-react-native';
+import { ScreenHeader } from '@/ui/ScreenHeader';
 import { useAgents } from '@/agents/AgentProvider';
 import { RelayClient } from '@/agents/relay/client';
 import { RelayError, isPairingCodeError } from '@/agents/relay/errors';
@@ -87,16 +88,7 @@ export default function PairScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
-      <View style={styles.header}>
-        <Pressable
-          style={styles.backBtn}
-          onPress={() => router.replace('/(app)/connect')}
-          hitSlop={8}
-        >
-          <ChevronLeft size={22} color={colors.muted} strokeWidth={1.9} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Connect your agent</Text>
-      </View>
+      <ScreenHeader title="Connect your agent" onBack={() => router.replace('/(app)/connect')} />
 
       <ScrollView
         style={styles.scroll}
@@ -241,30 +233,6 @@ export default function PairScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.ink,
-    letterSpacing: -0.2,
-  },
 
   scroll: { flex: 1 },
   scrollContent: {

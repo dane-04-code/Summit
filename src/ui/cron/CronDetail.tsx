@@ -10,8 +10,9 @@
 import React from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Play, Pause } from 'lucide-react-native';
+import { Play, Pause } from 'lucide-react-native';
 
+import { ScreenHeader } from '../ScreenHeader';
 import { colors, radius, space, typography } from '../../theme';
 import { StatusDot } from './StatusDot';
 import { ProcessTrace } from './ProcessTrace';
@@ -51,52 +52,40 @@ export function CronDetail({
   return (
     <View style={styles.flex}>
       {/* header */}
-      <View style={styles.header}>
-        <Pressable
-          onPress={onBack}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          style={({ pressed }) => [styles.backBtn, pressed && styles.pressedSurface]}
-        >
-          <ChevronLeft size={22} color={colors.muted} strokeWidth={1.9} />
-        </Pressable>
-
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {job.name}
-          </Text>
-          <Text style={styles.headerSub} numberOfLines={1}>
-            {job.schedule.display}
-          </Text>
-        </View>
-
-        {job.state !== 'running' && (
-          <Pressable
-            onPress={onToggle}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel={job.state === 'paused' ? 'Resume job' : 'Pause job'}
-            style={({ pressed }) => [styles.iconBtn, pressed && styles.pressedSurface]}
-          >
-            {job.state === 'paused' ? (
-              <Play size={15} color={colors.muted} fill={colors.muted} strokeWidth={1.5} />
-            ) : (
-              <Pause size={15} color={colors.muted} fill={colors.muted} strokeWidth={1.5} />
+      <ScreenHeader
+        title={job.name}
+        subtitle={job.schedule.display}
+        onBack={onBack}
+        right={
+          <View style={styles.headerActions}>
+            {job.state !== 'running' && (
+              <Pressable
+                onPress={onToggle}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={job.state === 'paused' ? 'Resume job' : 'Pause job'}
+                style={({ pressed }) => [styles.iconBtn, pressed && styles.pressedSurface]}
+              >
+                {job.state === 'paused' ? (
+                  <Play size={15} color={colors.muted} fill={colors.muted} strokeWidth={1.5} />
+                ) : (
+                  <Pause size={15} color={colors.muted} fill={colors.muted} strokeWidth={1.5} />
+                )}
+              </Pressable>
             )}
-          </Pressable>
-        )}
 
-        <Pressable
-          onPress={onRun}
-          accessibilityRole="button"
-          accessibilityLabel="Run now"
-          style={({ pressed }) => [styles.runBtn, pressed && styles.pressedBorder]}
-        >
-          <Play size={11} color={colors.ink} fill={colors.ink} strokeWidth={1.5} />
-          <Text style={styles.runText}>Run</Text>
-        </Pressable>
-      </View>
+            <Pressable
+              onPress={onRun}
+              accessibilityRole="button"
+              accessibilityLabel="Run now"
+              style={({ pressed }) => [styles.runBtn, pressed && styles.pressedBorder]}
+            >
+              <Play size={11} color={colors.ink} fill={colors.ink} strokeWidth={1.5} />
+              <Text style={styles.runText}>Run</Text>
+            </Pressable>
+          </View>
+        }
+      />
 
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + space.xxl }]}
@@ -167,27 +156,15 @@ const styles = StyleSheet.create({
   },
 
   // header
-  header: {
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.xs,
-    paddingHorizontal: space.md,
-    paddingTop: space.sm,
-    paddingBottom: space.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   iconBtn: {
     width: 34,
     height: 34,
-    borderRadius: 10,
+    borderRadius: radius.control,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -198,29 +175,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderColor: colors.lineFocus,
   },
-  headerCenter: {
-    flex: 1,
-    minWidth: 0,
-  },
-  headerTitle: {
-    ...typography.body,
-    fontWeight: '600',
-    lineHeight: 20,
-    letterSpacing: -0.2,
-    color: colors.ink,
-  },
-  headerSub: {
-    ...typography.caption,
-    color: colors.muted,
-    marginTop: 2,
-  },
   runBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.xs + 2,
     height: 32,
     paddingHorizontal: space.md + 1,
-    borderRadius: 9,
+    borderRadius: radius.control,
     borderWidth: 1,
     borderColor: colors.line,
     flexShrink: 0,

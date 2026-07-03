@@ -8,28 +8,17 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ChevronRight } from 'lucide-react-native';
 
+import { ScreenHeader } from '@/ui/ScreenHeader';
 import { colors, space, typography } from '@/theme';
 
-// ── Screen shell (custom header, matches the design) ───────────────────────────
+// ── Screen shell (shared ScreenHeader chrome) ───────────────────────────────────
 
 export function SettingsScreen({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header}>
-        <Pressable
-          style={styles.backBtn}
-          onPress={() => router.back()}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
-          <ChevronLeft size={22} color={colors.muted} strokeWidth={1.9} />
-        </Pressable>
-        <Text style={styles.headerTitle}>{title}</Text>
-      </View>
+      <ScreenHeader title={title} />
       {children}
     </SafeAreaView>
   );
@@ -100,29 +89,6 @@ export function Row({ icon, label, sublabel, value, onPress, right, danger, disa
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.ink,
-    letterSpacing: -0.2,
-  },
 
   sectionLabel: {
     ...typography.caption,
