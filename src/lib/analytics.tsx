@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useMemo } from 'react';
 
 import { POSTHOG_HOST, POSTHOG_KEY } from '@/config';
 
@@ -59,6 +59,11 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
     () => (POSTHOG_KEY ? { track: capture } : NOOP_ANALYTICS),
     [],
   );
+  // Heartbeat: one event per launch. Proves the capture pipe reaches PostHog
+  // and gives a DAU floor. No-ops when unconfigured (track is NOOP then).
+  useEffect(() => {
+    value.track('app_opened');
+  }, [value]);
   return <AnalyticsContext.Provider value={value}>{children}</AnalyticsContext.Provider>;
 }
 
