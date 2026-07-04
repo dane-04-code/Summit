@@ -35,6 +35,11 @@ yarn-error.*
 .env
 .env*.local
 
+# wrangler local-only vars (never deployed)
+.dev.vars
+relay/.dev.vars
+relay/.wrangler/
+
 # typescript
 *.tsbuildinfo
 

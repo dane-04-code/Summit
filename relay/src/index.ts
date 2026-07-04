@@ -5,6 +5,9 @@ export { PairingChannel };
 
 export interface Env {
   PAIRING_CHANNEL: DurableObjectNamespace;
+  /** Override the Expo Push API endpoint. Unset in prod (defaults to exp.host);
+   *  set via .dev.vars to point local tester loops at a sink. */
+  PUSH_URL?: string;
 }
 
 export default {

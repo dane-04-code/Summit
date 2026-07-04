@@ -10,10 +10,18 @@ import {
 import type { ChannelState, SideEffect } from './logic';
 import type { AnyFrame } from '../../protocol/protocol';
 
+/** Only the env this DO reads — kept local to avoid a cycle with index.ts. */
+type ChannelEnv = { PUSH_URL?: string };
+
+const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+
 export class PairingChannel {
   private state: ChannelState = makeInitialState();
 
-  constructor(private readonly doState: DurableObjectState) {
+  constructor(
+    private readonly doState: DurableObjectState,
+    private readonly env: ChannelEnv = {},
+  ) {
     // Reload persisted state on every wake — the DO hibernates between messages
     // and loses all in-memory state. Without this, connectorInfo is always null
     // when the app sends its pair frame.
@@ -105,7 +113,7 @@ export class PairingChannel {
    */
   private async sendPush(token: string, title: string, body: string): Promise<void> {
     try {
-      const res = await fetch('https://exp.host/--/api/v2/push/send', {
+      const res = await fetch(this.env.PUSH_URL || EXPO_PUSH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: token, title, body, sound: 'default' }),
