@@ -39,6 +39,7 @@ import { messageToText } from '@/ui/chat/types';
 import { renameSession } from '@/ui/chat/sessionActions';
 import type { Message, AgentBlock, RunState, MarkdownFile, ChatGroup } from '@/ui/chat/types';
 import { useAgents } from '@/agents/AgentProvider';
+import { captureError } from '@/lib/errorReporting';
 import { defaultCapabilitiesFor, frameworkLabel } from '@/agents/frameworks';
 import type { ConnectionState } from '@/agents/adapters/types';
 import { initialTurn, reduceTurn, turnToBlocks, settleBlocks, shouldFlush } from '@/ui/chat/streamReducer';
@@ -487,7 +488,8 @@ export default function AgentScreen() {
         }
         if (turn.done) break;
       }
-    } catch {
+    } catch (e) {
+      captureError(e, { where: 'chat_stream', framework: activeAgent.framework });
       setConnectionState('disconnected');
       turn = { ...turn, status: 'error', error: 'Agent disconnected.', done: true };
     }

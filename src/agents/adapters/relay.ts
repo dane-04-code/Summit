@@ -6,6 +6,7 @@ import { RelayClient } from '../relay/client';
 import { readJobRunResponse, readJobsResponse } from './jobs';
 import { RELAY_WS_URL } from '@/config';
 import { resolvePushToken } from '@/notifications/push';
+import { captureError } from '@/lib/errorReporting';
 
 const enc = encodeURIComponent;
 
@@ -61,7 +62,7 @@ export class RelayAdapter implements AgentAdapter {
   private registerPushToken(client: RelayClient): void {
     void this.getPushToken()
       .then((token) => (token ? client.registerPush(token) : undefined))
-      .catch(() => {});
+      .catch((e) => captureError(e, { where: 'push_register', transport: 'relay', framework: this.framework }));
   }
 
   private setConnectionState(state: ConnectionState): void {

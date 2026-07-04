@@ -4,11 +4,18 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { AgentProvider } from '@/agents/AgentProvider';
 import { AnalyticsProvider } from '@/lib/analytics';
 import { initNotificationHandling } from '@/notifications/push';
+import { ErrorBoundary } from '@/ui/ErrorBoundary';
+import { installGlobalErrorHandlers, setErrorUser } from '@/lib/errorReporting';
 
 function RouteGuard() {
   const { session, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+
+  // Attribute error reports to the signed-in user (null on sign-out).
+  useEffect(() => {
+    setErrorUser(session?.user?.id ?? null);
+  }, [session]);
 
   useEffect(() => {
     if (loading) return;
@@ -25,20 +32,23 @@ function RouteGuard() {
 
 export default function RootLayout() {
   useEffect(() => {
+    installGlobalErrorHandlers();
     initNotificationHandling();
   }, []);
 
   return (
-    <AnalyticsProvider>
-      <AuthProvider>
-        <AgentProvider>
-          <RouteGuard />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(app)" />
-          </Stack>
-        </AgentProvider>
-      </AuthProvider>
-    </AnalyticsProvider>
+    <ErrorBoundary>
+      <AnalyticsProvider>
+        <AuthProvider>
+          <AgentProvider>
+            <RouteGuard />
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(app)" />
+            </Stack>
+          </AgentProvider>
+        </AuthProvider>
+      </AnalyticsProvider>
+    </ErrorBoundary>
   );
 }
