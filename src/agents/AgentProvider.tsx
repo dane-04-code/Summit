@@ -6,12 +6,14 @@
  */
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 
 import type { Agent, NewAgentInput } from './types';
 import { buildAgent, removeAgent as removeFromList, resolveActive, touchAgent, upsertAgent } from './registry';
 import { deleteAgentSecret, setAgentSecret } from './secrets';
 import { makeAdapter } from './adapters';
 import type { AgentAdapter } from './adapters/types';
+import { reconnectIfDropped } from './resumeReconnect';
 import { getRepository, type Repository } from '@/db';
 
 const ACTIVE_KEY = 'active_agent_id';
@@ -126,10 +128,29 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     return adapter;
   }, []);
 
+  const activeAgent = resolveActive(agents, activeId);
+
+  // Heal a connection that died while the app was backgrounded, so returning
+  // to the app doesn't strand the user on a "disconnected" state. A ref keeps
+  // the listener pinned to the current agent without re-subscribing.
+  const activeAgentRef = useRef<Agent | null>(null);
+  useEffect(() => {
+    activeAgentRef.current = activeAgent;
+  }, [activeAgent]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      const agent = activeAgentRef.current;
+      if (agent) reconnectIfDropped(adapterFor(agent));
+    });
+    return () => sub.remove();
+  }, [adapterFor]);
+
   const value: AgentContextValue = {
     ready,
     agents,
-    activeAgent: resolveActive(agents, activeId),
+    activeAgent,
     addAgent,
     repairAgent,
     renameAgent,
