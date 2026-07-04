@@ -3,13 +3,19 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 )
+
+// httpClient is shared by all Hermes calls. The 30s timeout covers non-streaming
+// requests (doAPI). streamChat uses a longer per-request context instead.
+var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 // streamChat calls Hermes /v1/chat/completions with stream:true and returns a
 // channel of frames (chunk per token, then done; error on any failure).
@@ -17,6 +23,11 @@ func streamChat(messages []ChatMessage, sessionID, sessionKey, baseURL, apiKey s
 	ch := make(chan Frame, 64)
 	go func() {
 		defer close(ch)
+
+		// 5-minute cap on the full streaming response. If Hermes stalls mid-stream
+		// the context cancels the body read, unblocking the scanner and closing ch.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
 
 		payload, err := json.Marshal(map[string]interface{}{
 			"model":    "hermes",
@@ -28,7 +39,7 @@ func streamChat(messages []ChatMessage, sessionID, sessionKey, baseURL, apiKey s
 			return
 		}
 
-		req, err := http.NewRequest("POST", baseURL+"/v1/chat/completions", bytes.NewReader(payload))
+		req, err := http.NewRequestWithContext(ctx, "POST", baseURL+"/v1/chat/completions", bytes.NewReader(payload))
 		if err != nil {
 			ch <- Frame{T: "error", Message: fmt.Sprintf("build request: %v", err)}
 			return
@@ -42,7 +53,7 @@ func streamChat(messages []ChatMessage, sessionID, sessionKey, baseURL, apiKey s
 			req.Header.Set("X-Hermes-Session-Key", sessionKey)
 		}
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			ch <- Frame{T: "error", Message: fmt.Sprintf("http: %v", err)}
 			return
@@ -56,6 +67,7 @@ func streamChat(messages []ChatMessage, sessionID, sessionKey, baseURL, apiKey s
 		}
 
 		scanner := bufio.NewScanner(resp.Body)
+		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 		for scanner.Scan() {
 			line := scanner.Text()
 			if !strings.HasPrefix(line, "data: ") {
@@ -128,7 +140,7 @@ func doAPI(method, path, body, baseURL, apiKey string) (int, string) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return http.StatusBadGateway, fmt.Sprintf(`{"error":%q}`, err.Error())
 	}
