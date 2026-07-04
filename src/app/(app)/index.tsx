@@ -6,7 +6,7 @@
  * data — wired in the history slice.)
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,8 @@ import { AgentMessage } from '@/ui/chat/AgentMessage';
 import { ApprovalCard } from '@/ui/chat/ApprovalCard';
 import { Sidebar } from '@/ui/chat/Sidebar';
 import { MdReader } from '@/ui/chat/MdReader';
+import { SlashCommandMenu } from '@/ui/chat/SlashCommandMenu';
+import { matchCommands, type SlashCommand } from '@/ui/chat/slashCommands';
 import { CopiedToast } from '@/ui/chat/CopiedToast';
 import { useAuth } from '@/context/AuthContext';
 import { messageToText } from '@/ui/chat/types';
@@ -294,6 +296,7 @@ export default function AgentScreen() {
   const capabilities = activeAgent
     ? activeAgent.capabilities ?? defaultCapabilitiesFor(activeAgent.framework)
     : null;
+  const slashMatches = useMemo(() => matchCommands(input, capabilities), [input, capabilities]);
   const agentFrameworkLabel = activeAgent ? frameworkLabel(activeAgent.framework) : 'Hermes';
   const sidebarTitle = activeAgent?.name ?? 'Summit';
   const sidebarSubtitle = activeAgent
@@ -387,6 +390,22 @@ export default function AgentScreen() {
     setSidebarOpen(false);
     router.push('/(app)/settings');
   }, []);
+
+  const handleSlashSelect = useCallback(
+    (cmd: SlashCommand) => {
+      Haptics.selectionAsync().catch(() => {});
+      if (cmd.scope === 'app') {
+        setInput('');
+        setComposerHeight(COMPOSER_MIN_HEIGHT);
+        if (cmd.action === 'settings') handleOpenSettings();
+        else handleNewChat(); // 'new' and 'clear' both start a fresh thread in v1
+        return;
+      }
+      setInput(cmd.send);
+      inputRef.current?.focus();
+    },
+    [handleOpenSettings, handleNewChat],
+  );
 
   const handleOpenCron = useCallback(() => {
     setSidebarOpen(false);
@@ -589,6 +608,8 @@ export default function AgentScreen() {
               startRenderingFromBottom: true,
             }}
           />
+
+          <SlashCommandMenu commands={slashMatches} onSelect={handleSlashSelect} />
 
           {/* ── Input bar — pinned above keyboard ─────────── */}
           <View
