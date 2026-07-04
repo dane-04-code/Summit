@@ -7,13 +7,12 @@
  * Approve/stop = the Runs API. All endpoints confirmed in `FRAMEWORKS.md`.
  */
 
-import EventSource from 'react-native-sse';
-
 import type { Agent, AgentCapabilities } from '../types';
-import { EventQueue } from './stream';
+import { streamChatCompletions } from './sse';
 import {
   AgentAdapter,
   AgentStatus,
+  ConnectionState,
   ConnectionError,
   SendOptions,
   StreamEvent,
@@ -57,6 +56,8 @@ export function normalizeBaseUrl(raw: string): string {
 export class HermesAdapter implements AgentAdapter {
   readonly framework = 'hermes' as const;
   private readonly base: string;
+  private connectionState: ConnectionState = 'unknown';
+  private listeners: Array<(state: ConnectionState) => void> = [];
 
   constructor(
     agent: Agent,
@@ -75,6 +76,7 @@ export class HermesAdapter implements AgentAdapter {
     const key = await this.getSecret();
     let res: Response;
     try {
+      this.setConnectionState(this.connectionState === 'connected' ? 'reconnecting' : 'connecting');
       res = await fetch(`${this.base}${path}`, {
         ...init,
         headers: {
@@ -84,15 +86,40 @@ export class HermesAdapter implements AgentAdapter {
         },
       });
     } catch {
+      this.setConnectionState('disconnected');
       throw new ConnectionError('unreachable', `Couldn't reach ${this.base}.`);
     }
     if (res.status === 401 || res.status === 403) {
       throw new ConnectionError('unauthorized', "Server's there, but the API key was rejected.");
     }
     if (!res.ok) {
+      this.setConnectionState('disconnected');
       throw new ConnectionError('server-error', `Server returned ${res.status}.`);
     }
+    this.setConnectionState('connected');
     return res;
+  }
+
+  private setConnectionState(state: ConnectionState): void {
+    if (this.connectionState === state) return;
+    this.connectionState = state;
+    for (const listener of this.listeners) listener(state);
+  }
+
+  getConnectionState(): ConnectionState {
+    return this.connectionState;
+  }
+
+  subscribeConnectionState(listener: (state: ConnectionState) => void): () => void {
+    this.listeners.push(listener);
+    listener(this.connectionState);
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== listener);
+    };
+  }
+
+  async retryConnection(): Promise<void> {
+    await this.testConnection();
   }
 
   async testConnection(): Promise<AgentCapabilities> {
@@ -118,74 +145,31 @@ export class HermesAdapter implements AgentAdapter {
   }
 
   sendMessage(content: string, opts: SendOptions = {}): AsyncIterable<StreamEvent> {
-    const queue = new EventQueue<StreamEvent>();
-    const url = `${this.base}/v1/chat/completions`;
-
-    void this.getSecret()
-      .then((key) => {
-        const es = new EventSource<'hermes.tool.progress'>(url, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${key ?? ''}`,
-            'Content-Type': 'application/json',
-            ...(opts.sessionId ? { 'X-Hermes-Session-Id': opts.sessionId } : {}),
-            ...(opts.sessionKey ? { 'X-Hermes-Session-Key': opts.sessionKey } : {}),
-          },
-          // Single user turn. Full-history assembly belongs to the screen
-          // integration pass (`docs/AGENTS.md` §9) — session headers carry
-          // continuity via Honcho memory in the meantime.
-          body: JSON.stringify({
-            model: 'hermes-agent',
-            stream: true,
-            messages: [{ role: 'user', content }],
-          }),
-          pollingInterval: 0, // one-shot stream, don't reconnect
-        });
-
-        const close = () => {
-          es.removeAllEventListeners();
-          es.close();
-          queue.close();
-        };
-
-        es.addEventListener('message', (event) => {
-          const data = event.data;
-          if (!data) return;
-          if (data.trim() === '[DONE]') {
-            queue.push({ type: 'done' });
-            close();
-            return;
-          }
-          try {
-            const chunk = JSON.parse(data) as {
-              choices?: { delta?: { content?: string } }[];
-            };
-            const text = chunk.choices?.[0]?.delta?.content;
-            if (text) queue.push({ type: 'delta', text });
-          } catch {
-            // keep-alive or non-JSON frame — ignore
-          }
-        });
-
-        es.addEventListener('hermes.tool.progress', (event) => {
-          const label = readToolLabel(event.data);
-          if (label) queue.push({ type: 'tool', label });
-        });
-
-        es.addEventListener('error', () => {
-          queue.push({ type: 'error', message: 'The connection to the agent dropped.' });
-          close();
-        });
-      })
-      .catch((err: unknown) => {
-        queue.push({
-          type: 'error',
-          message: err instanceof Error ? err.message : 'Could not start the stream.',
-        });
-        queue.close();
-      });
-
-    return queue;
+    this.setConnectionState(this.connectionState === 'connected' ? 'reconnecting' : 'connecting');
+    return streamChatCompletions({
+      url: `${this.base}/v1/chat/completions`,
+      getHeaders: async () => ({
+        Authorization: `Bearer ${(await this.getSecret()) ?? ''}`,
+        ...(opts.sessionId ? { 'X-Hermes-Session-Id': opts.sessionId } : {}),
+        ...(opts.sessionKey ? { 'X-Hermes-Session-Key': opts.sessionKey } : {}),
+      }),
+      // Single user turn. Full-history assembly belongs to the screen
+      // integration pass (`docs/AGENTS.md` §9) — session headers carry
+      // continuity via Honcho memory in the meantime.
+      body: {
+        model: 'hermes-agent',
+        stream: true,
+        messages: [{ role: 'user', content }],
+      },
+      customEvents: {
+        'hermes.tool.progress': (data, push) => {
+          const label = readToolLabel(data);
+          if (label) push({ type: 'tool', label });
+        },
+      },
+      onActivity: () => this.setConnectionState('connected'),
+      onDisconnected: () => this.setConnectionState('disconnected'),
+    });
   }
 
   async getStatus(): Promise<AgentStatus> {

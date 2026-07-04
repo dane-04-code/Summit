@@ -17,8 +17,14 @@ export type ErrorFrame      = { t: 'error'; reqId?: string; message: string };
 // JSON string. The connector enforces which method+path pairs are permitted.
 export type ApiReqFrame     = { t: 'api_req'; reqId: string; method: string; path: string; body?: string };
 export type ApiResFrame     = { t: 'api_res'; reqId: string; status: number; body: string };
+// Push notifications. `register_push` (app → relay) stores the device's Expo
+// push token in the pairing channel. `notify` (connector → relay) is the
+// agent-initiated nudge: pushed to the phone when the app is away, forwarded
+// as a frame when it's connected.
+export type RegisterPushFrame = { t: 'register_push'; token: string };
+export type NotifyFrame       = { t: 'notify'; title?: string; body?: string };
 
 export type AnyFrame =
   | HelloFrame | CodeFrame | PairFrame | PairedFrame | PairErrorFrame
   | PeerGoneFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | DoneFrame | ErrorFrame
-  | ApiReqFrame | ApiResFrame;
+  | ApiReqFrame | ApiResFrame | RegisterPushFrame | NotifyFrame;

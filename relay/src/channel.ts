@@ -1,6 +1,7 @@
 import {
   makeInitialState,
   handleConnectorOpen,
+  handleAppOpen,
   handleConnectorMessage,
   handleAppMessage,
   handleConnectorClose,
@@ -41,6 +42,10 @@ export class PairingChannel {
       await this.doState.storage.put('state', this.state);
       this.doState.acceptWebSocket(server, ['connector']);
     } else {
+      // Presence gates pushes: while an app socket is attached, agent events
+      // stay in-band; the moment it detaches, finished turns become pushes.
+      this.state = handleAppOpen(this.state);
+      await this.doState.storage.put('state', this.state);
       this.doState.acceptWebSocket(server, ['app']);
     }
 
@@ -61,7 +66,7 @@ export class PairingChannel {
       this.state = result.state;
       await this.doState.storage.put('state', this.state);
     }
-    this.dispatch(result.effects);
+    await this.dispatch(result.effects);
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
@@ -71,12 +76,16 @@ export class PairingChannel {
       : handleAppClose(this.state);
     this.state = result.state;
     await this.doState.storage.put('state', this.state);
-    this.dispatch(result.effects);
+    await this.dispatch(result.effects);
   }
 
-  private dispatch(effects: SideEffect[]): void {
+  private async dispatch(effects: SideEffect[]): Promise<void> {
     const sockets = this.doState.getWebSockets();
     for (const effect of effects) {
+      if (effect.to === 'push') {
+        await this.sendPush(effect.token, effect.title, effect.body);
+        continue;
+      }
       const target = sockets.find((s) => this.doState.getTags(s)[0] === effect.to);
       if (target) {
         target.send(JSON.stringify(effect.frame));
@@ -86,6 +95,24 @@ export class PairingChannel {
         const reqId = (effect.frame as Record<string, unknown>).reqId as string | undefined;
         app?.send(JSON.stringify({ t: 'error', reqId, message: 'Agent is offline. Tap Retry in the app to reconnect.' }));
       }
+    }
+  }
+
+  /**
+   * One notification through the Expo Push API — a plain POST, no APNs/FCM
+   * credentials here (EAS holds those for the app build). Failures are logged,
+   * never fatal: a lost push must not break the relay session.
+   */
+  private async sendPush(token: string, title: string, body: string): Promise<void> {
+    try {
+      const res = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: token, title, body, sound: 'default' }),
+      });
+      if (!res.ok) console.warn(`push send failed: ${res.status}`);
+    } catch (err) {
+      console.warn('push send failed', err);
     }
   }
 }

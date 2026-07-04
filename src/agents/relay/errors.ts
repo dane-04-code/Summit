@@ -16,7 +16,7 @@ export type RelayErrorCode =
 
 export const RELAY_ERROR_MESSAGES: Record<RelayErrorCode, string> = {
   relay_unreachable:
-    "Can't reach the Summit relay. Check your connection and try again.",
+    'Agent disconnected. Check that the connector is running and try again.',
   code_not_found:
     "That code wasn't found. Make sure your agent's connector is still running, then re-check the code.",
   code_expired: 'That pairing code has expired. Ask your agent for a fresh code.',

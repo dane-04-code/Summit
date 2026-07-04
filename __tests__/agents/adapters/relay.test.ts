@@ -25,9 +25,16 @@ async function* makeAsyncGen(events: StreamEvent[]) {
 const mockPair = jest.fn().mockResolvedValue({ framework: 'hermes', agentName: 'Test', agentVersion: '1' });
 const mockChat = jest.fn(() => makeAsyncGen(mockChatEvents));
 const mockDisconnect = jest.fn();
+const mockRegisterPush = jest.fn().mockResolvedValue(undefined);
 
 jest.mock('@/agents/relay/client', () => ({
-  RelayClient: jest.fn(() => ({ pair: mockPair, chat: mockChat, disconnect: mockDisconnect })),
+  RelayClient: jest.fn(() => ({
+    pair: mockPair,
+    chat: mockChat,
+    disconnect: mockDisconnect,
+    registerPush: mockRegisterPush,
+    subscribeConnectionState: jest.fn(() => () => {}),
+  })),
 }));
 
 jest.mock('@/config', () => ({
@@ -63,5 +70,20 @@ describe('RelayAdapter', () => {
     await expect(async () => {
       for await (const _ of adapter.sendMessage('hi')) {}
     }).rejects.toThrow('No pairing code');
+  });
+
+  it('registers the push token after pairing', async () => {
+    const adapter = new RelayAdapter(fakeAgent, async () => '481920', async () => 'ExponentPushToken[t1]');
+    for await (const _ of adapter.sendMessage('hello')) {}
+    // registration is fire-and-forget — let the microtask settle
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mockRegisterPush).toHaveBeenCalledWith('ExponentPushToken[t1]');
+  });
+
+  it('skips registration when no token is available', async () => {
+    const adapter = new RelayAdapter(fakeAgent, async () => '481920', async () => null);
+    for await (const _ of adapter.sendMessage('hello')) {}
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mockRegisterPush).not.toHaveBeenCalled();
   });
 });

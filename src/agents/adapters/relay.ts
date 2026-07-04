@@ -1,10 +1,11 @@
-import type { AgentAdapter, AgentStatus, SendOptions, StreamEvent } from './types';
+import type { AgentAdapter, AgentStatus, ConnectionState, SendOptions, StreamEvent } from './types';
 import type { AgentCapabilities, AgentFramework, Agent } from '../types';
 import type { ChatMessage } from '../relay/types';
 import type { CronJob, CronRun } from '@/ui/cron/types';
 import { RelayClient } from '../relay/client';
 import { readJobRunResponse, readJobsResponse } from './jobs';
 import { RELAY_WS_URL } from '@/config';
+import { resolvePushToken } from '@/notifications/push';
 
 const enc = encodeURIComponent;
 
@@ -28,14 +29,19 @@ function parseJson(body: string): unknown {
 }
 
 export class RelayAdapter implements AgentAdapter {
-  readonly framework: AgentFramework = 'hermes';
+  readonly framework: AgentFramework;
   private client: RelayClient | null = null;
   private pairingCode: string | null = null;
+  private connectionState: ConnectionState = 'unknown';
+  private listeners: Array<(state: ConnectionState) => void> = [];
 
   constructor(
     private readonly agent: Agent,
     private readonly getSecret: () => Promise<string | null>,
-  ) {}
+    private readonly getPushToken: () => Promise<string | null> = resolvePushToken,
+  ) {
+    this.framework = agent.framework;
+  }
 
   private async ensureConnected(): Promise<RelayClient> {
     if (this.client) return this.client;
@@ -43,10 +49,43 @@ export class RelayAdapter implements AgentAdapter {
     if (!code) throw new Error('No pairing code stored for this agent.');
     const wsUrl = `${RELAY_WS_URL}?code=${encodeURIComponent(code)}`;
     const client = new RelayClient(wsUrl);
+    client.subscribeConnectionState((state) => this.setConnectionState(state));
     await client.pair(code);
     this.client = client;
     this.pairingCode = code;
+    this.registerPushToken(client);
     return client;
+  }
+
+  /** Fire-and-forget: push is an enhancement, never a blocker for chat. */
+  private registerPushToken(client: RelayClient): void {
+    void this.getPushToken()
+      .then((token) => (token ? client.registerPush(token) : undefined))
+      .catch(() => {});
+  }
+
+  private setConnectionState(state: ConnectionState): void {
+    if (this.connectionState === state) return;
+    this.connectionState = state;
+    for (const listener of this.listeners) listener(state);
+  }
+
+  getConnectionState(): ConnectionState {
+    return this.connectionState;
+  }
+
+  subscribeConnectionState(listener: (state: ConnectionState) => void): () => void {
+    this.listeners.push(listener);
+    listener(this.connectionState);
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== listener);
+    };
+  }
+
+  async retryConnection(): Promise<void> {
+    this.client?.disconnect();
+    this.client = null;
+    await this.ensureConnected();
   }
 
   async *sendMessage(content: string, opts?: SendOptions): AsyncIterable<StreamEvent> {

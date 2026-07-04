@@ -5,7 +5,7 @@
  * See `docs/AGENTS.md` §6.
  */
 
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
 import type { Agent, NewAgentInput } from './types';
 import { buildAgent, removeAgent as removeFromList, resolveActive, touchAgent, upsertAgent } from './registry';
@@ -118,13 +118,13 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
 
   const adapterCache = useRef<Map<string, AgentAdapter>>(new Map());
 
-  const adapterFor = (agent: Agent): AgentAdapter => {
+  const adapterFor = useCallback((agent: Agent): AgentAdapter => {
     const cached = adapterCache.current.get(agent.id);
     if (cached) return cached;
     const adapter = makeAdapter(agent);
     adapterCache.current.set(agent.id, adapter);
     return adapter;
-  };
+  }, []);
 
   const value: AgentContextValue = {
     ready,

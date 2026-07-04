@@ -14,6 +14,7 @@ import {
   Pressable,
   StyleSheet,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Animated,
 } from 'react-native';
@@ -38,6 +39,8 @@ import { messageToText } from '@/ui/chat/types';
 import { renameSession } from '@/ui/chat/sessionActions';
 import type { Message, AgentBlock, RunState, MarkdownFile, ChatGroup } from '@/ui/chat/types';
 import { useAgents } from '@/agents/AgentProvider';
+import { defaultCapabilitiesFor, frameworkLabel } from '@/agents/frameworks';
+import type { ConnectionState } from '@/agents/adapters/types';
 import { initialTurn, reduceTurn, turnToBlocks, settleBlocks, shouldFlush } from '@/ui/chat/streamReducer';
 import type { ChatSession } from '@/agents/types';
 
@@ -167,6 +170,7 @@ export default function AgentScreen() {
   const [activeSessionId, setActiveSessionId] = useState('');
   const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
   const [copiedAt, setCopiedAt] = useState(0);
+  const [connectionState, setConnectionState] = useState<ConnectionState>('unknown');
 
   const flashListRef = useRef<FlashListRef<Message>>(null);
   const inputRef = useRef<TextInput>(null);
@@ -201,6 +205,16 @@ export default function AgentScreen() {
       cancelledRef.current = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!activeAgent) {
+      setConnectionState('unknown');
+      return;
+    }
+    const adapter = adapterFor(activeAgent);
+    setConnectionState(adapter.getConnectionState());
+    return adapter.subscribeConnectionState(setConnectionState);
+  }, [activeAgent, adapterFor]);
 
   const loadSessionSummaries = useCallback(async () => {
     if (!activeAgent) {
@@ -273,9 +287,16 @@ export default function AgentScreen() {
 
   const statusLabel =
     status === 'running' ? 'running' : status === 'error' ? 'connection error' : 'ready';
+  // Capability-driven UI: features surface only when the agent supports them.
+  // Agents paired before capabilities were captured fall back to framework
+  // defaults — additive, never subtractive.
+  const capabilities = activeAgent
+    ? activeAgent.capabilities ?? defaultCapabilitiesFor(activeAgent.framework)
+    : null;
+  const agentFrameworkLabel = activeAgent ? frameworkLabel(activeAgent.framework) : 'Hermes';
   const sidebarTitle = activeAgent?.name ?? 'Summit';
   const sidebarSubtitle = activeAgent
-    ? activeAgent.framework === 'hermes' ? 'Hermes' : 'OpenClaw'
+    ? agentFrameworkLabel
     : 'No agent connected';
 
   const handleNewChat = useCallback(() => {
@@ -310,6 +331,7 @@ export default function AgentScreen() {
 
   const handleMenu = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
+    Keyboard.dismiss();
     setSidebarOpen(true);
   }, []);
 
@@ -410,6 +432,14 @@ export default function AgentScreen() {
     stopRef.current = true;
   }, []);
 
+  const handleRetryConnection = useCallback(() => {
+    if (!activeAgent) return;
+    Haptics.selectionAsync().catch(() => {});
+    void adapterFor(activeAgent).retryConnection().catch(() => {
+      setConnectionState('disconnected');
+    });
+  }, [activeAgent, adapterFor]);
+
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || streaming || !activeAgent) return;
@@ -458,7 +488,8 @@ export default function AgentScreen() {
         if (turn.done) break;
       }
     } catch {
-      turn = { ...turn, status: 'error', error: 'The connection to the agent dropped.', done: true };
+      setConnectionState('disconnected');
+      turn = { ...turn, status: 'error', error: 'Agent disconnected.', done: true };
     }
 
     if (cancelledRef.current) return;
@@ -522,7 +553,10 @@ export default function AgentScreen() {
           name={activeAgent?.name ?? AGENT_NAME}
           status={status}
           statusLabel={statusLabel}
+          connectionState={connectionState}
+          frameworkLabel={agentFrameworkLabel}
           hint={RUNNING_HINT}
+          onRetryConnection={handleRetryConnection}
           onMenu={handleMenu}
           onNewChat={handleNewChat}
         />
@@ -558,18 +592,19 @@ export default function AgentScreen() {
           <View
             style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, space.md) }]}
           >
+            <View style={styles.composerRow}>
             <Animated.View
               style={[
                 styles.fieldWrap,
                 {
                   borderColor: fieldBorderColor,
-                  height: Math.max(44, composerHeight + COMPOSER_VERTICAL_CHROME),
+                  maxHeight: COMPOSER_MAX_HEIGHT + COMPOSER_VERTICAL_CHROME,
                 },
               ]}
             >
               <TextInput
                 ref={inputRef}
-                style={[styles.textField, { height: composerHeight }]}
+                style={[styles.textField]}
                 value={input}
                 onChangeText={measureComposer}
                 placeholder="Message…"
@@ -635,6 +670,7 @@ export default function AgentScreen() {
                 )}
               </Animated.View>
             </Pressable>
+            </View>
           </View>
         </KeyboardAvoidingView>
 
@@ -647,7 +683,10 @@ export default function AgentScreen() {
         activeId={activeSessionId}
         title={sidebarTitle}
         subtitle={sidebarSubtitle}
+        connectionState={connectionState}
+        onRetryConnection={handleRetryConnection}
         account={account}
+        showCron={capabilities?.hasJobs ?? false}
         onClose={() => setSidebarOpen(false)}
         onNewChat={handleNewChat}
         onSelectChat={handleSelectChat}
@@ -707,14 +746,16 @@ const styles = StyleSheet.create({
 
   // ── Input bar ─────────────────────────────────────────────────────────────
   inputBar: {
-    flexDirection: 'row',
-    alignItems: 'flex-end', // keep Send pinned to the bottom as the field grows
-    gap: space.sm + 2,
     paddingHorizontal: space.lg,
     paddingTop: space.sm + 2,
     borderTopWidth: 1,
     borderTopColor: colors.line,
     backgroundColor: colors.bg,
+  },
+  composerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: space.sm + 2,
   },
   // Box chrome lives on the wrapper so its border colour can animate on focus.
   fieldWrap: {

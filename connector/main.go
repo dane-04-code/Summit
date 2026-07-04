@@ -30,12 +30,33 @@ type Frame struct {
 	Path         string        `json:"path,omitempty"`
 	Status       int           `json:"status,omitempty"`
 	Body         string        `json:"body,omitempty"`
+	Title        string        `json:"title,omitempty"`
 }
 
 // ChatMessage matches the OpenAI messages array shape.
 type ChatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+}
+
+// agentIdentity resolves what the connector announces in its hello frame.
+// AGENT_FRAMEWORK defaults to hermes; any OpenAI-compatible upstream can set
+// AGENT_FRAMEWORK=openai (and optionally AGENT_NAME) so the app surfaces only
+// the features that agent actually has.
+func agentIdentity(frameworkEnv, nameEnv string) (string, string) {
+	framework := strings.ToLower(strings.TrimSpace(frameworkEnv))
+	if framework == "" {
+		framework = "hermes"
+	}
+	name := strings.TrimSpace(nameEnv)
+	if name == "" {
+		if framework == "hermes" {
+			name = "Hermes"
+		} else {
+			name = "Agent"
+		}
+	}
+	return framework, name
 }
 
 func main() {
@@ -45,6 +66,7 @@ func main() {
 	}
 	hermesBase := strings.TrimRight(os.Getenv("HERMES_BASE_URL"), "/")
 	apiKey := os.Getenv("HERMES_API_KEY")
+	framework, agentName := agentIdentity(os.Getenv("AGENT_FRAMEWORK"), os.Getenv("AGENT_NAME"))
 
 	if hermesBase == "" || apiKey == "" {
 		log.Fatal("HERMES_BASE_URL and HERMES_API_KEY must be set")
@@ -53,8 +75,17 @@ func main() {
 		hermesBase = "http://" + hermesBase
 	}
 
+	// Local nudge endpoint: agent-side callers POST {title, body} and the
+	// paired phone gets a push when the app is away. See notify.go.
+	notify := &notifier{}
+	notifyPort := os.Getenv("NOTIFY_PORT")
+	if notifyPort == "" {
+		notifyPort = "8643"
+	}
+	startNotifyServer(notify, notifyPort)
+
 	for {
-		if err := run(relayURL, hermesBase, apiKey); err != nil {
+		if err := run(relayURL, hermesBase, apiKey, framework, agentName, notify); err != nil {
 			log.Printf("disconnected: %v — reconnecting in 5s", err)
 		}
 		time.Sleep(5 * time.Second)
@@ -73,7 +104,7 @@ func savedPairingCode() string {
 	return strings.TrimSpace(string(data))
 }
 
-func run(relayURL, hermesBase, apiKey string) error {
+func run(relayURL, hermesBase, apiKey, framework, agentName string, notify *notifier) error {
 	target := relayURL
 	if code := savedPairingCode(); code != "" {
 		target += "?claim=" + code
@@ -86,8 +117,11 @@ func run(relayURL, hermesBase, apiKey string) error {
 	var writeMu sync.Mutex
 	log.Printf("connected to relay %s", relayURL)
 
+	notify.setSender(func(f Frame) error { return writeFrame(conn, &writeMu, f) })
+	defer notify.setSender(nil)
+
 	if err := writeFrame(conn, &writeMu, Frame{
-		T: "hello", Framework: "hermes", AgentName: "Hermes", AgentVersion: "1.0",
+		T: "hello", Framework: framework, AgentName: agentName, AgentVersion: "1.0",
 	}); err != nil {
 		return fmt.Errorf("send hello: %w", err)
 	}

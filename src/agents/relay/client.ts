@@ -125,6 +125,16 @@ export class RelayClient {
     });
   }
 
+  /**
+   * Store this device's Expo push token in the pairing channel so the relay
+   * can reach the phone when the app is away. Idempotent — safe on every
+   * (re)connect.
+   */
+  async registerPush(token: string): Promise<void> {
+    const ws = await this.connect();
+    ws.send(JSON.stringify({ t: 'register_push', token }));
+  }
+
   async *chat(messages: ChatMessage[], reqId: string, sessionId?: string, sessionKey?: string): AsyncIterable<StreamEvent> {
     if (this.pairCode && !this.paired) {
       await this.pair(this.pairCode);

@@ -70,7 +70,8 @@ export default function ConnectScreen() {
               </View>
               <Text style={[styles.title, styles.brandTitle]}>Connect your agent</Text>
               <Text style={[styles.subtitle, styles.brandSubtitle]}>
-                Point Summit at your Hermes server. The host and API key stay on this device.
+                Point Summit at your agent — Hermes or any OpenAI-compatible server. The host
+                and API key stay on this device.
               </Text>
             </View>
 
@@ -79,7 +80,7 @@ export default function ConnectScreen() {
                 <Text style={styles.label}>Name</Text>
                 <TextInput
                   style={[styles.input, focused === 'name' && styles.inputFocused]}
-                  placeholder="Hermes"
+                  placeholder="My agent"
                   placeholderTextColor={colors.faint}
                   value={name}
                   onChangeText={setName}

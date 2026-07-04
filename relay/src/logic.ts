@@ -6,16 +6,27 @@ export type ChannelState = {
   code: string | null;
   connectorInfo: ConnectorInfo | null;
   connectorConnected: boolean;
+  /** Expo push token registered by the app; survives hibernation + reconnects. */
+  pushToken: string | null;
+  /** Whether an app socket is currently attached — pushes only fire when it isn't. */
+  appConnected: boolean;
 };
 
 export type SideEffect =
   | { to: 'connector'; frame: AnyFrame }
-  | { to: 'app'; frame: AnyFrame };
+  | { to: 'app'; frame: AnyFrame }
+  | { to: 'push'; token: string; title: string; body: string };
 
 export type HandleResult = { state: ChannelState; effects: SideEffect[]; occupied?: boolean };
 
 export function makeInitialState(): ChannelState {
-  return { code: null, connectorInfo: null, connectorConnected: false };
+  return {
+    code: null,
+    connectorInfo: null,
+    connectorConnected: false,
+    pushToken: null,
+    appConnected: false,
+  };
 }
 
 export function handleConnectorOpen(state: ChannelState, code: string): HandleResult {
@@ -26,6 +37,21 @@ export function handleConnectorOpen(state: ChannelState, code: string): HandleRe
   }
   // Store the code; wait for hello before replying with it
   return { state: { ...state, code, connectorConnected: true }, effects: [] };
+}
+
+export function handleAppOpen(state: ChannelState): ChannelState {
+  return { ...state, appConnected: true };
+}
+
+/** Push effect for an agent event, or null when the app is watching / no token. */
+function pushFor(state: ChannelState, title: string | undefined, body: string | undefined): SideEffect | null {
+  if (state.appConnected || !state.pushToken) return null;
+  return {
+    to: 'push',
+    token: state.pushToken,
+    title: title || state.connectorInfo?.agentName || 'Your agent',
+    body: body || 'Needs your attention.',
+  };
 }
 
 export function handleConnectorMessage(state: ChannelState, frame: AnyFrame): HandleResult {
@@ -43,13 +69,36 @@ export function handleConnectorMessage(state: ChannelState, frame: AnyFrame): Ha
     // resets. Control-frame pings don't reset it; JSON messages do.
     return { state, effects: [{ to: 'connector', frame: { t: 'pong' } }] };
   }
-  // chunk / done / error — forward to app
-  return { state, effects: [{ to: 'app', frame }] };
+  if (frame.t === 'notify') {
+    // Agent-initiated nudge: in-thread frame when the app is watching, push
+    // when it's away. The agent chose title/body deliberately — send them.
+    if (state.appConnected) {
+      return { state, effects: [{ to: 'app', frame }] };
+    }
+    const push = pushFor(state, frame.title, frame.body);
+    return { state, effects: push ? [push] : [] };
+  }
+  // chunk / done / error — forward to app; a finished turn the app didn't see
+  // becomes a push. Content stays out of the notification (it would transit
+  // Expo/Apple servers; the transcript is on-device only).
+  const effects: SideEffect[] = [{ to: 'app', frame }];
+  if (frame.t === 'done') {
+    const push = pushFor(state, undefined, 'Finished a reply — open Summit to read it.');
+    if (push) effects.push(push);
+  } else if (frame.t === 'error') {
+    const push = pushFor(state, undefined, 'Hit a problem and needs you.');
+    if (push) effects.push(push);
+  }
+  return { state, effects };
 }
 
 export function handleAppMessage(state: ChannelState, frame: AnyFrame): HandleResult {
   if (frame.t === 'ping') {
     return { state, effects: [{ to: 'app', frame: { t: 'pong' } }] };
+  }
+
+  if (frame.t === 'register_push') {
+    return { state: { ...state, pushToken: frame.token }, effects: [] };
   }
 
   if (frame.t === 'pair') {
@@ -71,5 +120,5 @@ export function handleConnectorClose(state: ChannelState): HandleResult {
 
 export function handleAppClose(state: ChannelState): HandleResult {
   const gone: PeerGoneFrame = { t: 'peer_gone' };
-  return { state, effects: [{ to: 'connector', frame: gone }] };
+  return { state: { ...state, appConnected: false }, effects: [{ to: 'connector', frame: gone }] };
 }

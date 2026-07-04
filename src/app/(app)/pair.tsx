@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +17,8 @@ import * as Clipboard from 'expo-clipboard';
 import { Copy, Check } from 'lucide-react-native';
 import { ScreenHeader } from '@/ui/ScreenHeader';
 import { useAgents } from '@/agents/AgentProvider';
+import { defaultCapabilitiesFor, frameworkLabel, parseFramework } from '@/agents/frameworks';
+import { resolvePushToken } from '@/notifications/push';
 import { RelayClient } from '@/agents/relay/client';
 import { RelayError, isPairingCodeError } from '@/agents/relay/errors';
 import { RELAY_WS_URL } from '@/config';
@@ -39,8 +42,19 @@ export default function PairScreen() {
   const [promptCopied, setPromptCopied] = useState(false);
   const [curlCopied, setCurlCopied] = useState(false);
   const clientRef = useRef<RelayClient | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   const canSubmit = code.trim().length === 6 && !loading;
+
+  // The name/code fields live at the bottom of the scroll. RN won't scroll a
+  // focused input into view on its own, so when the keyboard appears pull the
+  // content up to the end — keeping the code you're typing visible above it.
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => sub.remove();
+  }, []);
 
   async function copyText(text: string, setCopied: (v: boolean) => void) {
     await Clipboard.setStringAsync(text);
@@ -58,16 +72,30 @@ export default function PairScreen() {
       const client = new RelayClient(wsUrl);
       clientRef.current = client;
       const info = await client.pair(trimmed);
+
+      // The moment of intent: you just paired an agent, so this is when the
+      // permission dialog makes sense. Failure never blocks pairing — the
+      // adapter re-registers on every reconnect anyway.
+      try {
+        const pushToken = await resolvePushToken();
+        if (pushToken) await client.registerPush(pushToken);
+      } catch {
+        // push is an enhancement — carry on
+      }
+
       client.disconnect();
       clientRef.current = null;
 
+      // The connector announces its framework in the paired frame; capability
+      // flags follow from it (a live probe isn't possible over the relay).
+      const framework = parseFramework(info.framework);
       await addAgent(
         {
-          name: name.trim() || info.agentName || 'Hermes',
-          framework: 'hermes',
+          name: name.trim() || info.agentName || frameworkLabel(framework),
+          framework,
           transport: 'relay',
           baseUrl: null,
-          capabilities: null,
+          capabilities: defaultCapabilitiesFor(framework),
         },
         trimmed,
       );
@@ -97,6 +125,7 @@ export default function PairScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
+          ref={scrollRef}
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -361,7 +390,7 @@ const styles = StyleSheet.create({
   codeInputError: { borderColor: colors.error },
   error: {
     ...typography.caption,
-    color: colors.error,
+    color: colors.muted,
     paddingHorizontal: 4,
   },
 

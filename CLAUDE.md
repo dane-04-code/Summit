@@ -124,10 +124,31 @@ runs from the phone.
 - Credentials are stored on-device only via `expo-secure-store` (iOS Keychain). Nothing leaves the
   phone except calls to the user's own server.
 
+### Multi-agent: two-track architecture (built)
+
+Per `docs/superpowers/plans/2026-07-03-multi-agent-product-direction.md`:
+- **Tier 1 (native ceiling):** Hermes (live), OpenClaw (stub). **Tier 2 (generic floor):** any
+  OpenAI-compatible server (Ollama, LM Studio, llama.cpp, …) via `src/agents/adapters/openai.ts` —
+  probe `GET /v1/models`, chat SSE `/v1/chat/completions`. The connect flow **detects** the
+  framework (Hermes probe → generic fallback in `src/agents/connect.ts`); the user never picks one.
+- **Capability-driven UI:** features surface from `agent.capabilities` (fall back to
+  `defaultCapabilitiesFor()` in `src/agents/frameworks.ts`). `hasJobs` gates the sidebar Cron item;
+  generic agents get the clean messaging floor with no dead chrome.
+- The connector announces `AGENT_FRAMEWORK` (default `hermes`) in its hello frame; the pair screen
+  stores it. Tester loops (mock agent, all channels): `docs/TESTING.md`, `scripts/mock-agent.mjs`.
+- **Push notifications (relay mode only):** the relay DO stores the device's Expo push token
+  (`register_push` frame, sent at pair + every adapter reconnect) and POSTs to the Expo Push API
+  when a turn finishes or a `notify` frame arrives while no app socket is attached. Auto-pushes are
+  **content-free** (transcript never transits push servers); agent-chosen nudges come from the
+  connector's loopback endpoint `POST localhost:8643/notify {title, body}` (`NOTIFY_PORT` env).
+  App side: `src/notifications/push.ts` (expo-notifications is dynamically imported; everything
+  degrades to null off-device). Adding the native module means the dev client needs a rebuild.
+
 ### Connection modes — both are now built
 
-- **Slice 1 — direct mode.** `src/app/(app)/connect.tsx`: host + API key, calls Hermes directly.
-  Works only where the host is reachable (LAN / Tailscale / tunnel). (`ONBOARDING.md`)
+- **Slice 1 — direct mode.** `src/app/(app)/connect.tsx`: host + API key, auto-detects Hermes vs
+  generic OpenAI-compatible. Works only where the host is reachable (LAN / Tailscale / tunnel).
+  (`ONBOARDING.md`)
 - **Slice 3a/3b/3c — relay mode** (fully deployed). `src/app/(app)/pair.tsx` is the **primary
   onboarding** path — a 3-step screen: copyable agent prompt → copyable curl command → 6-digit code
   entry. A Go **connector sidecar** (`/connector/`) runs next to Hermes and dials outbound to a
@@ -159,6 +180,7 @@ intent; the code is authoritative for what exists.
 | `docs/CONNECTION.md` | Relay/connector architecture (the target, not yet built) |
 | `ONBOARDING.md` | The connect flow as actually built (direct mode) |
 | `DESIGN_SYSTEM.md` | Visual system — enforced by `src/theme.ts` |
+| `docs/TESTING.md` | Tester loops per connection channel + the mock agent (`scripts/mock-agent.mjs`) |
 | `.sdd/` and `docs/superpowers/{specs,plans}/` | Spec-driven build: progress log, specs, plans |
 | `.claude/skills/nano-product-manager/` | Product-manager skill + `product-brief.md` for "what should we build / is X worth it" questions |
 

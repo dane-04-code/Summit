@@ -19,6 +19,7 @@
     "expo-haptics": "~56.0.3",
     "expo-image": "~56.0.11",
     "expo-linking": "~56.0.14",
+    "expo-notifications": "~56.0.19",
     "expo-router": "~56.2.11",
     "expo-secure-store": "~56.0.4",
     "expo-sharing": "~56.0.18",
@@ -65,7 +66,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "mock:agent": "node scripts/mock-agent.mjs",
+    "mock:hermes": "node scripts/mock-agent.mjs --hermes"
   },
   "overrides": {
     "markdown-it": "14.2.0",

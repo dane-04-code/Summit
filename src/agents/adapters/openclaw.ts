@@ -14,6 +14,7 @@ import type { CronJob, CronRun } from '@/ui/cron/types';
 import {
   AgentAdapter,
   AgentStatus,
+  ConnectionState,
   SendOptions,
   StreamEvent,
 } from './types';
@@ -32,6 +33,18 @@ export class OpenClawAdapter implements AgentAdapter {
   }
 
   getStatus(): Promise<AgentStatus> {
+    return Promise.reject(new Error(NOT_READY));
+  }
+
+  getConnectionState(): ConnectionState {
+    return 'unknown';
+  }
+
+  subscribeConnectionState(_listener: (state: ConnectionState) => void): () => void {
+    return () => {};
+  }
+
+  retryConnection(): Promise<void> {
     return Promise.reject(new Error(NOT_READY));
   }
 

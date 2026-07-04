@@ -9,7 +9,12 @@
 
 import type { Message } from '@/ui/chat/types';
 
-export type AgentFramework = 'hermes' | 'openclaw';
+/**
+ * `hermes` / `openclaw` are Tier 1 native integrations; `openai` is the Tier 2
+ * generic floor — any server that speaks the OpenAI `/v1/chat/completions`
+ * format (Ollama, LM Studio, llama.cpp, …) gets clean messaging, nothing more.
+ */
+export type AgentFramework = 'hermes' | 'openclaw' | 'openai';
 export type AgentTransport = 'direct' | 'relay';
 
 /** Snapshot of what a server supports, captured on connect. */
@@ -21,6 +26,8 @@ export type AgentCapabilities = {
   hasJobs: boolean;
   hasSessions: boolean;
   serverVersion?: string;
+  /** Generic servers need a real model id in the request; captured on connect. */
+  chatModel?: string;
 };
 
 export type Agent = {

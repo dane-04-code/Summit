@@ -23,6 +23,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PanelLeftClose, Search, Plus, Settings, CalendarClock } from 'lucide-react-native';
 
 import { colors, radius, space, typography } from '../../theme';
+import type { ConnectionState } from '@/agents/adapters/types';
+import { ConnectionBadge } from './ConnectionBadge';
 import type { ChatGroup, ChatSummary, RunState } from './types';
 
 const DOT: Record<RunState, string> = {
@@ -39,7 +41,11 @@ interface SidebarProps {
   activeId: string;
   title: string;
   subtitle: string;
+  connectionState: ConnectionState;
+  onRetryConnection?: () => void;
   account: { name: string; initial: string };
+  /** Capability-gated: only agents with jobs get the Cron Drops entry. */
+  showCron: boolean;
   onClose: () => void;
   onNewChat: () => void;
   onSelectChat: (id: string) => void;
@@ -93,7 +99,10 @@ export function Sidebar({
   activeId,
   title,
   subtitle,
+  connectionState,
+  onRetryConnection,
   account,
+  showCron,
   onClose,
   onNewChat,
   onSelectChat,
@@ -214,6 +223,13 @@ export function Sidebar({
             <Text style={styles.workspace} numberOfLines={1}>
               {subtitle}
             </Text>
+            <View style={styles.connectionLine}>
+              <ConnectionBadge
+                state={connectionState}
+                onRetry={onRetryConnection}
+                compact
+              />
+            </View>
           </View>
           <Pressable
             onPress={onClose}
@@ -285,15 +301,17 @@ export function Sidebar({
 
         {/* account footer */}
         <View style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}>
-          <Pressable
-            onPress={onOpenCron}
-            accessibilityRole="button"
-            accessibilityLabel="Cron Drops"
-            style={({ pressed }) => [styles.navRow, pressed && styles.pressable]}
-          >
-            <CalendarClock size={18} color={colors.muted} strokeWidth={1.6} />
-            <Text style={styles.navLabel}>Cron Drops</Text>
-          </Pressable>
+          {showCron ? (
+            <Pressable
+              onPress={onOpenCron}
+              accessibilityRole="button"
+              accessibilityLabel="Cron Drops"
+              style={({ pressed }) => [styles.navRow, pressed && styles.pressable]}
+            >
+              <CalendarClock size={18} color={colors.muted} strokeWidth={1.6} />
+              <Text style={styles.navLabel}>Cron Drops</Text>
+            </Pressable>
+          ) : null}
 
           <Pressable
             onPress={onOpenSettings}
@@ -406,6 +424,9 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: colors.muted,
     marginTop: 2,
+  },
+  connectionLine: {
+    marginTop: 4,
   },
   closeBtn: {
     width: 36,

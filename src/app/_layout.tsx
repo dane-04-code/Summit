@@ -3,6 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { AgentProvider } from '@/agents/AgentProvider';
 import { AnalyticsProvider } from '@/lib/analytics';
+import { initNotificationHandling } from '@/notifications/push';
 
 function RouteGuard() {
   const { session, loading } = useAuth();
@@ -23,6 +24,10 @@ function RouteGuard() {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    initNotificationHandling();
+  }, []);
+
   return (
     <AnalyticsProvider>
       <AuthProvider>

@@ -87,6 +87,20 @@ describe('pair()', () => {
   });
 });
 
+describe('registerPush()', () => {
+  it('sends a register_push frame with the token', async () => {
+    client = new RelayClient('ws://localhost:8787?code=111111');
+    const promise = client.registerPush('ExponentPushToken[t1]');
+    mockWs.openNow();
+    await flush();
+    await promise;
+    expect(JSON.parse(mockWs.sent[0])).toEqual({
+      t: 'register_push',
+      token: 'ExponentPushToken[t1]',
+    });
+  });
+});
+
 describe('chat()', () => {
   it('yields delta events then done', async () => {
     client = new RelayClient('ws://localhost:8787?code=111111');

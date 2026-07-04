@@ -1,15 +1,16 @@
 /**
- * Agent chat header — menu · agent name + live status · new chat.
- * Sits directly under the top safe-area inset; carries the hairline divider
- * that separates the chrome from the thread.
+ * Agent chat header - menu, agent name, live status, and new chat.
+ * Sits directly under the top safe-area inset.
  */
 
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Menu, SquarePen } from 'lucide-react-native';
 
+import type { ConnectionState } from '@/agents/adapters/types';
 import { colors, radius, space, typography } from '../../theme';
 import type { RunState } from './types';
+import { ConnectionBadge } from './ConnectionBadge';
 
 const DOT: Record<RunState, string> = {
   running: colors.accent,
@@ -21,8 +22,10 @@ interface HeaderProps {
   name: string;
   status: RunState;
   statusLabel: string;
-  /** Trailing muted hint (e.g. "searching the web…"), shown while running. */
+  connectionState: ConnectionState;
+  frameworkLabel: string;
   hint?: string | null;
+  onRetryConnection?: () => void;
   onMenu: () => void;
   onNewChat: () => void;
 }
@@ -53,7 +56,10 @@ export function Header({
   name,
   status,
   statusLabel,
+  connectionState,
+  frameworkLabel,
   hint,
+  onRetryConnection,
   onMenu,
   onNewChat,
 }: HeaderProps) {
@@ -73,11 +79,21 @@ export function Header({
           style={styles.statusRow}
           accessibilityLabel={`Status: ${statusLabel}${showHint ? `, ${hint}` : ''}`}
         >
-          <View style={[styles.dot, { backgroundColor: DOT[status] }]} />
-          <Text style={styles.statusLabel} numberOfLines={1}>
-            {statusLabel}
-            {showHint ? <Text style={styles.hint}>{` · ${hint}`}</Text> : null}
-          </Text>
+          {status === 'running' ? (
+            <>
+              <View style={[styles.dot, { backgroundColor: DOT[status] }]} />
+              <Text style={styles.statusLabel} numberOfLines={1}>
+                {statusLabel}
+                {showHint ? <Text style={styles.hint}>{` - ${hint}`}</Text> : null}
+              </Text>
+            </>
+          ) : (
+            <ConnectionBadge
+              state={connectionState}
+              prefix={frameworkLabel}
+              onRetry={onRetryConnection}
+            />
+          )}
         </View>
       </View>
 
@@ -118,7 +134,7 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontWeight: '600',
     color: colors.ink,
-    letterSpacing: -0.2,
+    letterSpacing: 0,
   },
   statusRow: {
     flexDirection: 'row',

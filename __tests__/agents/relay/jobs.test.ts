@@ -9,6 +9,7 @@ jest.mock('@/agents/relay/client', () => ({
     pair: mockPair,
     request: mockRequest,
     disconnect: jest.fn(),
+    subscribeConnectionState: jest.fn(() => () => {}),
   })),
 }));
 jest.mock('@/config', () => ({ RELAY_WS_URL: 'ws://test', SIGNUP_ENABLED: false }));

@@ -9,6 +9,14 @@ import type { CronJob, CronRun } from '@/ui/cron/types';
 
 export type AgentStatus = 'idle' | 'running' | 'error';
 
+export type ConnectionState =
+  | 'unknown'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'disconnected'
+  | 'pairing_expired';
+
 /** A normalized event from a streamed turn — same shape across frameworks. */
 export type StreamEvent =
   | { type: 'delta'; text: string }
@@ -50,6 +58,10 @@ export interface AgentAdapter {
   sendMessage(content: string, opts?: SendOptions): AsyncIterable<StreamEvent>;
 
   getStatus(): Promise<AgentStatus>;
+
+  getConnectionState(): ConnectionState;
+  subscribeConnectionState(listener: (state: ConnectionState) => void): () => void;
+  retryConnection(): Promise<void>;
 
   // Runs API — Hermes only in v1 (gate on capabilities.hasRunApproval).
   approveRun(runId: string, approved: boolean): Promise<void>;
