@@ -1,4 +1,4 @@
-import { SLASH_COMMANDS, slashQuery, matchCommands } from '@/ui/chat/slashCommands';
+import { slashQuery, matchCommands } from '@/ui/chat/slashCommands';
 import { defaultCapabilitiesFor } from '@/agents/frameworks';
 
 const hermesCaps = defaultCapabilitiesFor('hermes');   // hasJobs: true
