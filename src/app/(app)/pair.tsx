@@ -21,6 +21,7 @@ import { defaultCapabilitiesFor, frameworkLabel, parseFramework } from '@/agents
 import { resolvePushToken } from '@/notifications/push';
 import { RelayClient } from '@/agents/relay/client';
 import { RelayError, isPairingCodeError } from '@/agents/relay/errors';
+import { captureError } from '@/lib/errorReporting';
 import { RELAY_WS_URL } from '@/config';
 import { colors, space, radius, typography } from '@/theme';
 
@@ -79,8 +80,9 @@ export default function PairScreen() {
       try {
         const pushToken = await resolvePushToken();
         if (pushToken) await client.registerPush(pushToken);
-      } catch {
-        // push is an enhancement — carry on
+      } catch (e) {
+        // push is an enhancement — carry on, but let us see when it breaks
+        captureError(e, { where: 'push_register', transport: 'relay' });
       }
 
       client.disconnect();
@@ -104,11 +106,15 @@ export default function PairScreen() {
       if (e instanceof RelayError) {
         setError(e.message);
         setCodeError(isPairingCodeError(e.code));
+        // A wrong/expired code is the user's to fix — not worth reporting.
+        // A systemic failure (relay down, agent gone) is exactly what we want to see.
+        if (!isPairingCodeError(e.code)) captureError(e, { where: 'pair', transport: 'relay' });
       } else {
         setError(
           e instanceof Error ? e.message : 'Pairing failed — check the code and try again.',
         );
         setCodeError(true);
+        captureError(e, { where: 'pair', transport: 'relay' });
       }
     } finally {
       setLoading(false);

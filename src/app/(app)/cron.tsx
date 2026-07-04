@@ -14,6 +14,7 @@ import { FlashList } from '@shopify/flash-list';
 import * as Haptics from 'expo-haptics';
 
 import { useAgents } from '@/agents/AgentProvider';
+import { captureError } from '@/lib/errorReporting';
 import { ScreenHeader } from '@/ui/ScreenHeader';
 import { colors, radius, space, typography } from '@/theme';
 import { DropCard } from '@/ui/cron/DropCard';
@@ -62,6 +63,7 @@ export default function CronScreen() {
         setJobs([]);
         setSelectedId(null);
         setError(e instanceof Error ? e.message : 'Could not load cron jobs.');
+        captureError(e, { where: 'cron_load' });
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -90,8 +92,9 @@ export default function CronScreen() {
       try {
         const run = await adapterFor(activeAgent).getJobRun(jobId);
         setRuns((prev) => ({ ...prev, [jobId]: run }));
-      } catch {
+      } catch (e) {
         setRuns((prev) => ({ ...prev, [jobId]: null }));
+        captureError(e, { where: 'cron_run_load' });
       }
     },
     [activeAgent, adapterFor],
@@ -126,6 +129,7 @@ export default function CronScreen() {
         await loadJobs(true);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not update cron job.');
+        captureError(e, { where: 'cron_toggle' });
       } finally {
         setBusyId(null);
       }
@@ -143,6 +147,7 @@ export default function CronScreen() {
       await Promise.all([loadJobs(true), loadRun(selected.id)]);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not run cron job.');
+      captureError(e, { where: 'cron_run' });
     } finally {
       setBusyId(null);
     }
