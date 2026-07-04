@@ -3,8 +3,12 @@
 export type HelloFrame      = { t: 'hello'; framework: string; agentName: string; agentVersion: string };
 export type CodeFrame       = { t: 'code'; code: string };
 export type PairFrame       = { t: 'pair'; code: string };
-export type PairedFrame     = { t: 'paired'; framework: string; agentName: string; agentVersion: string };
-export type PairErrorFrame  = { t: 'pair_error'; reason: 'not_found' | 'expired' | 'already_paired' };
+// Reconnect with the durable session token issued at pair time — the code is
+// single-use and short-lived, so the token (not the code) is the credential
+// the app keeps.
+export type ResumeFrame     = { t: 'resume'; token: string };
+export type PairedFrame     = { t: 'paired'; framework: string; agentName: string; agentVersion: string; sessionToken: string };
+export type PairErrorFrame  = { t: 'pair_error'; reason: 'not_found' | 'expired' | 'already_paired' | 'locked' };
 export type PeerGoneFrame   = { t: 'peer_gone' };
 export type PingFrame       = { t: 'ping' };
 export type PongFrame       = { t: 'pong' };
@@ -26,6 +30,6 @@ export type RegisterPushFrame = { t: 'register_push'; token: string };
 export type NotifyFrame       = { t: 'notify'; title?: string; body?: string };
 
 export type AnyFrame =
-  | HelloFrame | CodeFrame | PairFrame | PairedFrame | PairErrorFrame
+  | HelloFrame | CodeFrame | PairFrame | ResumeFrame | PairedFrame | PairErrorFrame
   | PeerGoneFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | DoneFrame | ErrorFrame
   | ApiReqFrame | ApiResFrame | RegisterPushFrame | NotifyFrame;

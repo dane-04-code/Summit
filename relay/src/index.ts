@@ -45,9 +45,10 @@ export default {
       return env.PAIRING_CHANNEL.get(id).fetch(new Request(url2.toString(), request));
     }
 
-    // Connector connecting for the first time: mint a unique 6-digit code
+    // Connector connecting for the first time: mint a unique 6-digit code.
+    // Crypto-grade randomness — Math.random is predictable and must not gate access.
     for (let i = 0; i < 5; i++) {
-      const newCode = String(Math.floor(100000 + Math.random() * 900000));
+      const newCode = String((crypto.getRandomValues(new Uint32Array(1))[0] % 900000) + 100000);
       const id = env.PAIRING_CHANNEL.idFromName(newCode);
       const url2 = new URL(request.url);
       url2.searchParams.set('code', newCode);

@@ -10,7 +10,26 @@ export type ChannelState = {
   pushToken: string | null;
   /** Whether an app socket is currently attached — pushes only fire when it isn't. */
   appConnected: boolean;
+  /** When the 6-digit code stops being usable for pairing (short-lived handshake). */
+  codeExpiresAt: number | null;
+  /** Durable credential minted at pair time; the app reconnects with this, not the code. */
+  sessionToken: string | null;
+  /** The code is single-use: true once a successful pair has happened. */
+  paired: boolean;
+  /** Consecutive failed pair attempts, for lockout. */
+  failedPairs: number;
+  /** Lockout expiry after too many failed attempts. */
+  lockedUntil: number | null;
 };
+
+/** Pairing hardening knobs. */
+const CODE_TTL_MS = 10 * 60_000;
+const MAX_FAILED_PAIRS = 5;
+const LOCK_MS = 15 * 60_000;
+
+/** Injected clock + token source so the pure logic stays deterministic in tests. */
+export type AppDeps = { now?: number; mintToken?: () => string };
+const defaultMintToken = () => crypto.randomUUID();
 
 export type SideEffect =
   | { to: 'connector'; frame: AnyFrame }
@@ -26,6 +45,11 @@ export function makeInitialState(): ChannelState {
     connectorConnected: false,
     pushToken: null,
     appConnected: false,
+    codeExpiresAt: null,
+    sessionToken: null,
+    paired: false,
+    failedPairs: 0,
+    lockedUntil: null,
   };
 }
 
@@ -54,12 +78,14 @@ function pushFor(state: ChannelState, title: string | undefined, body: string | 
   };
 }
 
-export function handleConnectorMessage(state: ChannelState, frame: AnyFrame): HandleResult {
+export function handleConnectorMessage(state: ChannelState, frame: AnyFrame, now: number = Date.now()): HandleResult {
   if (frame.t === 'hello') {
     return {
       state: {
         ...state,
         connectorInfo: { framework: frame.framework, agentName: frame.agentName, agentVersion: frame.agentVersion },
+        // The code is only advertised now, so start its short life here.
+        codeExpiresAt: now + CODE_TTL_MS,
       },
       effects: [{ to: 'connector', frame: { t: 'code', code: state.code! } }],
     };
@@ -92,7 +118,10 @@ export function handleConnectorMessage(state: ChannelState, frame: AnyFrame): Ha
   return { state, effects };
 }
 
-export function handleAppMessage(state: ChannelState, frame: AnyFrame): HandleResult {
+export function handleAppMessage(state: ChannelState, frame: AnyFrame, deps: AppDeps = {}): HandleResult {
+  const now = deps.now ?? Date.now();
+  const mintToken = deps.mintToken ?? defaultMintToken;
+
   if (frame.t === 'ping') {
     return { state, effects: [{ to: 'app', frame: { t: 'pong' } }] };
   }
@@ -101,13 +130,43 @@ export function handleAppMessage(state: ChannelState, frame: AnyFrame): HandleRe
     return { state: { ...state, pushToken: frame.token }, effects: [] };
   }
 
-  if (frame.t === 'pair') {
-    if (!state.connectorInfo) {
-      const reply: PairErrorFrame = { t: 'pair_error', reason: 'not_found' };
+  if (frame.t === 'resume') {
+    // Reconnect with the durable token. No token match = treat as unknown, never
+    // reveal whether a connector is present.
+    if (state.sessionToken && frame.token === state.sessionToken && state.connectorInfo) {
+      const reply: PairedFrame = { t: 'paired', ...state.connectorInfo, sessionToken: state.sessionToken };
       return { state, effects: [{ to: 'app', frame: reply }] };
     }
-    const reply: PairedFrame = { t: 'paired', ...state.connectorInfo };
+    const reply: PairErrorFrame = { t: 'pair_error', reason: 'not_found' };
     return { state, effects: [{ to: 'app', frame: reply }] };
+  }
+
+  if (frame.t === 'pair') {
+    // Locked out after repeated failures — refuse before doing anything else.
+    if (state.lockedUntil !== null && now < state.lockedUntil) {
+      return { state, effects: [{ to: 'app', frame: { t: 'pair_error', reason: 'locked' } }] };
+    }
+    // No connector on this code: a miss. Count it, and lock the channel once the
+    // misses pile up so a single code can't be hammered.
+    if (!state.connectorInfo) {
+      const failedPairs = state.failedPairs + 1;
+      const lockedUntil = failedPairs >= MAX_FAILED_PAIRS ? now + LOCK_MS : state.lockedUntil;
+      return {
+        state: { ...state, failedPairs, lockedUntil },
+        effects: [{ to: 'app', frame: { t: 'pair_error', reason: 'not_found' } }],
+      };
+    }
+    // Single-use + short-lived: a code already spent, or past its window, is dead.
+    if (state.paired || (state.codeExpiresAt !== null && now > state.codeExpiresAt)) {
+      return { state, effects: [{ to: 'app', frame: { t: 'pair_error', reason: 'expired' } }] };
+    }
+    // Success: mint the durable session token, retire the code.
+    const sessionToken = mintToken();
+    const reply: PairedFrame = { t: 'paired', ...state.connectorInfo, sessionToken };
+    return {
+      state: { ...state, paired: true, sessionToken, failedPairs: 0 },
+      effects: [{ to: 'app', frame: reply }],
+    };
   }
   // chat — forward to connector
   return { state, effects: [{ to: 'connector', frame }] };

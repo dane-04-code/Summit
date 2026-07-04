@@ -28,8 +28,11 @@ describe('handleConnectorMessage — hello', () => {
     const { state, effects } = handleConnectorMessage(
       base,
       { t: 'hello', framework: 'hermes', agentName: 'My Agent', agentVersion: '2.1' },
+      5_000,
     );
     expect(state.connectorInfo).toEqual({ framework: 'hermes', agentName: 'My Agent', agentVersion: '2.1' });
+    // The code's short life starts when it's advertised (10-minute TTL).
+    expect(state.codeExpiresAt).toBe(5_000 + 10 * 60_000);
     expect(effects).toEqual([{ to: 'connector', frame: { t: 'code', code: '111111' } }]);
   });
 });
@@ -43,22 +46,69 @@ describe('handleConnectorMessage — passthrough', () => {
   });
 });
 
+const DEPS = { now: 1_000_000, mintToken: () => 'tok-fixed' };
+
+function pairedState() {
+  return {
+    ...makeInitialState(),
+    code: '111111',
+    codeExpiresAt: DEPS.now + 60_000,
+    connectorInfo: { framework: 'hermes', agentName: 'A', agentVersion: '1' },
+  };
+}
+
 describe('handleAppMessage — pair', () => {
-  it('sends paired when connector info is present', () => {
-    const state = {
-      ...makeInitialState(),
-      code: '111111',
-      connectorInfo: { framework: 'hermes', agentName: 'A', agentVersion: '1' },
-    };
-    const { effects } = handleAppMessage(state, { t: 'pair', code: '111111' });
+  it('sends paired with a session token when connector info is present', () => {
+    const { state, effects } = handleAppMessage(pairedState(), { t: 'pair', code: '111111' }, DEPS);
     expect(effects).toEqual([{
       to: 'app',
-      frame: { t: 'paired', framework: 'hermes', agentName: 'A', agentVersion: '1' },
+      frame: { t: 'paired', framework: 'hermes', agentName: 'A', agentVersion: '1', sessionToken: 'tok-fixed' },
     }]);
+    // Token is persisted so a later resume can be validated against it.
+    expect(state.sessionToken).toBe('tok-fixed');
+    expect(state.paired).toBe(true);
   });
 
   it('sends pair_error when connector not present', () => {
-    const { effects } = handleAppMessage(makeInitialState(), { t: 'pair', code: '999999' });
+    const { effects } = handleAppMessage(makeInitialState(), { t: 'pair', code: '999999' }, DEPS);
+    expect(effects).toEqual([{ to: 'app', frame: { t: 'pair_error', reason: 'not_found' } }]);
+  });
+});
+
+describe('handleAppMessage — pairing hardening', () => {
+  it('refuses to pair a second time on the same code (single-use)', () => {
+    const first = handleAppMessage(pairedState(), { t: 'pair', code: '111111' }, DEPS);
+    const second = handleAppMessage(first.state, { t: 'pair', code: '111111' }, DEPS);
+    expect(second.effects).toEqual([{ to: 'app', frame: { t: 'pair_error', reason: 'expired' } }]);
+  });
+
+  it('refuses to pair once the code has expired', () => {
+    const state = { ...pairedState(), codeExpiresAt: DEPS.now - 1 };
+    const { effects } = handleAppMessage(state, { t: 'pair', code: '111111' }, DEPS);
+    expect(effects).toEqual([{ to: 'app', frame: { t: 'pair_error', reason: 'expired' } }]);
+  });
+
+  it('locks out after too many failed attempts', () => {
+    let state = makeInitialState(); // no connector → every pair fails
+    for (let i = 0; i < 5; i++) {
+      state = handleAppMessage(state, { t: 'pair', code: '000000' }, DEPS).state;
+    }
+    const { effects } = handleAppMessage(state, { t: 'pair', code: '000000' }, DEPS);
+    expect(effects).toEqual([{ to: 'app', frame: { t: 'pair_error', reason: 'locked' } }]);
+  });
+
+  it('resumes an existing session with the right token', () => {
+    const paired = handleAppMessage(pairedState(), { t: 'pair', code: '111111' }, DEPS).state;
+    const { effects } = handleAppMessage(paired, { t: 'resume', token: 'tok-fixed' }, DEPS);
+    expect(effects).toEqual([{
+      to: 'app',
+      frame: { t: 'paired', framework: 'hermes', agentName: 'A', agentVersion: '1', sessionToken: 'tok-fixed' },
+    }]);
+  });
+
+  it('rejects a resume with the wrong token', () => {
+    const paired = handleAppMessage(pairedState(), { t: 'pair', code: '111111' }, DEPS).state;
+    const { effects } = handleAppMessage(paired, { t: 'resume', token: 'wrong' }, DEPS);
     expect(effects).toEqual([{ to: 'app', frame: { t: 'pair_error', reason: 'not_found' } }]);
   });
 });
