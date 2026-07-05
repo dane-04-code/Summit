@@ -21,6 +21,9 @@ export type ConnectionState =
 export type StreamEvent =
   | { type: 'delta'; text: string }
   | { type: 'tool'; label: string }
+  // A tool call gated behind an approval policy. The run pauses until resolved
+  // via approveRun/stopRun. Only Tier-1 agents with `hasRunApproval` emit this.
+  | { type: 'approval'; runId: string; title: string; command: string }
   | { type: 'done' }
   | { type: 'error'; message: string };
 

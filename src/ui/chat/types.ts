@@ -53,10 +53,13 @@ export type AgentBlock =
   // OpenClaw replies; the typed blocks above stay for app-authored content.
   | { kind: 'markdown'; source: string };
 
+/** A pending run-approval request: the run id to resolve, plus what to show. */
+export type ApprovalRequest = { runId: string; title: string; command: string };
+
 export type Message =
   | { id: string; role: 'user'; text: string }
   | { id: string; role: 'agent'; blocks: AgentBlock[] }
-  | { id: string; role: 'action'; title: string; command: string };
+  | ({ id: string; role: 'action' } & ApprovalRequest);
 
 /** A conversation summary in the sidebar recents list. */
 export type ChatSummary = {

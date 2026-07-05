@@ -25,7 +25,13 @@ describe('blocksToText', () => {
 describe('messageToText', () => {
   it('handles all three roles', () => {
     const user: Message = { id: '1', role: 'user', text: 'hi' };
-    const action: Message = { id: '2', role: 'action', title: 'Run?', command: 'rm -rf /tmp/x' };
+    const action: Message = {
+      id: '2',
+      role: 'action',
+      runId: 'run_2',
+      title: 'Run?',
+      command: 'rm -rf /tmp/x',
+    };
     const agent: Message = {
       id: '3',
       role: 'agent',

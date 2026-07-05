@@ -7,7 +7,7 @@
  */
 
 import type { StreamEvent } from '@/agents/adapters/types';
-import type { AgentBlock, MarkdownFile } from './types';
+import type { AgentBlock, ApprovalRequest, MarkdownFile } from './types';
 import { splitFrontMatter } from './types';
 
 export type LiveTurn = {
@@ -16,6 +16,8 @@ export type LiveTurn = {
   status: 'running' | 'idle' | 'error';
   error: string | null;
   done: boolean;
+  /** Set when the run hit an approval gate; surfaced as an action card. */
+  pendingApproval: ApprovalRequest | null;
 };
 
 export const initialTurn: LiveTurn = {
@@ -24,6 +26,7 @@ export const initialTurn: LiveTurn = {
   status: 'running',
   error: null,
   done: false,
+  pendingApproval: null,
 };
 
 export function reduceTurn(turn: LiveTurn, event: StreamEvent): LiveTurn {
@@ -32,6 +35,15 @@ export function reduceTurn(turn: LiveTurn, event: StreamEvent): LiveTurn {
       return { ...turn, text: turn.text + event.text };
     case 'tool':
       return { ...turn, toolLabel: event.label };
+    case 'approval':
+      return {
+        ...turn,
+        pendingApproval: {
+          runId: event.runId,
+          title: event.title,
+          command: event.command,
+        },
+      };
     case 'done':
       return { ...turn, status: 'idle', done: true };
     case 'error':

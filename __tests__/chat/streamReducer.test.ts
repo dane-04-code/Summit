@@ -24,6 +24,27 @@ describe('reduceTurn', () => {
     const t = reduceTurn(initialTurn, { type: 'error', message: 'dropped' });
     expect(t).toMatchObject({ status: 'error', error: 'dropped', done: true });
   });
+
+  it('starts with no pending approval', () => {
+    expect(initialTurn.pendingApproval).toBeNull();
+  });
+
+  it('captures a pending approval and keeps the turn open', () => {
+    const t = reduceTurn(initialTurn, {
+      type: 'approval',
+      runId: 'run_42',
+      title: 'Run a shell command?',
+      command: './deploy.sh',
+    });
+    expect(t.pendingApproval).toEqual({
+      runId: 'run_42',
+      title: 'Run a shell command?',
+      command: './deploy.sh',
+    });
+    // An approval gate is not the end of the turn — the run resumes after the
+    // user decides, so `done` must stay false.
+    expect(t.done).toBe(false);
+  });
 });
 
 describe('turnToBlocks', () => {

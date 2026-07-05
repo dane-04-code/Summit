@@ -171,6 +171,7 @@ export const SEED_THREAD: Message[] = [
   {
     id: 'seed-action',
     role: 'action',
+    runId: 'seed-run',
     title: 'Run a shell command on the production host?',
     command: './deploy.sh api --prod',
   },
