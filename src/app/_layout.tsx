@@ -21,7 +21,7 @@ function RouteGuard() {
     if (loading) return;
     const inAuthGroup = segments[0] === '(auth)';
     if (!session && !inAuthGroup) {
-      router.replace('/(auth)/sign-in');
+      router.replace('/(auth)/welcome' as '/'); // typed route added on next expo start
     } else if (session && inAuthGroup) {
       router.replace('/(app)');
     }
