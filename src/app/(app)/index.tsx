@@ -39,7 +39,9 @@ import { CopiedToast } from '@/ui/chat/CopiedToast';
 import { useAuth } from '@/context/AuthContext';
 import { messageToText } from '@/ui/chat/types';
 import { renameSession } from '@/ui/chat/sessionActions';
-import type { Message, AgentBlock, RunState, MarkdownFile, ChatGroup } from '@/ui/chat/types';
+import { buildApprovalMessage, resolveApproval } from '@/ui/chat/approval';
+import type { ApprovalDecision } from '@/ui/chat/approval';
+import type { Message, RunState, MarkdownFile, ChatGroup } from '@/ui/chat/types';
 import { useAgents } from '@/agents/AgentProvider';
 import { captureError } from '@/lib/errorReporting';
 import { defaultCapabilitiesFor, frameworkLabel } from '@/agents/frameworks';
@@ -60,12 +62,6 @@ const COMPOSER_VERTICAL_CHROME = 20;
 
 function genId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-/** Build an agent message whose single text block holds `text`. */
-function agentText(id: string, text: string): Message {
-  const blocks: AgentBlock[] = [{ kind: 'text', spans: [{ text }] }];
-  return { id, role: 'agent', blocks };
 }
 
 function previewText(message: Message | null): string {
@@ -412,23 +408,42 @@ export default function AgentScreen() {
     router.push('/(app)/cron');
   }, []);
 
-  const handleApprove = useCallback((id: string) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === id
-          ? agentText(`${id}-result`, 'Approved — running the command now.')
-          : m,
-      ),
-    );
-  }, []);
+  // Resolve an approval card through the adapter's Runs API, then swap the
+  // card for the outcome copy. On failure the card stays so the user can retry.
+  const resolveDecision = useCallback(
+    async (id: string, decision: ApprovalDecision) => {
+      const card = messages.find((m) => m.id === id);
+      if (!card || card.role !== 'action' || !activeAgent) return;
+      const outcome = await resolveApproval(adapterFor(activeAgent), card, decision);
+      if (!outcome.ok) {
+        captureError(outcome.error, { where: 'run_approval', framework: activeAgent.framework });
+      }
+      if (cancelledRef.current) return;
+      setMessages((prev) =>
+        outcome.ok
+          ? prev.map((m) => (m.id === id ? outcome.message : m))
+          : // Keep the card for retry; append (or re-append) the failure note.
+            [...prev.filter((m) => m.id !== outcome.message.id), outcome.message],
+      );
+    },
+    [messages, activeAgent, adapterFor],
+  );
 
-  const handleStop = useCallback((id: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    setMessages((prev) =>
-      prev.map((m) => (m.id === id ? agentText(`${id}-result`, 'Stopped. Nothing was run.') : m)),
-    );
-  }, []);
+  const handleApprove = useCallback(
+    (id: string) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      void resolveDecision(id, 'approve');
+    },
+    [resolveDecision],
+  );
+
+  const handleStop = useCallback(
+    (id: string) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      void resolveDecision(id, 'stop');
+    },
+    [resolveDecision],
+  );
 
   const ensureSession = useCallback(async (): Promise<ChatSession> => {
     if (sessionRef.current) return sessionRef.current;
@@ -551,6 +566,12 @@ export default function AgentScreen() {
     const settled: Message = { id: agentId, role: 'agent', blocks: settleBlocks(turn.text) };
     // Snap from streaming markdown to the settled form (file card for pasted .md content, etc.)
     setMessages((prev) => prev.map((m) => (m.id === agentId ? settled : m)));
+    // An approval gate holds the run open without `done` — surface the card so
+    // the user can act. Pending state is ephemeral: never persisted to the repo.
+    const pending = turn.pendingApproval;
+    if (pending) {
+      setMessages((prev) => [...prev, buildApprovalMessage(genId(), pending)]);
+    }
     await repo.appendMessage({ id: agentId, sessionId: session.id, message: settled, createdAt: Date.now() });
     const title = session.title ?? text.slice(0, 40);
     const updated: ChatSession = { ...session, title, updatedAt: Date.now() };

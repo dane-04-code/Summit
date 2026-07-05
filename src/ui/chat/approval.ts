@@ -26,6 +26,51 @@ export function submitApproval(
   return adapter.approveRun(msg.runId, approved);
 }
 
+/** The user's decision on an approval card. */
+export type ApprovalDecision = 'approve' | 'stop';
+
+/** What replaces the card in the thread once the decision is resolved. */
+export type ApprovalOutcome =
+  | { ok: true; message: Message }
+  | { ok: false; message: Message; error: unknown };
+
+function resultMessage(cardId: string, text: string, muted = false): Message {
+  return {
+    id: `${cardId}-result`,
+    role: 'agent',
+    blocks: [{ kind: 'text', spans: [{ text }], ...(muted ? { tone: 'muted' as const } : {}) }],
+  };
+}
+
+/**
+ * Resolve a card's decision through the adapter and return the thread message
+ * that replaces the card. On adapter failure the card's run is untouched, so
+ * the copy says the run is still waiting.
+ */
+export async function resolveApproval(
+  adapter: Pick<AgentAdapter, 'approveRun' | 'stopRun'>,
+  msg: ActionMessage,
+  decision: ApprovalDecision,
+): Promise<ApprovalOutcome> {
+  try {
+    if (decision === 'approve') await submitApproval(adapter, msg, true);
+    else await submitStop(adapter, msg);
+  } catch (error) {
+    return {
+      ok: false,
+      error,
+      message: resultMessage(msg.id, 'Couldn’t reach the agent — the run is still waiting.', true),
+    };
+  }
+  return {
+    ok: true,
+    message: resultMessage(
+      msg.id,
+      decision === 'approve' ? 'Approved — running the command now.' : 'Stopped. Nothing was run.',
+    ),
+  };
+}
+
 /** Stop the card's run through the adapter. */
 export function submitStop(
   adapter: Pick<AgentAdapter, 'stopRun'>,
