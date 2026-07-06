@@ -1,6 +1,10 @@
 package main
 
-import "encoding/json"
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+)
 
 // ocEvent is the minimal shape of an OpenClaw Gateway event frame we care about
 // for Phase 1 chat. See docs/openclaw-adapter-research.md §3.
@@ -57,4 +61,61 @@ func translateEvent(raw []byte, runID string) (Frame, bool) {
 		}
 	}
 	return Frame{}, false
+}
+
+// newID returns a random hex request id for gateway req frames.
+func newID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func buildConnect(token string) ([]byte, string) {
+	id := newID()
+	req := map[string]any{
+		"type":   "req",
+		"id":     id,
+		"method": "connect",
+		"params": map[string]any{
+			"minProtocol": 3,
+			"maxProtocol": 3,
+			"client": map[string]any{
+				"id": "gateway-client", "version": "1.0.0", "platform": "connector", "mode": "backend",
+			},
+			"role":        "operator",
+			"scopes":      []string{"operator.read", "operator.write", "operator.approvals"},
+			"caps":        []string{},
+			"commands":    []string{},
+			"permissions": map[string]any{},
+			"auth":        map[string]any{"token": token},
+			"locale":      "en-US",
+			"userAgent":   "summit-connector/1.0.0",
+		},
+	}
+	raw, _ := json.Marshal(req)
+	return raw, id
+}
+
+func buildSubscribe(sessionKey string) []byte {
+	raw, _ := json.Marshal(map[string]any{
+		"type":   "req",
+		"id":     newID(),
+		"method": "sessions.messages.subscribe",
+		"params": map[string]any{"key": sessionKey},
+	})
+	return raw
+}
+
+func buildChatSend(message, sessionKey, idempotencyKey string) []byte {
+	raw, _ := json.Marshal(map[string]any{
+		"type":   "req",
+		"id":     newID(),
+		"method": "chat.send",
+		"params": map[string]any{
+			"message":        message,
+			"idempotencyKey": idempotencyKey,
+			"sessionKey":     sessionKey,
+		},
+	})
+	return raw
 }
