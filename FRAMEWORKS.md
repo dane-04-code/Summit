@@ -246,9 +246,15 @@ x-openclaw-model: <model>          # override the agent's backend model
 
 #### REST Endpoints (HTTP layer on top of WS)
 
+> ⚠️ **Both HTTP endpoints are disabled by default** — verified live against Gateway
+> 2026.6.11 (July 2026): `/v1/chat/completions` returns 404 and `/v1/models` serves the
+> Control-UI HTML on a stock install. Enable via
+> `gateway: { http: { endpoints: { chatCompletions: { enabled: true }, responses: { enabled: true } } } }`.
+> The WS control plane (what our connector uses) needs no such config.
+
 **`POST /v1/chat/completions`** — OpenAI-compatible, same port as Gateway. Target agent via `model: "openclaw"`, `model: "openclaw/<agentId>"`, or `x-openclaw-agent-id` header.
 
-**`POST /v1/responses`** (OpenResponses API) — **Disabled by default.** Enable via `gateway.http.endpoints.responses.enabled: true`. Supports SSE streaming. Stateless per request by default; stable session derived from `user` field if provided.
+**`POST /v1/responses`** (OpenResponses API) — Supports SSE streaming. Stateless per request by default; stable session derived from `user` field if provided.
 
 SSE event types: `response.created`, `response.in_progress`, `response.output_item.added`, `response.content_part.added`, `response.output_text.delta`, `response.output_text.done`, `response.output_item.done`, `response.completed`, `response.failed`
 

@@ -175,10 +175,17 @@ separate sessions. Not needed for the WS-only plan, noted for completeness.
 
 ## Open items before / during build
 
-1. **Reconcile the HTTP-endpoint conflict** (§6) with `FRAMEWORKS.md`. Doesn't
-   block the WS build, but our own docs are currently wrong somewhere.
-2. **Confirm the Gateway WS port** — notes/`FRAMEWORKS.md` say `18789`; the trace
-   didn't restate it. Verify against a live install before wiring the dial.
+1. ~~**Reconcile the HTTP-endpoint conflict** (§6) with `FRAMEWORKS.md`.~~
+   ✅ Resolved 2026-07-07 against a live Gateway 2026.6.11: both endpoints ARE
+   disabled by default (`/v1/chat/completions` → 404, `/v1/models` → Control-UI
+   HTML). `FRAMEWORKS.md` corrected.
+2. ~~**Confirm the Gateway WS port**~~ ✅ Confirmed live: default is `18789`.
+   **New finding (2026-07-07): Gateway 2026.6.11 requires protocol 4** — the
+   trace above was protocol 3 (server 2026.5.6). The connector now offers
+   `minProtocol: 3, maxProtocol: 4`. Protocol-4 deltas: terminal `chat` event
+   state is `"final"` (not `"done"`; a streaming `"delta"` state also exists),
+   and broadcast events (`health`, `tick`) interleave with req/res — match
+   responses by request id, never assume the next frame is your ack.
 3. **Shared-token provisioning** — where the connector reads the OpenClaw gateway
    token from (analogous to Hermes reading `~/.hermes/.env`). Needs an install-flow
    decision.
