@@ -137,3 +137,39 @@ func TestDialOpenClaw_handshake(t *testing.T) {
 		t.Errorf("expected subscribed client")
 	}
 }
+
+func TestOcClient_chatRoundTrip(t *testing.T) {
+	srv := ocTestServer(t, func(conn *websocket.Conn) {
+		// read chat.send
+		_, raw, _ := conn.ReadMessage()
+		var send map[string]any
+		json.Unmarshal(raw, &send)
+		params := send["params"].(map[string]any)
+		runID := params["idempotencyKey"].(string)
+		// echo user, then assistant, then chat done
+		conn.WriteJSON(map[string]any{"type": "event", "event": "session.message",
+			"payload": map[string]any{"message": map[string]any{"role": "user",
+				"content": []map[string]any{{"type": "text", "text": "hi"}}}}})
+		conn.WriteJSON(map[string]any{"type": "event", "event": "session.message",
+			"payload": map[string]any{"message": map[string]any{"role": "assistant",
+				"content": []map[string]any{{"type": "text", "text": "PONG"}}, "stopReason": "end_turn"}}})
+		conn.WriteJSON(map[string]any{"type": "event", "event": "chat",
+			"payload": map[string]any{"runId": runID, "state": "done"}})
+	})
+	defer srv.Close()
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+
+	c, err := dialOpenClaw(wsURL, "tok", "main")
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.close()
+
+	var got []Frame
+	for f := range c.chat("hi", "req-1") {
+		got = append(got, f)
+	}
+	if len(got) != 2 || got[0].T != "chunk" || got[0].Delta != "PONG" || got[1].T != "done" {
+		t.Fatalf("unexpected frames: %+v", got)
+	}
+}

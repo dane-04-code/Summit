@@ -197,6 +197,39 @@ func dialOpenClaw(wsURL, token, sessionKey string) (*ocClient, error) {
 	return c, nil
 }
 
+// chat sends one message and streams the reply as relay frames. runID doubles
+// as the idempotencyKey and correlates the terminal chat event. One turn at a
+// time (turnMu); Phase 1 assumes sequential turns per session.
+func (c *ocClient) chat(message, runID string) <-chan Frame {
+	out := make(chan Frame, 16)
+	go func() {
+		defer close(out)
+		c.turnMu.Lock()
+		defer c.turnMu.Unlock()
+
+		if err := c.write(buildChatSend(message, c.sessionKey, runID)); err != nil {
+			out <- Frame{T: "error", Message: fmt.Sprintf("chat.send: %v", err)}
+			return
+		}
+		for {
+			_, raw, err := c.conn.ReadMessage()
+			if err != nil {
+				out <- Frame{T: "error", Message: fmt.Sprintf("gateway read: %v", err)}
+				return
+			}
+			f, ok := translateEvent(raw, runID)
+			if !ok {
+				continue
+			}
+			out <- f
+			if f.T == "done" || f.T == "error" {
+				return
+			}
+		}
+	}()
+	return out
+}
+
 func hasScope(scopes []string, want string) bool {
 	for _, s := range scopes {
 		if s == want {
