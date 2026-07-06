@@ -10,6 +10,12 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// ocTickIntervalSeconds is the Gateway's policy.tickIntervalMs (30s) expressed
+// in seconds. Silence beyond 2x this means the connection is dead
+// (docs/openclaw-adapter-research.md §5). Phase 1 leans on the connector's outer
+// reconnect loop rather than an in-client watchdog.
+const ocTickIntervalSeconds = 30
+
 // ocEvent is the minimal shape of an OpenClaw Gateway event frame we care about
 // for Phase 1 chat. See docs/openclaw-adapter-research.md §3.
 type ocEvent struct {

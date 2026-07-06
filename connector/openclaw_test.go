@@ -187,3 +187,9 @@ func TestLatestUserMessage(t *testing.T) {
 		t.Errorf("empty slice should give empty string, got %q", got)
 	}
 }
+
+func TestOpenClawTickInterval(t *testing.T) {
+	if ocTickIntervalSeconds != 30 {
+		t.Errorf("tick interval should be 30s per trace, got %d", ocTickIntervalSeconds)
+	}
+}
