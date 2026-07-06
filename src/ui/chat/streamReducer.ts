@@ -91,13 +91,57 @@ function buildFileBlock(name: string, source: string): AgentBlock {
   return { kind: 'file', file };
 }
 
+// A ```markdown / ```md fence is an explicit "here's a file" signal from the
+// agent, so no length threshold applies — only a small floor so inline
+// markdown *examples* aren't hidden behind a card.
+const MD_FENCE_RE = /^```(?:markdown|md)[ \t]*\r?\n([\s\S]*?)\r?\n```[ \t]*\r?$/gim;
+const FENCE_MIN_LINES = 6;
+/** A bare `name.md` filename mentioned in prose (no spaces). */
+const MD_NAME_RE = /[\w][\w.-]*\.md\b/gi;
+
+function fenceFileName(preceding: string, content: string): string {
+  const mentioned = preceding.match(MD_NAME_RE);
+  if (mentioned?.length) return mentioned[mentioned.length - 1];
+  const h1 = content.match(H1_RE)?.[2]?.trim();
+  if (h1) return /\.\w{1,6}$/.test(h1) ? h1 : `${h1}.md`;
+  return 'document.md';
+}
+
+/**
+ * Extract ```markdown / ```md fenced documents into file blocks, keeping the
+ * surrounding text as markdown blocks. Returns null when no fence qualifies,
+ * so `settleBlocks` falls through to the raw-paste heuristic.
+ */
+function extractFencedFiles(text: string): AgentBlock[] | null {
+  const blocks: AgentBlock[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(MD_FENCE_RE)) {
+    const content = match[1];
+    if (content.split('\n').length < FENCE_MIN_LINES) continue;
+    const start = match.index ?? 0;
+    const before = text.slice(cursor, start);
+    if (before.trim()) blocks.push({ kind: 'markdown', source: before.trim() });
+    blocks.push(buildFileBlock(fenceFileName(before, content), content));
+    cursor = start + match[0].length;
+  }
+  if (cursor === 0) return null;
+  const rest = text.slice(cursor);
+  if (rest.trim()) blocks.push({ kind: 'markdown', source: rest.trim() });
+  return blocks;
+}
+
 /**
  * Called once streaming completes. Detects when the response IS a markdown
  * document (pasted file content) and returns a file card block rather than raw
- * text. Signals: YAML front matter present, OR H1 heading that looks like a
- * filename (has an extension or is all-caps), AND total length > threshold.
+ * text. Fenced ```markdown blocks are an explicit signal and are extracted
+ * first, with no length threshold. Otherwise the raw-paste signals apply:
+ * YAML front matter present, OR H1 heading that looks like a filename (has an
+ * extension or is all-caps), AND total length > threshold.
  */
 export function settleBlocks(text: string): AgentBlock[] {
+  const fenced = extractFencedFiles(text);
+  if (fenced) return fenced;
+
   if (text.length < DOCUMENT_MIN_CHARS) {
     return [{ kind: 'markdown', source: text }];
   }

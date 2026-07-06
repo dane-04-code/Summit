@@ -32,3 +32,70 @@ describe('settleBlocks — raw-paste heuristic (existing behaviour)', () => {
     expect(settleBlocks(text)).toEqual([{ kind: 'markdown', source: text }]);
   });
 });
+
+/** ≥6 content lines, the floor for a fenced doc to collapse. */
+const FENCED_DOC = [
+  '# Trip Plan',
+  '',
+  '## Day 1',
+  '- Arrive',
+  '## Day 2',
+  '- Explore',
+].join('\n');
+
+const fence = (lang: string, content: string) => `\`\`\`${lang}\n${content}\n\`\`\``;
+
+describe('settleBlocks — fenced markdown documents', () => {
+  it('extracts a ```markdown fence into a file block, keeping surrounding prose', () => {
+    const text = `Here you go:\n\n${fence('markdown', FENCED_DOC)}\n\nAnything else?`;
+    const blocks = settleBlocks(text);
+    expect(blocks.map((b) => b.kind)).toEqual(['markdown', 'file', 'markdown']);
+    if (blocks[1].kind !== 'file') throw new Error('expected file block');
+    expect(blocks[1].file.source).toBe(FENCED_DOC);
+    expect(blocks[1].file.lineCount).toBe(6);
+  });
+
+  it('accepts the ```md alias regardless of case', () => {
+    const blocks = settleBlocks(fence('MD', FENCED_DOC));
+    expect(blocks.map((b) => b.kind)).toEqual(['file']);
+  });
+
+  it('names the file from a mention in the preceding prose', () => {
+    const text = `I saved this as \`trip-plan.md\`:\n\n${fence('markdown', FENCED_DOC)}`;
+    const blocks = settleBlocks(text);
+    if (blocks[1]?.kind !== 'file') throw new Error('expected file block');
+    expect(blocks[1].file.name).toBe('trip-plan.md');
+  });
+
+  it('falls back to the document H1, then to document.md', () => {
+    const withH1 = settleBlocks(fence('markdown', FENCED_DOC));
+    if (withH1[0].kind !== 'file') throw new Error('expected file block');
+    expect(withH1[0].file.name).toBe('Trip Plan.md');
+
+    const noH1 = fence('markdown', 'alpha\nbeta\ngamma\ndelta\nepsilon\nzeta');
+    const blocks = settleBlocks(noH1);
+    if (blocks[0].kind !== 'file') throw new Error('expected file block');
+    expect(blocks[0].file.name).toBe('document.md');
+  });
+
+  it('leaves a fence under the 6-line floor as ordinary markdown', () => {
+    const text = `Example:\n\n${fence('markdown', '# Tiny\n- one\n- two')}`;
+    expect(settleBlocks(text)).toEqual([{ kind: 'markdown', source: text }]);
+  });
+
+  it('leaves non-markdown fences untouched', () => {
+    const text = fence('python', 'a\nb\nc\nd\ne\nf\ng');
+    expect(settleBlocks(text)).toEqual([{ kind: 'markdown', source: text }]);
+  });
+
+  it('extracts multiple fenced documents in order', () => {
+    const other = FENCED_DOC.replace('# Trip Plan', '# Packing List');
+    const text = `First:\n${fence('markdown', FENCED_DOC)}\nSecond:\n${fence('md', other)}`;
+    const blocks = settleBlocks(text);
+    expect(blocks.map((b) => b.kind)).toEqual([
+      'markdown', 'file', 'markdown', 'file',
+    ]);
+    const names = blocks.flatMap((b) => (b.kind === 'file' ? [b.file.name] : []));
+    expect(names).toEqual(['Trip Plan.md', 'Packing List.md']);
+  });
+});
