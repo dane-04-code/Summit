@@ -4,6 +4,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"sync"
+
+	"github.com/gorilla/websocket"
 )
 
 // ocEvent is the minimal shape of an OpenClaw Gateway event frame we care about
@@ -118,4 +122,86 @@ func buildChatSend(message, sessionKey, idempotencyKey string) []byte {
 		},
 	})
 	return raw
+}
+
+type ocClient struct {
+	conn       *websocket.Conn
+	writeMu    sync.Mutex
+	turnMu     sync.Mutex
+	sessionKey string
+	subscribed bool
+}
+
+func (c *ocClient) write(raw []byte) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	return c.conn.WriteMessage(websocket.TextMessage, raw)
+}
+
+func (c *ocClient) close() error { return c.conn.Close() }
+
+// dialOpenClaw performs the trusted-backend handshake and subscribes. See
+// docs/openclaw-adapter-research.md §2–3.
+func dialOpenClaw(wsURL, token, sessionKey string) (*ocClient, error) {
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("dial gateway: %w", err)
+	}
+	c := &ocClient{conn: conn, sessionKey: sessionKey}
+
+	// 1. Expect connect.challenge (we don't need the nonce on the backend path).
+	if _, _, err := conn.ReadMessage(); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("read challenge: %w", err)
+	}
+	// 2. Send connect, expect hello-ok with operator.write scope.
+	connectRaw, id := buildConnect(token)
+	if err := c.write(connectRaw); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	_, helloRaw, err := conn.ReadMessage()
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("read hello-ok: %w", err)
+	}
+	var hello struct {
+		ID      string `json:"id"`
+		OK      bool   `json:"ok"`
+		Payload struct {
+			Type string `json:"type"`
+			Auth struct {
+				Scopes []string `json:"scopes"`
+			} `json:"auth"`
+		} `json:"payload"`
+	}
+	json.Unmarshal(helloRaw, &hello)
+	if !hello.OK || hello.ID != id || hello.Payload.Type != "hello-ok" {
+		conn.Close()
+		return nil, fmt.Errorf("handshake rejected: %s", string(helloRaw))
+	}
+	if !hasScope(hello.Payload.Auth.Scopes, "operator.write") {
+		conn.Close()
+		return nil, fmt.Errorf("gateway granted no operator.write scope: %v", hello.Payload.Auth.Scopes)
+	}
+	// 3. Subscribe.
+	if err := c.write(buildSubscribe(sessionKey)); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	if _, _, err := conn.ReadMessage(); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("read subscribe ack: %w", err)
+	}
+	c.subscribed = true
+	return c, nil
+}
+
+func hasScope(scopes []string, want string) bool {
+	for _, s := range scopes {
+		if s == want {
+			return true
+		}
+	}
+	return false
 }

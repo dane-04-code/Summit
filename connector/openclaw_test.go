@@ -2,8 +2,48 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/gorilla/websocket"
 )
+
+// ocTestServer upgrades to WS and plays the Gateway side of the handshake.
+// handle is called with the upgraded conn after hello-ok+subscribe so a test
+// can drive turn events.
+func ocTestServer(t *testing.T, handle func(*websocket.Conn)) *httptest.Server {
+	up := websocket.Upgrader{}
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := up.Upgrade(w, r, nil)
+		if err != nil {
+			t.Errorf("upgrade: %v", err)
+			return
+		}
+		defer conn.Close()
+		// 1. challenge
+		conn.WriteJSON(map[string]any{"type": "event", "event": "connect.challenge",
+			"payload": map[string]any{"nonce": "n1", "ts": 1}})
+		// 2. read connect, reply hello-ok
+		_, raw, _ := conn.ReadMessage()
+		var req map[string]any
+		json.Unmarshal(raw, &req)
+		conn.WriteJSON(map[string]any{"type": "res", "id": req["id"], "ok": true,
+			"payload": map[string]any{"type": "hello-ok", "protocol": 3,
+				"auth":   map[string]any{"role": "operator", "scopes": []string{"operator.read", "operator.write", "operator.approvals"}},
+				"policy": map[string]any{"tickIntervalMs": 30000}}})
+		// 3. read subscribe, ack
+		_, subRaw, _ := conn.ReadMessage()
+		var sub map[string]any
+		json.Unmarshal(subRaw, &sub)
+		conn.WriteJSON(map[string]any{"type": "res", "id": sub["id"], "ok": true,
+			"payload": map[string]any{"subscribed": true, "key": "agent:main:main"}})
+		if handle != nil {
+			handle(conn)
+		}
+	}))
+}
 
 func TestTranslateEvent(t *testing.T) {
 	const runID = "req-1"
@@ -80,5 +120,20 @@ func TestBuildFrames(t *testing.T) {
 	if send["method"] != "chat.send" || sendParams["message"] != "hello" ||
 		sendParams["idempotencyKey"] != "idem-1" || sendParams["sessionKey"] != "main" {
 		t.Errorf("chat.send wrong: %v", send)
+	}
+}
+
+func TestDialOpenClaw_handshake(t *testing.T) {
+	srv := ocTestServer(t, nil)
+	defer srv.Close()
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+
+	c, err := dialOpenClaw(wsURL, "tok", "main")
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer c.close()
+	if !c.subscribed {
+		t.Errorf("expected subscribed client")
 	}
 }
