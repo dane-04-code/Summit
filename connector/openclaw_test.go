@@ -1,0 +1,37 @@
+package main
+
+import "testing"
+
+func TestTranslateEvent(t *testing.T) {
+	const runID = "req-1"
+
+	assistant := `{"type":"event","event":"session.message","payload":{
+		"sessionKey":"agent:main:main",
+		"message":{"role":"assistant","content":[{"type":"text","text":"PONG"}],"stopReason":"end_turn"},
+		"messageId":"m2","messageSeq":2}}`
+	userEcho := `{"type":"event","event":"session.message","payload":{
+		"message":{"role":"user","content":[{"type":"text","text":"hi"}]}}}`
+	agentLifecycle := `{"type":"event","event":"agent","payload":{"runId":"req-1","stream":"lifecycle","data":{"phase":"start"}}}`
+	chatDone := `{"type":"event","event":"chat","payload":{"runId":"req-1","state":"done","errorMessage":null}}`
+	chatErr := `{"type":"event","event":"chat","payload":{"runId":"req-1","state":"error","errorMessage":"boom"}}`
+	otherRun := `{"type":"event","event":"chat","payload":{"runId":"other","state":"done"}}`
+
+	if f, ok := translateEvent([]byte(assistant), runID); !ok || f.T != "chunk" || f.Delta != "PONG" {
+		t.Errorf("assistant: got %+v ok=%v", f, ok)
+	}
+	if _, ok := translateEvent([]byte(userEcho), runID); ok {
+		t.Errorf("user echo should be skipped")
+	}
+	if _, ok := translateEvent([]byte(agentLifecycle), runID); ok {
+		t.Errorf("agent lifecycle should be skipped in phase 1")
+	}
+	if f, ok := translateEvent([]byte(chatDone), runID); !ok || f.T != "done" {
+		t.Errorf("chat done: got %+v ok=%v", f, ok)
+	}
+	if f, ok := translateEvent([]byte(chatErr), runID); !ok || f.T != "error" || f.Message != "boom" {
+		t.Errorf("chat error: got %+v ok=%v", f, ok)
+	}
+	if _, ok := translateEvent([]byte(otherRun), runID); ok {
+		t.Errorf("chat for other runId should be skipped")
+	}
+}
