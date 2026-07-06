@@ -64,7 +64,10 @@ func translateEvent(raw []byte, runID string) (Frame, bool) {
 			return Frame{}, false
 		}
 		switch ev.Payload.State {
-		case "done":
+		// Protocol 3 says "done"; protocol 4 (Gateway 2026.6.11, live-verified)
+		// says "final". Intermediate "delta" states are skipped — the assistant
+		// session.message already carries the full reply.
+		case "done", "final":
 			return Frame{T: "done"}, true
 		case "error":
 			return Frame{T: "error", Message: ev.Payload.ErrMsg}, true
@@ -87,8 +90,10 @@ func buildConnect(token string) ([]byte, string) {
 		"id":     id,
 		"method": "connect",
 		"params": map[string]any{
+			// The July 2026 trace was protocol 3 (Gateway 2026.5.6); Gateway
+			// 2026.6.11 requires 4. Offer the range and let the server pick.
 			"minProtocol": 3,
-			"maxProtocol": 3,
+			"maxProtocol": 4,
 			"client": map[string]any{
 				"id": "gateway-client", "version": "1.0.0", "platform": "connector", "mode": "backend",
 			},
@@ -106,14 +111,15 @@ func buildConnect(token string) ([]byte, string) {
 	return raw, id
 }
 
-func buildSubscribe(sessionKey string) []byte {
+func buildSubscribe(sessionKey string) ([]byte, string) {
+	id := newID()
 	raw, _ := json.Marshal(map[string]any{
 		"type":   "req",
-		"id":     newID(),
+		"id":     id,
 		"method": "sessions.messages.subscribe",
 		"params": map[string]any{"key": sessionKey},
 	})
-	return raw
+	return raw, id
 }
 
 func buildChatSend(message, sessionKey, idempotencyKey string) []byte {
@@ -166,14 +172,13 @@ func dialOpenClaw(wsURL, token, sessionKey string) (*ocClient, error) {
 		conn.Close()
 		return nil, err
 	}
-	_, helloRaw, err := conn.ReadMessage()
+	helloRaw, err := readRes(conn, id)
 	if err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("read hello-ok: %w", err)
 	}
 	var hello struct {
-		ID      string `json:"id"`
-		OK      bool   `json:"ok"`
+		OK      bool `json:"ok"`
 		Payload struct {
 			Type string `json:"type"`
 			Auth struct {
@@ -182,7 +187,7 @@ func dialOpenClaw(wsURL, token, sessionKey string) (*ocClient, error) {
 		} `json:"payload"`
 	}
 	json.Unmarshal(helloRaw, &hello)
-	if !hello.OK || hello.ID != id || hello.Payload.Type != "hello-ok" {
+	if !hello.OK || hello.Payload.Type != "hello-ok" {
 		conn.Close()
 		return nil, fmt.Errorf("handshake rejected: %s", string(helloRaw))
 	}
@@ -191,16 +196,46 @@ func dialOpenClaw(wsURL, token, sessionKey string) (*ocClient, error) {
 		return nil, fmt.Errorf("gateway granted no operator.write scope: %v", hello.Payload.Auth.Scopes)
 	}
 	// 3. Subscribe.
-	if err := c.write(buildSubscribe(sessionKey)); err != nil {
+	subRaw, subID := buildSubscribe(sessionKey)
+	if err := c.write(subRaw); err != nil {
 		conn.Close()
 		return nil, err
 	}
-	if _, _, err := conn.ReadMessage(); err != nil {
+	ackRaw, err := readRes(conn, subID)
+	if err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("read subscribe ack: %w", err)
 	}
+	var ack struct {
+		OK bool `json:"ok"`
+	}
+	json.Unmarshal(ackRaw, &ack)
+	if !ack.OK {
+		conn.Close()
+		return nil, fmt.Errorf("subscribe rejected: %s", string(ackRaw))
+	}
 	c.subscribed = true
 	return c, nil
+}
+
+// readRes reads frames until the response with the given request id arrives,
+// skipping interleaved broadcast events (health, tick, …) — live Gateways send
+// those between our request and its response.
+func readRes(conn *websocket.Conn, id string) ([]byte, error) {
+	for {
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			return nil, err
+		}
+		var env struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		}
+		json.Unmarshal(raw, &env)
+		if env.Type == "res" && env.ID == id {
+			return raw, nil
+		}
+	}
 }
 
 // chat sends one message and streams the reply as relay frames. runID doubles

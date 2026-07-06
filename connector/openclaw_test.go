@@ -25,18 +25,21 @@ func ocTestServer(t *testing.T, handle func(*websocket.Conn)) *httptest.Server {
 		// 1. challenge
 		conn.WriteJSON(map[string]any{"type": "event", "event": "connect.challenge",
 			"payload": map[string]any{"nonce": "n1", "ts": 1}})
-		// 2. read connect, reply hello-ok
+		// 2. read connect, reply hello-ok — with a stray broadcast event first,
+		// as observed live (protocol 4 interleaves events with responses).
 		_, raw, _ := conn.ReadMessage()
 		var req map[string]any
 		json.Unmarshal(raw, &req)
+		conn.WriteJSON(map[string]any{"type": "event", "event": "health", "payload": map[string]any{"ok": true}})
 		conn.WriteJSON(map[string]any{"type": "res", "id": req["id"], "ok": true,
-			"payload": map[string]any{"type": "hello-ok", "protocol": 3,
+			"payload": map[string]any{"type": "hello-ok", "protocol": 4,
 				"auth":   map[string]any{"role": "operator", "scopes": []string{"operator.read", "operator.write", "operator.approvals"}},
 				"policy": map[string]any{"tickIntervalMs": 30000}}})
-		// 3. read subscribe, ack
+		// 3. read subscribe, ack — again preceded by an unrelated event.
 		_, subRaw, _ := conn.ReadMessage()
 		var sub map[string]any
 		json.Unmarshal(subRaw, &sub)
+		conn.WriteJSON(map[string]any{"type": "event", "event": "tick", "payload": map[string]any{"ts": 1}})
 		conn.WriteJSON(map[string]any{"type": "res", "id": sub["id"], "ok": true,
 			"payload": map[string]any{"subscribed": true, "key": "agent:main:main"}})
 		if handle != nil {
@@ -56,8 +59,12 @@ func TestTranslateEvent(t *testing.T) {
 		"message":{"role":"user","content":[{"type":"text","text":"hi"}]}}}`
 	agentLifecycle := `{"type":"event","event":"agent","payload":{"runId":"req-1","stream":"lifecycle","data":{"phase":"start"}}}`
 	chatDone := `{"type":"event","event":"chat","payload":{"runId":"req-1","state":"done","errorMessage":null}}`
+	// Protocol 4 (Gateway 2026.6.11, live-verified): terminal state is "final",
+	// and intermediate "delta" frames carry the assistant message too.
+	chatFinal := `{"type":"event","event":"chat","payload":{"runId":"req-1","state":"final","message":{"role":"assistant","content":[{"type":"text","text":"pong"}]}}}`
+	chatDelta := `{"type":"event","event":"chat","payload":{"runId":"req-1","state":"delta","deltaText":"pong","message":{"role":"assistant","content":[{"type":"text","text":"pong"}]}}}`
 	chatErr := `{"type":"event","event":"chat","payload":{"runId":"req-1","state":"error","errorMessage":"boom"}}`
-	otherRun := `{"type":"event","event":"chat","payload":{"runId":"other","state":"done"}}`
+	otherRun := `{"type":"event","event":"chat","payload":{"runId":"other","state":"final"}}`
 
 	if f, ok := translateEvent([]byte(assistant), runID); !ok || f.T != "chunk" || f.Delta != "PONG" {
 		t.Errorf("assistant: got %+v ok=%v", f, ok)
@@ -70,6 +77,12 @@ func TestTranslateEvent(t *testing.T) {
 	}
 	if f, ok := translateEvent([]byte(chatDone), runID); !ok || f.T != "done" {
 		t.Errorf("chat done: got %+v ok=%v", f, ok)
+	}
+	if f, ok := translateEvent([]byte(chatFinal), runID); !ok || f.T != "done" {
+		t.Errorf("chat final: got %+v ok=%v", f, ok)
+	}
+	if _, ok := translateEvent([]byte(chatDelta), runID); ok {
+		t.Errorf("chat delta should be skipped (session.message carries the reply)")
 	}
 	if f, ok := translateEvent([]byte(chatErr), runID); !ok || f.T != "error" || f.Message != "boom" {
 		t.Errorf("chat error: got %+v ok=%v", f, ok)
@@ -99,13 +112,21 @@ func TestBuildFrames(t *testing.T) {
 	if params["role"] != "operator" {
 		t.Errorf("role wrong: %v", params["role"])
 	}
+	// Live-verified: Gateway 2026.6.11 requires protocol 4; 2026.5.6 spoke 3.
+	if params["minProtocol"] != float64(3) || params["maxProtocol"] != float64(4) {
+		t.Errorf("protocol range wrong: min=%v max=%v", params["minProtocol"], params["maxProtocol"])
+	}
 	auth := params["auth"].(map[string]any)
 	if auth["token"] != "tok-123" {
 		t.Errorf("token wrong: %v", auth)
 	}
 
+	subRaw, subID := buildSubscribe("main")
+	if subID == "" {
+		t.Fatal("subscribe id must be non-empty")
+	}
 	var sub map[string]any
-	json.Unmarshal(buildSubscribe("main"), &sub)
+	json.Unmarshal(subRaw, &sub)
 	subParams := sub["params"].(map[string]any)
 	if sub["method"] != "sessions.messages.subscribe" || subParams["key"] != "main" {
 		t.Errorf("subscribe wrong: %v", sub)
@@ -154,7 +175,7 @@ func TestOcClient_chatRoundTrip(t *testing.T) {
 			"payload": map[string]any{"message": map[string]any{"role": "assistant",
 				"content": []map[string]any{{"type": "text", "text": "PONG"}}, "stopReason": "end_turn"}}})
 		conn.WriteJSON(map[string]any{"type": "event", "event": "chat",
-			"payload": map[string]any{"runId": runID, "state": "done"}})
+			"payload": map[string]any{"runId": runID, "state": "final"}})
 	})
 	defer srv.Close()
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
