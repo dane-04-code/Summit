@@ -33,10 +33,13 @@ curl -fsSL \\
 chmod +x "\${INSTALL_PATH}"
 echo "▸ Installed to \${INSTALL_PATH}"
 
-# ── Detect Hermes config ──────────────────────────────────────────────────────
+# ── Detect agent framework ────────────────────────────────────────────────────
+# Explicit AGENT_FRAMEWORK wins; else Hermes if a key is found; else OpenClaw
+# if its config exists.
 : "\${HERMES_BASE_URL:=http://localhost:8642}"
+OPENCLAW_CONFIG="\${HOME}/.openclaw/openclaw.json"
 
-if [ -z "\${HERMES_API_KEY}" ]; then
+if [ "\${AGENT_FRAMEWORK}" != "openclaw" ] && [ -z "\${HERMES_API_KEY}" ]; then
   for env_file in \\
     "\${HOME}/.hermes/.env" \\
     "/etc/hermes/.env" \\
@@ -44,31 +47,69 @@ if [ -z "\${HERMES_API_KEY}" ]; then
     "/opt/hermes/.env"; do
     if [ -f "\${env_file}" ]; then
       key=$(grep -E '^(API_SERVER_KEY|HERMES_API_KEY)=' "\${env_file}" 2>/dev/null \\
-            | head -1 | sed 's/^[^=]*=//' | tr -d '"'"'"')
+            | head -1 | sed 's/^[^=]*=//' | tr -d "\\"'")
       if [ -n "\${key}" ]; then
         HERMES_API_KEY="\${key}"
-        echo "▸ API key found in \${env_file}"
+        echo "▸ Hermes API key found in \${env_file}"
         break
       fi
     fi
   done
 fi
 
-if [ -z "\${HERMES_API_KEY}" ]; then
+if [ -z "\${AGENT_FRAMEWORK}" ]; then
+  if [ -n "\${HERMES_API_KEY}" ]; then
+    AGENT_FRAMEWORK="hermes"
+  elif [ -f "\${OPENCLAW_CONFIG}" ]; then
+    AGENT_FRAMEWORK="openclaw"
+  fi
+fi
+
+if [ "\${AGENT_FRAMEWORK}" = "openclaw" ]; then
+  echo "▸ OpenClaw detected"
+  # Gateway shared token: env override, else gateway.auth.token in the config.
+  # (openclaw config get redacts secrets, so read the JSON directly — node is
+  # always present on an OpenClaw box.)
+  [ -z "\${OPENCLAW_TOKEN}" ] && OPENCLAW_TOKEN="\${OPENCLAW_GATEWAY_TOKEN}"
+  if [ -z "\${OPENCLAW_TOKEN}" ] && [ -f "\${OPENCLAW_CONFIG}" ]; then
+    OPENCLAW_TOKEN=$(node -e "const c=require('\${OPENCLAW_CONFIG}');const t=(c.gateway||{}).auth&&c.gateway.auth.token;if(typeof t==='string')process.stdout.write(t)" 2>/dev/null)
+    [ -n "\${OPENCLAW_TOKEN}" ] && echo "▸ Gateway token found in \${OPENCLAW_CONFIG}"
+  fi
+  if [ -z "\${OPENCLAW_WS_URL}" ]; then
+    port=$(node -e "const c=require('\${OPENCLAW_CONFIG}');const p=(c.gateway||{}).port;if(p)process.stdout.write(String(p))" 2>/dev/null)
+    OPENCLAW_WS_URL="ws://localhost:\${port:-18789}"
+  fi
+  if [ -z "\${OPENCLAW_TOKEN}" ]; then
+    echo ""
+    echo "ERROR: Could not find your OpenClaw gateway token automatically."
+    echo "Set one on the gateway first (openclaw config set gateway.auth.token <token>),"
+    echo "or re-run with it set:"
+    echo "  OPENCLAW_TOKEN=your-token curl -fsSL https://get.summitapp.dev/connect | sh"
+    exit 1
+  fi
+elif [ -z "\${HERMES_API_KEY}" ]; then
   echo ""
-  echo "ERROR: Could not find your Hermes API key automatically."
+  echo "ERROR: Could not detect a Hermes API key or an OpenClaw install."
   echo ""
-  echo "Re-run with your key set:"
+  echo "For Hermes, re-run with your key set:"
   echo "  HERMES_API_KEY=your-key curl -fsSL https://get.summitapp.dev/connect | sh"
+  echo "For OpenClaw, re-run with:"
+  echo "  AGENT_FRAMEWORK=openclaw OPENCLAW_TOKEN=your-token curl -fsSL https://get.summitapp.dev/connect | sh"
   exit 1
 fi
 
 # ── Write config ──────────────────────────────────────────────────────────────
 mkdir -p "\${CONFIG_DIR}"
 chmod 700 "\${CONFIG_DIR}"
-printf 'RELAY_URL=%s\\nHERMES_BASE_URL=%s\\nHERMES_API_KEY=%s\\n' \\
-  "\${RELAY_URL}" "\${HERMES_BASE_URL}" "\${HERMES_API_KEY}" \\
-  > "\${CONFIG_DIR}/connector.env"
+if [ "\${AGENT_FRAMEWORK}" = "openclaw" ]; then
+  printf 'RELAY_URL=%s\\nAGENT_FRAMEWORK=openclaw\\nOPENCLAW_WS_URL=%s\\nOPENCLAW_TOKEN=%s\\n' \\
+    "\${RELAY_URL}" "\${OPENCLAW_WS_URL}" "\${OPENCLAW_TOKEN}" \\
+    > "\${CONFIG_DIR}/connector.env"
+else
+  printf 'RELAY_URL=%s\\nHERMES_BASE_URL=%s\\nHERMES_API_KEY=%s\\n' \\
+    "\${RELAY_URL}" "\${HERMES_BASE_URL}" "\${HERMES_API_KEY}" \\
+    > "\${CONFIG_DIR}/connector.env"
+fi
 chmod 600 "\${CONFIG_DIR}/connector.env"
 
 # ── Start connector ───────────────────────────────────────────────────────────
@@ -106,9 +147,10 @@ UNIT
 else
   pkill -f summit-connector 2>/dev/null || true
   sleep 1
-  RELAY_URL="\${RELAY_URL}" HERMES_BASE_URL="\${HERMES_BASE_URL}" \\
-    HERMES_API_KEY="\${HERMES_API_KEY}" \\
-    nohup "\${INSTALL_PATH}" > "\${LOG_FILE}" 2>&1 &
+  set -a
+  . "\${CONFIG_DIR}/connector.env"
+  set +a
+  nohup "\${INSTALL_PATH}" > "\${LOG_FILE}" 2>&1 &
   CONNECTOR_PID=$!
   echo "▸ Connector started (PID: \${CONNECTOR_PID})"
   echo "▸ Waiting for pairing code..."
