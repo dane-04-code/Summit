@@ -173,3 +173,17 @@ func TestOcClient_chatRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected frames: %+v", got)
 	}
 }
+
+func TestLatestUserMessage(t *testing.T) {
+	msgs := []ChatMessage{
+		{Role: "user", Content: "first"},
+		{Role: "assistant", Content: "reply"},
+		{Role: "user", Content: "second"},
+	}
+	if got := latestUserMessage(msgs); got != "second" {
+		t.Errorf("got %q, want %q", got, "second")
+	}
+	if got := latestUserMessage(nil); got != "" {
+		t.Errorf("empty slice should give empty string, got %q", got)
+	}
+}

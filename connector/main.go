@@ -67,11 +67,13 @@ func main() {
 	hermesBase := strings.TrimRight(os.Getenv("HERMES_BASE_URL"), "/")
 	apiKey := os.Getenv("HERMES_API_KEY")
 	framework, agentName := agentIdentity(os.Getenv("AGENT_FRAMEWORK"), os.Getenv("AGENT_NAME"))
+	openclawWSURL := strings.TrimRight(os.Getenv("OPENCLAW_WS_URL"), "/")
+	openclawToken := os.Getenv("OPENCLAW_TOKEN")
 
-	if hermesBase == "" || apiKey == "" {
+	if framework != "openclaw" && (hermesBase == "" || apiKey == "") {
 		log.Fatal("HERMES_BASE_URL and HERMES_API_KEY must be set")
 	}
-	if !strings.HasPrefix(hermesBase, "http") {
+	if hermesBase != "" && !strings.HasPrefix(hermesBase, "http") {
 		hermesBase = "http://" + hermesBase
 	}
 
@@ -85,7 +87,7 @@ func main() {
 	startNotifyServer(notify, notifyPort)
 
 	for {
-		if err := run(relayURL, hermesBase, apiKey, framework, agentName, notify); err != nil {
+		if err := run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, openclawToken, notify); err != nil {
 			log.Printf("disconnected: %v — reconnecting in 5s", err)
 		}
 		time.Sleep(5 * time.Second)
@@ -104,7 +106,7 @@ func savedPairingCode() string {
 	return strings.TrimSpace(string(data))
 }
 
-func run(relayURL, hermesBase, apiKey, framework, agentName string, notify *notifier) error {
+func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, openclawToken string, notify *notifier) error {
 	target := relayURL
 	if code := savedPairingCode(); code != "" {
 		target += "?claim=" + code
@@ -124,6 +126,20 @@ func run(relayURL, hermesBase, apiKey, framework, agentName string, notify *noti
 		T: "hello", Framework: framework, AgentName: agentName, AgentVersion: "1.0",
 	}); err != nil {
 		return fmt.Errorf("send hello: %w", err)
+	}
+
+	// For OpenClaw, open the persistent WS control plane to the local Gateway.
+	// Chat is bridged through it instead of Hermes HTTP.
+	var oc *ocClient
+	if framework == "openclaw" {
+		if openclawWSURL == "" || openclawToken == "" {
+			return fmt.Errorf("OPENCLAW_WS_URL and OPENCLAW_TOKEN must be set for openclaw")
+		}
+		oc, err = dialOpenClaw(openclawWSURL, openclawToken, "main")
+		if err != nil {
+			return fmt.Errorf("openclaw dial: %w", err)
+		}
+		defer oc.close()
 	}
 
 	// Keep the Cloudflare connection alive with application-level heartbeats.
@@ -157,7 +173,11 @@ func run(relayURL, hermesBase, apiKey, framework, agentName string, notify *noti
 				os.WriteFile(filepath.Join(dir, "pairing_code"), []byte(f.Code+"\n"), 0600)
 			}
 		case "chat":
-			go handleChat(conn, &writeMu, f, f.SessionID, f.SessionKey, hermesBase, apiKey)
+			if oc != nil {
+				go handleChatOpenClaw(conn, &writeMu, f, oc)
+			} else {
+				go handleChat(conn, &writeMu, f, f.SessionID, f.SessionKey, hermesBase, apiKey)
+			}
 		case "api_req":
 			go handleApiReq(conn, &writeMu, f, hermesBase, apiKey)
 		case "peer_gone":

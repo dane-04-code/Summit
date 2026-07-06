@@ -238,3 +238,23 @@ func hasScope(scopes []string, want string) bool {
 	}
 	return false
 }
+
+// latestUserMessage returns the content of the last user-role message. OpenClaw
+// chat.send takes a single message, not the full array Hermes gets.
+func latestUserMessage(msgs []ChatMessage) string {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].Role == "user" {
+			return msgs[i].Content
+		}
+	}
+	return ""
+}
+
+func handleChatOpenClaw(conn *websocket.Conn, writeMu *sync.Mutex, f Frame, oc *ocClient) {
+	for frame := range oc.chat(latestUserMessage(f.Messages), f.ReqID) {
+		frame.ReqID = f.ReqID
+		if err := writeFrame(conn, writeMu, frame); err != nil {
+			return
+		}
+	}
+}
