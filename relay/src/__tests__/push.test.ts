@@ -85,6 +85,39 @@ describe('push on turn completion', () => {
   });
 });
 
+describe('approval_req — pushed exec approvals', () => {
+  it('forwards to the app and pushes content-free when the app is away', () => {
+    const { effects } = handleConnectorMessage(away(), {
+      t: 'approval_req',
+      approvalId: 'ap-1',
+      command: 'rm -rf /tmp/build',
+    });
+    expect(effects).toContainEqual({
+      to: 'app',
+      frame: { t: 'approval_req', approvalId: 'ap-1', command: 'rm -rf /tmp/build' },
+    });
+    // The command never transits push servers — body is generic.
+    expect(effects).toContainEqual({
+      to: 'push',
+      token: 'ExponentPushToken[t1]',
+      title: 'Hermes',
+      body: 'Waiting for your approval.',
+    });
+  });
+
+  it('only forwards while the app is connected', () => {
+    const connected = { ...away(), appConnected: true };
+    const { effects } = handleConnectorMessage(connected, {
+      t: 'approval_req',
+      approvalId: 'ap-1',
+      command: 'ls',
+    });
+    expect(effects).toEqual([
+      { to: 'app', frame: { t: 'approval_req', approvalId: 'ap-1', command: 'ls' } },
+    ]);
+  });
+});
+
 describe('notify — the agent-initiated nudge', () => {
   it('pushes the agent-chosen title and body when the app is away', () => {
     const { effects } = handleConnectorMessage(away(), {

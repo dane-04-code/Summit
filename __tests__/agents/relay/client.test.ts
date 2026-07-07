@@ -144,6 +144,32 @@ describe('chat()', () => {
     expect(events).toEqual([{ type: 'error', message: 'upstream failed' }]);
   });
 
+  it('yields an approval event on approval_req and keeps streaming', async () => {
+    client = new RelayClient('ws://localhost:8787?code=111111');
+
+    const events: object[] = [];
+    const gen = client.chat([{ role: 'user', content: 'deploy' }], 'req-4');
+    const collecting = (async () => { for await (const ev of gen) events.push(ev); })();
+
+    await flush();
+    mockWs.openNow();
+    await flush();
+
+    mockWs.receive({ t: 'chunk', reqId: 'req-4', delta: 'Deploying' });
+    // Pushed approvals carry the Gateway approval id, not the chat reqId.
+    mockWs.receive({ t: 'approval_req', approvalId: 'ap-1', command: 'make deploy' });
+    mockWs.receive({ t: 'chunk', reqId: 'req-4', delta: ' now' });
+    mockWs.receive({ t: 'done', reqId: 'req-4' });
+
+    await collecting;
+    expect(events).toEqual([
+      { type: 'delta', text: 'Deploying' },
+      { type: 'approval', runId: 'ap-1', title: 'Run a command', command: 'make deploy' },
+      { type: 'delta', text: ' now' },
+      { type: 'done' },
+    ]);
+  });
+
   it('yields error event on peer_gone', async () => {
     client = new RelayClient('ws://localhost:8787?code=111111');
 
@@ -158,5 +184,20 @@ describe('chat()', () => {
     mockWs.receive({ t: 'peer_gone' });
     await collecting;
     expect(events).toEqual([{ type: 'error', message: 'Agent disconnected.' }]);
+  });
+});
+
+describe('resolveApproval()', () => {
+  it('sends an approval_resolve frame with the decision', async () => {
+    client = new RelayClient('ws://localhost:8787?code=111111');
+    const promise = client.resolveApproval('ap-1', 'approve');
+    mockWs.openNow();
+    await flush();
+    await promise;
+    expect(JSON.parse(mockWs.sent[0])).toEqual({
+      t: 'approval_resolve',
+      approvalId: 'ap-1',
+      decision: 'approve',
+    });
   });
 });

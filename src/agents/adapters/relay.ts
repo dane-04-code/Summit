@@ -117,10 +117,23 @@ export class RelayAdapter implements AgentAdapter {
   }
 
   async approveRun(runId: string, approved: boolean): Promise<void> {
+    if (this.framework === 'openclaw') {
+      // OpenClaw approvals are push-based: runId is the Gateway approval id
+      // and the decision goes back as an approval_resolve frame.
+      const client = await this.ensureConnected();
+      await client.resolveApproval(runId, approved ? 'approve' : 'deny');
+      return;
+    }
     await this.api('POST', `/v1/runs/${enc(runId)}/approval`, { approved });
   }
 
   async stopRun(runId: string): Promise<void> {
+    if (this.framework === 'openclaw') {
+      // No run-stop on the Gateway; stopping an approval card means denying it.
+      const client = await this.ensureConnected();
+      await client.resolveApproval(runId, 'deny');
+      return;
+    }
     await this.api('POST', `/v1/runs/${enc(runId)}/stop`);
   }
 

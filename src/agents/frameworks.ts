@@ -27,7 +27,9 @@ export function defaultCapabilitiesFor(framework: AgentFramework): AgentCapabili
   const native = framework === 'hermes';
   return {
     framework,
-    hasRunApproval: native,
+    // OpenClaw pushes exec approvals over the connector's persistent WS
+    // (approval_req/approval_resolve frames) — live-validated Phase 2.
+    hasRunApproval: native || framework === 'openclaw',
     hasRunStop: native,
     hasStreaming: true,
     hasJobs: native,

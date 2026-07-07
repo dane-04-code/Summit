@@ -26,6 +26,8 @@ const mockPair = jest.fn().mockResolvedValue({ framework: 'hermes', agentName: '
 const mockChat = jest.fn(() => makeAsyncGen(mockChatEvents));
 const mockDisconnect = jest.fn();
 const mockRegisterPush = jest.fn().mockResolvedValue(undefined);
+const mockResolveApproval = jest.fn().mockResolvedValue(undefined);
+const mockRequest = jest.fn().mockResolvedValue({ status: 200, body: '{}' });
 
 jest.mock('@/agents/relay/client', () => ({
   RelayClient: jest.fn(() => ({
@@ -33,6 +35,8 @@ jest.mock('@/agents/relay/client', () => ({
     chat: mockChat,
     disconnect: mockDisconnect,
     registerPush: mockRegisterPush,
+    resolveApproval: mockResolveApproval,
+    request: mockRequest,
     subscribeConnectionState: jest.fn(() => () => {}),
   })),
 }));
@@ -85,5 +89,32 @@ describe('RelayAdapter', () => {
     for await (const _ of adapter.sendMessage('hello')) {}
     await new Promise((r) => setTimeout(r, 0));
     expect(mockRegisterPush).not.toHaveBeenCalled();
+  });
+
+  describe('run approval routing', () => {
+    const openclawAgent: Agent = { ...fakeAgent, framework: 'openclaw' };
+
+    it('resolves OpenClaw approvals with approval_resolve frames', async () => {
+      const adapter = new RelayAdapter(openclawAgent, async () => '481920');
+      await adapter.approveRun('ap-1', true);
+      expect(mockResolveApproval).toHaveBeenCalledWith('ap-1', 'approve');
+      await adapter.approveRun('ap-2', false);
+      expect(mockResolveApproval).toHaveBeenCalledWith('ap-2', 'deny');
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it('maps OpenClaw stopRun to a deny decision', async () => {
+      const adapter = new RelayAdapter(openclawAgent, async () => '481920');
+      await adapter.stopRun('ap-3');
+      expect(mockResolveApproval).toHaveBeenCalledWith('ap-3', 'deny');
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it('keeps Hermes approvals on the REST proxy', async () => {
+      const adapter = new RelayAdapter(fakeAgent, async () => '481920');
+      await adapter.approveRun('run-1', true);
+      expect(mockRequest).toHaveBeenCalledWith('POST', '/v1/runs/run-1/approval', { approved: true });
+      expect(mockResolveApproval).not.toHaveBeenCalled();
+    });
   });
 });

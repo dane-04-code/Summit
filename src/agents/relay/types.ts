@@ -23,8 +23,14 @@ export type ApiResFrame     = { t: 'api_res'; reqId: string; status: number; bod
 // as a frame when it's connected.
 export type RegisterPushFrame = { t: 'register_push'; token: string };
 export type NotifyFrame       = { t: 'notify'; title?: string; body?: string };
+// Push approvals (OpenClaw): the connector forwards Gateway-pushed exec
+// approvals as `approval_req`; the app answers with `approval_resolve`.
+// Hermes approvals stay on the api_req REST proxy.
+export type ApprovalReqFrame     = { t: 'approval_req'; approvalId: string; command: string };
+export type ApprovalResolveFrame = { t: 'approval_resolve'; approvalId: string; decision: 'approve' | 'deny' };
 
 export type AnyFrame =
   | HelloFrame | CodeFrame | PairFrame | PairedFrame | PairErrorFrame
   | PeerGoneFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | DoneFrame | ErrorFrame
-  | ApiReqFrame | ApiResFrame | RegisterPushFrame | NotifyFrame;
+  | ApiReqFrame | ApiResFrame | RegisterPushFrame | NotifyFrame
+  | ApprovalReqFrame | ApprovalResolveFrame;

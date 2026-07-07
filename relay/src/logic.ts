@@ -114,6 +114,11 @@ export function handleConnectorMessage(state: ChannelState, frame: AnyFrame, now
   } else if (frame.t === 'error') {
     const push = pushFor(state, undefined, 'Hit a problem and needs you.');
     if (push) effects.push(push);
+  } else if (frame.t === 'approval_req') {
+    // A blocked run waiting on the user is the strongest push case of all —
+    // but the command stays out of the notification (content-free).
+    const push = pushFor(state, undefined, 'Waiting for your approval.');
+    if (push) effects.push(push);
   }
   return { state, effects };
 }

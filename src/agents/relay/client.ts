@@ -149,6 +149,10 @@ export class RelayClient {
     const handler = (frame: AnyFrame) => {
       if (frame.t === 'chunk' && frame.reqId === reqId) {
         queue.push({ type: 'delta', text: frame.delta });
+      } else if (frame.t === 'approval_req') {
+        // Pushed exec approval — not tied to the chat reqId; the card resolves
+        // it through resolveApproval() with the Gateway approval id as runId.
+        queue.push({ type: 'approval', runId: frame.approvalId, title: 'Run a command', command: frame.command });
       } else if (frame.t === 'done' && frame.reqId === reqId) {
         queue.push({ type: 'done' });
         done = true;
@@ -177,6 +181,13 @@ export class RelayClient {
     } finally {
       this.handlers = this.handlers.filter((h) => h !== handler);
     }
+  }
+
+  /** Answer a pushed approval. Fire-and-forget: the connector resolves it on
+   * the Gateway; the suspended run continues (or is denied) from there. */
+  async resolveApproval(approvalId: string, decision: 'approve' | 'deny'): Promise<void> {
+    const ws = await this.connect();
+    ws.send(JSON.stringify({ t: 'approval_resolve', approvalId, decision }));
   }
 
   /**
