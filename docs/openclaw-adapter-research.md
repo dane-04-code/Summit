@@ -126,16 +126,31 @@ Flow:
 - No raw token deltas over WS — you get built messages, not per-token chunks.
   (Contrast with Hermes SSE, which streams `delta.content` token-by-token.)
 
-## 4. Approvals — VERIFIED
+## 4. Approvals — RE-VERIFIED 2026-07-07 (the original sketch below was wrong)
 
-- Broadcast: **`exec.approval.requested`** with `approvalId`, `sessionKey`,
-  `command`, `systemRunPlan { argv, cwd, rawCommand, sessionKey, agentId }`.
-  Plugin approvals are a separate `plugin.approval.requested` shape.
-- Resolve: **`exec.approval.resolve`** with `approvalId` + `decision: "approve" | "deny"`.
-  Requires `operator.approvals` at connect (events still arrive without it, but the
-  resolve call fails). We request it in §2, so we're covered.
-- `exec.approval.resolved` broadcasts when done (by us or another client); the
-  suspended turn resumes.
+⚠️ **Corrected against Gateway 2026.6.11 source + live traces.** The original
+notes ("payload has `approvalId`, resolve with `approvalId` + approve/deny")
+do **not** match the real Gateway:
+
+- Broadcast: **`exec.approval.requested`** payload is
+  `{ id, request: { command, cwd, systemRunPlan, commandAnalysis, allowedDecisions, agentId, sessionKey, … }, createdAtMs, expiresAtMs }`
+  — the id field is **`id`**, not `approvalId`, and the details are nested
+  under `request`. Plugin approvals are a separate `plugin.approval.requested`.
+- Resolve: **`exec.approval.resolve`** params are **`{ id, decision }`** with
+  `additionalProperties: false` (an `approvalId` key is rejected). The decision
+  enum is **`"allow-once" | "allow-always" | "deny"`** — there is no "approve".
+- **Receiving the push requires the `operator.admin` scope.** The visibility
+  rule (`isApprovalRecordVisibleToClient`): admins see everything; otherwise
+  only the internal approval runtime, registered reviewer devices, or the
+  requesting connection itself. `operator.approvals` alone lets you *resolve*
+  but the requested/resolved events are never delivered to you. The trusted
+  backend identity is granted `operator.admin` when requested — the connector
+  now asks for all four scopes.
+- `exec.approval.resolved` broadcasts when done (by us or another client) and
+  the requester's pending `exec.approval.request` res settles with the decision;
+  the suspended turn resumes.
+- Useful for testing: **`exec.approval.request`** lets any operator client file
+  a synthetic approval (params `{ command, cwd, … }`).
 
 ## 5. Keepalive / reconnect — corrected interval
 

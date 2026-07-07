@@ -1,5 +1,18 @@
 # OpenClaw — Next Steps Handoff
 
+> **STATUS 2026-07-07: ALL FOUR TASKS DONE.** Validated against a live local
+> Gateway (openclaw 2026.6.11 via npm, claude-cli model backend). A→D→B→C all
+> executed and committed on `build/first-pages`. Full-chain E2E passed:
+> app-sim → wrangler-dev relay → connector → live Gateway, covering pair, chat
+> round-trip, and push-approval approve (`allow-once` recorded by the Gateway).
+> Key deltas found live: Gateway now speaks **protocol 4** ("final" not "done",
+> events interleave with responses), approval payload is `{id, request{…}}`,
+> resolve is `{id, decision}` with enum allow-once/allow-always/deny, and
+> receiving approval pushes requires the **operator.admin** scope. Details in
+> `docs/openclaw-adapter-research.md` (§4 rewritten). Remaining ideas, not
+> commitments: run-stop (chat.abort), allow-always surfacing, approvals while
+> the app is closed (currently only pushed as a notification).
+
 **Audience:** an agent picking this up cold. Read this top-to-bottom first; every claim links to the file that proves it. **Do not re-research the protocol** — it's already verified (see §"Source of truth").
 
 ## Where we are (done, on branch `build/first-pages`, pushed)
