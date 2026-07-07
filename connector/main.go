@@ -31,6 +31,11 @@ type Frame struct {
 	Status       int           `json:"status,omitempty"`
 	Body         string        `json:"body,omitempty"`
 	Title        string        `json:"title,omitempty"`
+	// Push approvals (OpenClaw): connector → app `approval_req`, app →
+	// connector `approval_resolve` with decision approve|deny.
+	ApprovalID string `json:"approvalId,omitempty"`
+	Command    string `json:"command,omitempty"`
+	Decision   string `json:"decision,omitempty"`
 }
 
 // ChatMessage matches the OpenAI messages array shape.
@@ -140,6 +145,13 @@ func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, open
 			return fmt.Errorf("openclaw dial: %w", err)
 		}
 		defer oc.close()
+		// The Gateway pushes exec approvals over the persistent WS; forward
+		// each to the app as an approval_req frame.
+		oc.setOnApproval(func(ap ocApproval) {
+			if err := writeFrame(conn, &writeMu, Frame{T: "approval_req", ApprovalID: ap.ID, Command: ap.Command}); err != nil {
+				log.Printf("write approval_req: %v", err)
+			}
+		})
 	}
 
 	// Keep the Cloudflare connection alive with application-level heartbeats.
@@ -180,6 +192,12 @@ func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, open
 			}
 		case "api_req":
 			go handleApiReq(conn, &writeMu, f, hermesBase, apiKey)
+		case "approval_resolve":
+			if oc != nil {
+				if err := oc.resolveApproval(f.ApprovalID, f.Decision); err != nil {
+					log.Printf("approval resolve: %v", err)
+				}
+			}
 		case "peer_gone":
 			fmt.Println("App disconnected — waiting for reconnect.")
 		case "pong":

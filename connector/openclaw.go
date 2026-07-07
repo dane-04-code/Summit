@@ -97,8 +97,11 @@ func buildConnect(token string) ([]byte, string) {
 			"client": map[string]any{
 				"id": "gateway-client", "version": "1.0.0", "platform": "connector", "mode": "backend",
 			},
-			"role":        "operator",
-			"scopes":      []string{"operator.read", "operator.write", "operator.approvals"},
+			"role": "operator",
+			// operator.admin is what makes the Gateway push
+			// exec.approval.requested to this client (live-verified);
+			// operator.approvals alone only allows resolving.
+			"scopes": []string{"operator.read", "operator.write", "operator.approvals", "operator.admin"},
 			"caps":        []string{},
 			"commands":    []string{},
 			"permissions": map[string]any{},
@@ -136,12 +139,50 @@ func buildChatSend(message, sessionKey, idempotencyKey string) []byte {
 	return raw
 }
 
+// ocApproval is one pushed exec.approval.requested, reduced to what the app's
+// approval card needs.
+type ocApproval struct {
+	ID      string
+	Command string
+}
+
+// parseApproval extracts an exec approval push. Payload shape (live-verified,
+// Gateway 2026.6.11): { id, request: { command, ... }, createdAtMs, expiresAtMs }.
+func parseApproval(raw []byte) (ocApproval, bool) {
+	var ev struct {
+		Event   string `json:"event"`
+		Payload struct {
+			ID      string `json:"id"`
+			Request struct {
+				Command string `json:"command"`
+			} `json:"request"`
+		} `json:"payload"`
+	}
+	if err := json.Unmarshal(raw, &ev); err != nil {
+		return ocApproval{}, false
+	}
+	if ev.Event != "exec.approval.requested" || ev.Payload.ID == "" {
+		return ocApproval{}, false
+	}
+	return ocApproval{ID: ev.Payload.ID, Command: ev.Payload.Request.Command}, true
+}
+
 type ocClient struct {
 	conn       *websocket.Conn
 	writeMu    sync.Mutex
 	turnMu     sync.Mutex
 	sessionKey string
 	subscribed bool
+
+	// One reader goroutine (readLoop) owns the socket after dial and demuxes:
+	// turn events go to the active turn channel, approval pushes to onApproval.
+	mu         sync.Mutex
+	turnCh     chan Frame
+	turnRunID  string
+	onApproval func(ocApproval)
+	closed     bool
+	done       chan struct{}
+	closeOnce  sync.Once
 }
 
 func (c *ocClient) write(raw []byte) error {
@@ -150,7 +191,75 @@ func (c *ocClient) write(raw []byte) error {
 	return c.conn.WriteMessage(websocket.TextMessage, raw)
 }
 
-func (c *ocClient) close() error { return c.conn.Close() }
+func (c *ocClient) close() error {
+	c.closeOnce.Do(func() { close(c.done) })
+	return c.conn.Close()
+}
+
+// setOnApproval registers the handler for pushed exec approvals. Called from
+// the read loop; keep it non-blocking.
+func (c *ocClient) setOnApproval(fn func(ocApproval)) {
+	c.mu.Lock()
+	c.onApproval = fn
+	c.mu.Unlock()
+}
+
+// resolveApproval answers a pushed approval. The app speaks approve/deny; the
+// Gateway's enum is allow-once/allow-always/deny (live-verified) — approve maps
+// to allow-once so each command is gated individually.
+func (c *ocClient) resolveApproval(approvalID, decision string) error {
+	gw := "deny"
+	if decision == "approve" {
+		gw = "allow-once"
+	}
+	raw, _ := json.Marshal(map[string]any{
+		"type":   "req",
+		"id":     newID(),
+		"method": "exec.approval.resolve",
+		"params": map[string]any{"id": approvalID, "decision": gw},
+	})
+	return c.write(raw)
+}
+
+// readLoop is the single socket reader: approval pushes fire onApproval, turn
+// events feed the active chat channel, everything else is dropped. On read
+// error it wakes any in-flight chat via the done channel.
+func (c *ocClient) readLoop() {
+	for {
+		_, raw, err := c.conn.ReadMessage()
+		if err != nil {
+			c.mu.Lock()
+			c.closed = true
+			c.mu.Unlock()
+			c.closeOnce.Do(func() { close(c.done) })
+			return
+		}
+		if ap, ok := parseApproval(raw); ok {
+			c.mu.Lock()
+			cb := c.onApproval
+			c.mu.Unlock()
+			if cb != nil {
+				cb(ap)
+			}
+			continue
+		}
+		c.mu.Lock()
+		ch, runID := c.turnCh, c.turnRunID
+		c.mu.Unlock()
+		if ch == nil {
+			continue
+		}
+		f, ok := translateEvent(raw, runID)
+		if !ok {
+			continue
+		}
+		select {
+		case ch <- f:
+		case <-c.done:
+			return
+		}
+	}
+}
 
 // dialOpenClaw performs the trusted-backend handshake and subscribes. See
 // docs/openclaw-adapter-research.md §2–3.
@@ -159,7 +268,7 @@ func dialOpenClaw(wsURL, token, sessionKey string) (*ocClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dial gateway: %w", err)
 	}
-	c := &ocClient{conn: conn, sessionKey: sessionKey}
+	c := &ocClient{conn: conn, sessionKey: sessionKey, done: make(chan struct{})}
 
 	// 1. Expect connect.challenge (we don't need the nonce on the backend path).
 	if _, _, err := conn.ReadMessage(); err != nil {
@@ -215,6 +324,7 @@ func dialOpenClaw(wsURL, token, sessionKey string) (*ocClient, error) {
 		return nil, fmt.Errorf("subscribe rejected: %s", string(ackRaw))
 	}
 	c.subscribed = true
+	go c.readLoop()
 	return c, nil
 }
 
@@ -240,7 +350,8 @@ func readRes(conn *websocket.Conn, id string) ([]byte, error) {
 
 // chat sends one message and streams the reply as relay frames. runID doubles
 // as the idempotencyKey and correlates the terminal chat event. One turn at a
-// time (turnMu); Phase 1 assumes sequential turns per session.
+// time (turnMu); sequential turns per session. Turn events are delivered by
+// readLoop through the registered turn channel.
 func (c *ocClient) chat(message, runID string) <-chan Frame {
 	out := make(chan Frame, 16)
 	go func() {
@@ -248,22 +359,36 @@ func (c *ocClient) chat(message, runID string) <-chan Frame {
 		c.turnMu.Lock()
 		defer c.turnMu.Unlock()
 
+		turn := make(chan Frame, 16)
+		c.mu.Lock()
+		if c.closed {
+			c.mu.Unlock()
+			out <- Frame{T: "error", Message: "gateway connection lost"}
+			return
+		}
+		c.turnCh, c.turnRunID = turn, runID
+		c.mu.Unlock()
+		defer func() {
+			c.mu.Lock()
+			if c.turnCh == turn {
+				c.turnCh = nil
+			}
+			c.mu.Unlock()
+		}()
+
 		if err := c.write(buildChatSend(message, c.sessionKey, runID)); err != nil {
 			out <- Frame{T: "error", Message: fmt.Sprintf("chat.send: %v", err)}
 			return
 		}
 		for {
-			_, raw, err := c.conn.ReadMessage()
-			if err != nil {
-				out <- Frame{T: "error", Message: fmt.Sprintf("gateway read: %v", err)}
-				return
-			}
-			f, ok := translateEvent(raw, runID)
-			if !ok {
-				continue
-			}
-			out <- f
-			if f.T == "done" || f.T == "error" {
+			select {
+			case f := <-turn:
+				out <- f
+				if f.T == "done" || f.T == "error" {
+					return
+				}
+			case <-c.done:
+				out <- Frame{T: "error", Message: "gateway connection lost"}
 				return
 			}
 		}
