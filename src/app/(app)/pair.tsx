@@ -89,7 +89,7 @@ export default function PairScreen() {
       // adapter re-registers on every reconnect anyway.
       try {
         const pushToken = await resolvePushToken();
-        if (pushToken) await authenticatedClient.registerPush(pushToken);
+        if (pushToken) await authenticatedClient.registerPush(pushToken, 'all');
       } catch (e) {
         // push is an enhancement — carry on, but let us see when it breaks
         captureError(e, { where: 'push_register', transport: 'relay' });

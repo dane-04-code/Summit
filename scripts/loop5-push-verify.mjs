@@ -94,7 +94,7 @@ async function main() {
   // ── Path 1: agent-initiated nudge while the app is away ──────────────────
   const ws = await openApp();
   console.log('✓ paired');
-  ws.send(JSON.stringify({ t: 'register_push', token: TOKEN }));
+  ws.send(JSON.stringify({ t: 'register_push', token: TOKEN, mode: 'all' }));
   console.log(`✓ registered token ${TOKEN}`);
   await sleep(300); // let the DO persist the token
   ws.close();

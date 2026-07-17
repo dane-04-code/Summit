@@ -19,7 +19,7 @@ import {
   Animated,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
 import { ArrowUp, Square } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -154,7 +154,8 @@ function MessageRow({
 // ---------------------------------------------------------------------------
 
 export default function AgentScreen() {
-  const { activeAgent, adapterFor, repo } = useAgents();
+  const { sessionId: notificationSessionId } = useLocalSearchParams<{ sessionId?: string }>();
+  const { activeAgent, adapterFor, repo, selectAgent } = useAgents();
   const { user } = useAuth();
   const accountName = user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'You';
   const account = { name: accountName, initial: accountName[0]?.toUpperCase() ?? '?' };
@@ -273,8 +274,17 @@ export default function AgentScreen() {
         }
         return;
       }
+      const requestedSession = typeof notificationSessionId === 'string'
+        ? await repo.getSession(notificationSessionId)
+        : null;
+      // A push carries only an opaque local session id. Resolve it locally and
+      // select its owner instead of treating it as a server-side identity.
+      if (requestedSession && requestedSession.agentId !== activeAgent.id) {
+        await selectAgent(requestedSession.agentId);
+        return;
+      }
       const sessions = await repo.listSessions(activeAgent.id); // newest-first
-      const latest = sessions[0] ?? null;
+      const latest = requestedSession ?? sessions[0] ?? null;
       if (cancelled) return;
       await loadSession(latest);
       if (!cancelled) await loadSessionSummaries();
@@ -282,7 +292,7 @@ export default function AgentScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeAgent, repo, loadSession, loadSessionSummaries]);
+  }, [activeAgent, notificationSessionId, repo, loadSession, loadSessionSummaries, selectAgent]);
 
   const statusLabel =
     status === 'running' ? 'running' : status === 'error' ? 'connection error' : 'ready';

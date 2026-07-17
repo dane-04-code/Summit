@@ -6,6 +6,8 @@ import { RelayClient } from '../relay/client';
 import { readJobRunResponse, readJobsResponse } from './jobs';
 import { RELAY_WS_URL } from '@/config';
 import { resolvePushToken } from '@/notifications/push';
+import { getNotificationMode, type NotificationMode } from '@/notifications/preferences';
+import { getRepository } from '@/db';
 import { captureError } from '@/lib/errorReporting';
 import { decodeRelayCredential } from '../relay/credential';
 
@@ -42,6 +44,8 @@ export class RelayAdapter implements AgentAdapter {
     private readonly agent: Agent,
     private readonly getSecret: () => Promise<string | null>,
     private readonly getPushToken: () => Promise<string | null> = resolvePushToken,
+    private readonly notificationMode: () => Promise<NotificationMode> =
+      () => getNotificationMode(getRepository(), agent.id),
   ) {
     this.framework = agent.framework;
   }
@@ -63,8 +67,11 @@ export class RelayAdapter implements AgentAdapter {
 
   /** Fire-and-forget: push is an enhancement, never a blocker for chat. */
   private registerPushToken(client: RelayClient): void {
-    void this.getPushToken()
-      .then((token) => (token ? client.registerPush(token) : undefined))
+    // A preference read must never suppress a valid push registration (for
+    // example while a lightweight test or a just-starting store is not ready).
+    // The documented default is All activity.
+    void Promise.all([this.getPushToken(), this.notificationMode().catch(() => 'all' as NotificationMode)])
+      .then(([token, mode]) => client.registerPush(token, mode))
       .catch((e) => captureError(e, { where: 'push_register', transport: 'relay', framework: this.framework }));
   }
 
@@ -96,9 +103,10 @@ export class RelayAdapter implements AgentAdapter {
     const client = await this.ensureConnected();
     const messages: ChatMessage[] = [{ role: 'user', content }];
     const reqId = `req-${++this.requestCounter}`;
-    // Use the pairing code as a stable session ID — same device always maps to
-    // the same Hermes session, giving persistent memory across chats like Telegram.
-    yield* client.chat(messages, reqId, this.pairingCode ?? undefined, opts?.sessionKey);
+    // The app's local session id travels with relay frames so a notification
+    // can open the exact saved thread. `sessionKey` remains the stable remote
+    // memory identity used by Hermes/OpenClaw.
+    yield* client.chat(messages, reqId, opts?.sessionId, opts?.sessionKey);
   }
 
   async testConnection(): Promise<AgentCapabilities> {

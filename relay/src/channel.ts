@@ -125,7 +125,7 @@ export class PairingChannel {
     const sockets = this.doState.getWebSockets();
     for (const effect of effects) {
       if (effect.to === 'push') {
-        await this.sendPush(effect.token, effect.title, effect.body);
+        await this.sendPush(effect.token, effect.title, effect.body, effect.data);
         continue;
       }
       const target = sockets.find((s) => this.doState.getTags(s)[0] === effect.to);
@@ -145,14 +145,19 @@ export class PairingChannel {
    * credentials here (EAS holds those for the app build). Failures are logged,
    * never fatal: a lost push must not break the relay session.
    */
-  private async sendPush(token: string, title: string, body: string): Promise<void> {
+  private async sendPush(
+    token: string,
+    title: string,
+    body: string,
+    data?: { sessionId?: string },
+  ): Promise<void> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5_000);
     try {
       const res = await fetch(this.env.PUSH_URL || EXPO_PUSH_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: token, title, body, sound: 'default' }),
+        body: JSON.stringify({ to: token, title, body, sound: 'default', ...(data ? { data } : {}) }),
         signal: controller.signal,
       });
       if (!res.ok) console.warn(`push send failed: ${res.status}`);

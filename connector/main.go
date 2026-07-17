@@ -222,6 +222,7 @@ func writeFrame(conn *websocket.Conn, writeMu *sync.Mutex, frame Frame) error {
 func handleChat(conn *websocket.Conn, writeMu *sync.Mutex, f Frame, sessionID, sessionKey, hermesBase, apiKey string) {
 	for frame := range streamChat(f.Messages, sessionID, sessionKey, hermesBase, apiKey) {
 		frame.ReqID = f.ReqID
+		frame.SessionID = f.SessionID
 		if err := writeFrame(conn, writeMu, frame); err != nil {
 			log.Printf("write frame: %v", err)
 			return

@@ -5,6 +5,9 @@ second track, look here instead._
 
 _Set 2026-07-04._
 
+**Current factual snapshot:** [`PROJECT_STATUS.md`](PROJECT_STATUS.md). This plan remains the
+ordered execution track; update the snapshot when verification or release readiness changes.
+
 ---
 
 ## What Summit is

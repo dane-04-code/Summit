@@ -1,4 +1,4 @@
-import type { AnyFrame, ChatMessage, PairErrorFrame } from './types';
+import type { AnyFrame, ChatMessage, NotificationMode, PairErrorFrame } from './types';
 import type { ConnectionState, StreamEvent } from '../adapters/types';
 import { RelayError, type RelayErrorCode } from './errors';
 
@@ -177,10 +177,10 @@ export class RelayClient {
    * can reach the phone when the app is away. Idempotent — safe on every
    * (re)connect.
    */
-  async registerPush(token: string): Promise<void> {
+  async registerPush(token: string | null, mode: NotificationMode): Promise<void> {
     await this.authenticate();
     const ws = await this.connect();
-    ws.send(JSON.stringify({ t: 'register_push', token }));
+    ws.send(JSON.stringify({ t: 'register_push', ...(token ? { token } : {}), mode }));
   }
 
   async *chat(messages: ChatMessage[], reqId: string, sessionId?: string, sessionKey?: string): AsyncIterable<StreamEvent> {

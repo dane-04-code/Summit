@@ -11,9 +11,9 @@ export type PingFrame       = { t: 'ping' };
 export type PongFrame       = { t: 'pong' };
 export type ChatMessage     = { role: 'user' | 'assistant' | 'system'; content: string };
 export type ChatFrame       = { t: 'chat'; reqId: string; messages: ChatMessage[]; sessionId?: string; sessionKey?: string };
-export type ChunkFrame      = { t: 'chunk'; reqId: string; delta: string };
-export type DoneFrame       = { t: 'done'; reqId: string };
-export type ErrorFrame      = { t: 'error'; reqId?: string; message: string };
+export type ChunkFrame      = { t: 'chunk'; reqId: string; delta: string; sessionId?: string };
+export type DoneFrame       = { t: 'done'; reqId: string; sessionId?: string };
+export type ErrorFrame      = { t: 'error'; reqId?: string; message: string; sessionId?: string };
 // Allow-listed REST proxy over the relay (jobs, run approval/stop). `body` is a
 // JSON string. The connector enforces which method+path pairs are permitted.
 export type ApiReqFrame     = { t: 'api_req'; reqId: string; method: string; path: string; body?: string };
@@ -22,7 +22,8 @@ export type ApiResFrame     = { t: 'api_res'; reqId: string; status: number; bod
 // push token in the pairing channel. `notify` (connector → relay) is the
 // agent-initiated nudge: pushed to the phone when the app is away, forwarded
 // as a frame when it's connected.
-export type RegisterPushFrame = { t: 'register_push'; token: string };
+export type NotificationMode = 'all' | 'attention' | 'off';
+export type RegisterPushFrame = { t: 'register_push'; token?: string; mode: NotificationMode };
 export type NotifyFrame       = { t: 'notify'; title?: string; body?: string };
 // Push approvals (OpenClaw): the connector forwards Gateway-pushed exec
 // approvals as `approval_req`; the app answers with `approval_resolve`.

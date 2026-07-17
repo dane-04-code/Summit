@@ -93,14 +93,14 @@ describe('RelayAdapter', () => {
     for await (const _ of adapter.sendMessage('hello')) {}
     // registration is fire-and-forget — let the microtask settle
     await new Promise((r) => setTimeout(r, 0));
-    expect(mockRegisterPush).toHaveBeenCalledWith('ExponentPushToken[t1]');
+    expect(mockRegisterPush).toHaveBeenCalledWith('ExponentPushToken[t1]', 'all');
   });
 
-  it('skips registration when no token is available', async () => {
+  it('still synchronizes the selected mode when no token is available', async () => {
     const adapter = new RelayAdapter(fakeAgent, async () => credential, async () => null);
     for await (const _ of adapter.sendMessage('hello')) {}
     await new Promise((r) => setTimeout(r, 0));
-    expect(mockRegisterPush).not.toHaveBeenCalled();
+    expect(mockRegisterPush).toHaveBeenCalledWith(null, 'all');
   });
 
   describe('run approval routing', () => {

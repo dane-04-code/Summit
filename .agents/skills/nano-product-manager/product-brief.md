@@ -1,7 +1,7 @@
 # Summit — Product Brief
 
 *The single source of product truth for the nano product manager. Synthesizes `PRD.md`,
-`FRAMEWORKS.md`, and `docs/CONNECTION.md`. When those change, update this. Last synced: 2026-06-25.*
+`FRAMEWORKS.md`, and `CONNECTION.md`. When those change, update this. Last synced: 2026-07-17.*
 
 ---
 
@@ -13,7 +13,8 @@ agent: reach it from anywhere, message it fluidly, see its status, and act on bl
 with one tap. It is *not* a replacement for Telegram/Discord as everyday messengers — it fixes the
 specific things those break when you're working with an agent on your phone.
 
-**Codename:** Summit · **Stage:** iOS development build running, PRD v0.3 draft · **Author:** Dane
+**Codename:** Summit · **Stage:** implementation ready for real-device beta verification; not yet
+store-ready · **Author:** Dane
 
 ## 2. The positioning thesis (memorize this — it's the spine)
 
@@ -82,10 +83,11 @@ onboarding). Mitigations: thin/self-hostable relay (open-core), direct mode bypa
   `/{id}/approval`. Gate the approve UI on the `run_approval` flag in `/v1/capabilities` at runtime.
 - Stored responses for `previous_response_id`: max 100 (LRU).
 
-**OpenClaw (v2 target — different beast):** multi-agent gateway, **WebSocket-first**, **no REST
-runs/approval API** (control plane is WS; REST session mgmt tracked in issue #20934), **has** file
-upload (images + PDFs), no `/v1/capabilities`. Don't assume Hermes parity; OpenClaw needs its own
-research pass before building.
+**OpenClaw (connector path built; public-support validation pending):** multi-agent gateway,
+**WebSocket-first**, **no REST runs/approval API** (control plane is WS; REST session mgmt tracked
+in issue #20934), **has** file upload (images + PDFs), no `/v1/capabilities`. The connector has a
+focused relay chat/approval implementation, but do not assume Hermes parity or promise broad
+support until real-world beta validation.
 
 ## 6. Current scope
 
@@ -93,12 +95,13 @@ research pass before building.
 proper markdown rendering (tables/headings/code, partial-stream-safe) · agent status (idle/running/
 error) · reply from app · approve/stop actions.
 
-**Phase 2:** push notifications (via the relay) · smart notification types (finished/needs-input/
-errored, per-type mute) · quick-reply from notification · multi-agent (multiple host+key pairs).
+**Phase 2:** relay push notifications now have per-agent modes (all activity / attention only / off)
+and privacy-safe tap-to-thread routing; physical-device delivery verification is still required.
+Quick-reply from notification · multi-agent (multiple host+key pairs) remain follow-ons.
 
 **Backlog (v2+, don't start until MVP validates):** cross-agent search · "last result" pin per agent
-· cost/usage glance · agent-defined status widgets (JSON → card) · OpenClaw adapter · formal adapter
-abstraction (build from real cases, not guessed).
+· cost/usage glance · agent-defined status widgets (JSON → card) · broader OpenClaw support · formal
+adapter abstraction (build from real cases, not guessed).
 
 ## 7. Explicit non-goals (ruled OUT — flag if an idea lands here)
 

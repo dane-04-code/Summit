@@ -135,6 +135,22 @@ Then:
 4. Token registration is idempotent: it re-registers at pair time and on every
    adapter reconnect, so a reinstalled app heals itself on next send.
 
+### 5c — notification controls and notification taps
+
+On a paired relay agent, open **Settings → Notifications** and verify each mode while the app is
+backgrounded:
+
+1. **All activity** (the default): finish a reply in a non-empty saved chat. One generic “Finished
+   a reply” notification arrives. Tap it and confirm Summit opens that exact thread, not merely the
+   most recent chat. The push carries only the opaque local session ID — never reply text.
+2. **Needs attention:** a completed reply produces no notification; an approval request or agent
+   error still does.
+3. **Off:** neither replies nor attention events produce notifications.
+
+Changing a mode reconnects the relay client so it takes effect immediately when the connector is
+online; if it is offline, the saved mode applies on the next reconnect. Direct-mode agents remain
+unable to notify a closed app by design.
+
 Direct-mode agents can't push — nothing server-side sees their traffic when the
 app is closed. That's inherent to direct mode, not a bug.
 

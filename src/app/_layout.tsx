@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { AgentProvider } from '@/agents/AgentProvider';
 import { AnalyticsProvider } from '@/lib/analytics';
-import { initNotificationHandling } from '@/notifications/push';
+import { initNotificationHandling, observeNotificationResponses } from '@/notifications/push';
 import { ErrorBoundary } from '@/ui/ErrorBoundary';
 import { installGlobalErrorHandlers, setErrorUser } from '@/lib/errorReporting';
 
@@ -26,6 +26,25 @@ function RouteGuard() {
       router.replace('/(app)');
     }
   }, [session, loading, segments]);
+
+  const openNotification = useCallback(
+    ({ sessionId }: { sessionId: string | null }) => {
+      // The relay may include the opaque local session ID in a future push.
+      // No message content or credentials ever become router parameters.
+      router.replace({
+        pathname: '/(app)',
+        params: sessionId ? { sessionId } : {},
+      } as never);
+    },
+    [router],
+  );
+
+  useEffect(() => {
+    // Wait for auth before consuming a cold-start response. This ensures a
+    // notification cannot bypass the normal signed-in route guard.
+    if (loading || !session) return;
+    return observeNotificationResponses(openNotification);
+  }, [loading, session, openNotification]);
 
   return null;
 }

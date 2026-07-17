@@ -39,10 +39,10 @@ relay  (built):  phone ──► our relay ◄── connector ──► Hermes 
   tunnel / domain). See `ONBOARDING.md`. The API key is the on-device secret. Accessed via
   `src/app/(app)/connect.tsx`.
 - **`relay`** — a 6-digit pairing code binds the device to a connector that dials our relay
-  (`docs/CONNECTION.md`). The on-device secret is the **pairing code** (used as a device token for
-  this spike; persistent tokens are slice 3c), never the Hermes key. Primary onboarding path:
-  `src/app/(app)/pair.tsx`. Relay is `relay/` (Cloudflare Worker), connector is `connector/` (Go),
-  frame types in `protocol/`.
+  (`CONNECTION.md`). It is a short-lived, single-use handshake: a successful pairing mints a
+  256-bit device token, which is the on-device secret. The Hermes key never reaches the phone.
+  Primary onboarding path: `src/app/(app)/pair.tsx`. Relay is `relay/` (Cloudflare Worker),
+  connector is `connector/` (Go), frame types in `protocol/`.
 
 The secret's *meaning* differs by transport (API key vs device token), but storage is the same:
 one secret per agent in the Keychain (§4).
@@ -163,11 +163,12 @@ not just flattened text.
 4. Land in chat.
 
 ### Relay mode (slice 3a — `docs/CONNECTION.md`, `src/app/(app)/pair.tsx`)
-1. Pair screen: enter the 6-digit code printed by the connector.
-2. `RelayClient.pair()` sends a `pair` frame; relay binds device ↔ connector and returns agent
-   name/version (the "capabilities" equivalent).
-3. Store the **pairing code** in Keychain as `agent.<id>.secret` (acts as device token for this
-   spike), metadata in SQLite (`transport: 'relay'`, `base_url: null`). Same `agents` row shape.
+1. Pair screen: enter the 6-digit code printed by the connector. Treat it as a password: never
+   share it.
+2. `RelayClient.pair()` sends a `pair` frame; relay binds device ↔ connector, returns agent
+   name/version and mints a durable 256-bit device token.
+3. Store the channel locator and **device token** in Keychain as `agent.<id>.secret`; store only
+   metadata in SQLite (`transport: 'relay'`, `base_url: null`). Same `agents` row shape.
 4. Land in chat.
 
 Both paths end in the **same** persisted state: one `agents` row + one Keychain secret. The registry

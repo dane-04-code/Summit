@@ -5,13 +5,17 @@ import { HermesAdapter } from './hermes';
 import { OpenAICompatAdapter } from './openai';
 import { OpenClawAdapter } from './openclaw';
 import { RelayAdapter } from './relay';
+import type { Repository } from '@/db';
+import { getRepository } from '@/db';
+import { getNotificationMode } from '@/notifications/preferences';
 
 export function makeAdapter(
   agent: Agent,
   getSecret: () => Promise<string | null> = () => getAgentSecret(agent.id),
+  repo: Repository = getRepository(),
 ): AgentAdapter {
   if (agent.transport === 'relay') {
-    return new RelayAdapter(agent, getSecret);
+    return new RelayAdapter(agent, getSecret, undefined, () => getNotificationMode(repo, agent.id));
   }
   switch (agent.framework) {
     case 'hermes':

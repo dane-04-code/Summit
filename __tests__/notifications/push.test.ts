@@ -11,6 +11,9 @@ jest.mock('expo-notifications', () => ({
   getPermissionsAsync: jest.fn(async () => ({ status: 'undetermined' })),
   requestPermissionsAsync: jest.fn(async () => ({ status: 'granted' })),
   getExpoPushTokenAsync: jest.fn(async () => ({ data: 'ExponentPushToken[test]' })),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  getLastNotificationResponse: jest.fn(() => null),
+  clearLastNotificationResponse: jest.fn(),
   AndroidImportance: { HIGH: 4 },
 }));
 jest.mock('expo-device', () => ({ __esModule: true, isDevice: true }));
@@ -22,7 +25,11 @@ jest.mock('expo-constants', () => ({
   },
 }));
 
-import { resolvePushToken, initNotificationHandling } from '@/notifications/push';
+import {
+  resolvePushToken,
+  initNotificationHandling,
+  observeNotificationResponses,
+} from '@/notifications/push';
 
 const Notifications = jest.requireMock('expo-notifications');
 const Constants = jest.requireMock('expo-constants').default;
@@ -66,5 +73,43 @@ describe('initNotificationHandling', () => {
     initNotificationHandling();
     await flush();
     expect(Notifications.setNotificationHandler).not.toHaveBeenCalled();
+  });
+});
+
+describe('observeNotificationResponses', () => {
+  const response = (data: Record<string, unknown> = {}, id = 'notification-1') => ({
+    notification: { request: { identifier: id, content: { data } } },
+  });
+
+  it('opens the exact session from opaque notification data', () => {
+    const open = jest.fn();
+    const stop = observeNotificationResponses(open);
+    const listener = Notifications.addNotificationResponseReceivedListener.mock.calls[0][0];
+
+    listener(response({ sessionId: 'session-123' }));
+
+    expect(open).toHaveBeenCalledWith({ sessionId: 'session-123' });
+    stop();
+    expect(Notifications.addNotificationResponseReceivedListener.mock.results[0].value.remove).toHaveBeenCalled();
+  });
+
+  it('handles a cold-start tap once, without reading notification text', () => {
+    Notifications.getLastNotificationResponse.mockReturnValueOnce(response({ sessionId: 'session-123' }));
+    const open = jest.fn();
+
+    observeNotificationResponses(open);
+
+    expect(open).toHaveBeenCalledWith({ sessionId: 'session-123' });
+    expect(Notifications.clearLastNotificationResponse).toHaveBeenCalled();
+  });
+
+  it('falls back to opening Summit when no valid session ID is present', () => {
+    const open = jest.fn();
+    observeNotificationResponses(open);
+    const listener = Notifications.addNotificationResponseReceivedListener.mock.calls[0][0];
+
+    listener(response({ sessionId: 'x'.repeat(257), body: 'must not be read' }));
+
+    expect(open).toHaveBeenCalledWith({ sessionId: null });
   });
 });

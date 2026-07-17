@@ -123,10 +123,10 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   const adapterFor = useCallback((agent: Agent): AgentAdapter => {
     const cached = adapterCache.current.get(agent.id);
     if (cached) return cached;
-    const adapter = makeAdapter(agent);
+    const adapter = makeAdapter(agent, undefined, repo);
     adapterCache.current.set(agent.id, adapter);
     return adapter;
-  }, []);
+  }, [repo]);
 
   const activeAgent = resolveActive(agents, activeId);
 

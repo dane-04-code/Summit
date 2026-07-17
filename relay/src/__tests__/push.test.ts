@@ -22,14 +22,20 @@ describe('register_push', () => {
     const { state, effects } = handleAppMessage(paired(), {
       t: 'register_push',
       token: 'ExponentPushToken[t1]',
+      mode: 'all',
     }, {}, true);
     expect(state.pushToken).toBe('ExponentPushToken[t1]');
     expect(effects).toEqual([]);
   });
 
   it('is never forwarded to the connector', () => {
-    const { effects } = handleAppMessage(paired(), { t: 'register_push', token: 'x' }, {}, true);
+    const { effects } = handleAppMessage(paired(), { t: 'register_push', token: 'x', mode: 'all' }, {}, true);
     expect(effects.find((e) => e.to === 'connector')).toBeUndefined();
+  });
+
+  it('updates the notification policy without replacing a saved token', () => {
+    const { state } = handleAppMessage(away(), { t: 'register_push', mode: 'attention' }, {}, true);
+    expect(state).toMatchObject({ pushToken: 'ExponentPushToken[t1]', notificationMode: 'attention' });
   });
 });
 
@@ -48,14 +54,31 @@ describe('app presence tracking', () => {
 });
 
 describe('push on turn completion', () => {
-  it('pushes a content-free notification when done arrives with the app away', () => {
-    const { effects } = handleConnectorMessage(away(), { t: 'done', reqId: 'r1' });
+  it('pushes a content-free notification with the local session id when done arrives away', () => {
+    const { effects } = handleConnectorMessage(away(), { t: 'done', reqId: 'r1', sessionId: 'session-1' });
     expect(effects).toContainEqual({
       to: 'push',
       token: 'ExponentPushToken[t1]',
       title: 'Hermes',
       body: 'Finished a reply — open Summit to read it.',
+      data: { sessionId: 'session-1' },
     });
+  });
+
+  it('does not push completed replies in attention-only mode', () => {
+    const { effects } = handleConnectorMessage(
+      { ...away(), notificationMode: 'attention' },
+      { t: 'done', reqId: 'r1' },
+    );
+    expect(effects.find((effect) => effect.to === 'push')).toBeUndefined();
+  });
+
+  it('does not push any event when notifications are off', () => {
+    const { effects } = handleConnectorMessage(
+      { ...away(), notificationMode: 'off' },
+      { t: 'approval_req', approvalId: 'approval-1', command: 'deploy' },
+    );
+    expect(effects.find((effect) => effect.to === 'push')).toBeUndefined();
   });
 
   it('pushes when an error ends the turn with the app away', () => {

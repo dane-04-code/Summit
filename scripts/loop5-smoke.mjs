@@ -39,7 +39,7 @@ ws.addEventListener('message', (event) => {
     case 'paired':
       paired = true;
       console.log(`✓ paired — framework=${frame.framework} name=${frame.agentName}`);
-      ws.send(JSON.stringify({ t: 'register_push', token: 'ExponentPushToken[smoke]' }));
+      ws.send(JSON.stringify({ t: 'register_push', token: 'ExponentPushToken[smoke]', mode: 'all' }));
       console.log('✓ registered push token');
       ws.send(
         JSON.stringify({ t: 'chat', reqId: 's1', messages: [{ role: 'user', content: 'ping' }] }),

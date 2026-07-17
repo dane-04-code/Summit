@@ -96,7 +96,7 @@ describe('registerPush()', () => {
   it('sends a register_push frame with the token', async () => {
     client = new RelayClient('ws://localhost:8787?code=111111');
     markAuthenticated(client);
-    const promise = client.registerPush('ExponentPushToken[t1]');
+    const promise = client.registerPush('ExponentPushToken[t1]', 'all');
     await flush();
     mockWs.openNow();
     await flush();
@@ -104,6 +104,7 @@ describe('registerPush()', () => {
     expect(JSON.parse(mockWs.sent[0])).toEqual({
       t: 'register_push',
       token: 'ExponentPushToken[t1]',
+      mode: 'all',
     });
   });
 });

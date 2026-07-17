@@ -91,3 +91,61 @@ export function initNotificationHandling(): void {
     // push is an enhancement — carry on
   }
 }
+
+export type NotificationDestination = {
+  /**
+   * Present only for thread-aware pushes. This is an opaque local session ID,
+   * never agent output or a credential.
+   */
+  sessionId: string | null;
+};
+
+function destinationFromResponse(response: unknown): NotificationDestination {
+  const data = (response as {
+    notification?: { request?: { content?: { data?: unknown } } };
+  })?.notification?.request?.content?.data;
+  const sessionId =
+    data && typeof data === 'object' && typeof (data as { sessionId?: unknown }).sessionId === 'string'
+      ? (data as { sessionId: string }).sessionId
+      : null;
+
+  // Keep notification data bounded before it reaches the router. Session IDs
+  // are app-generated opaque strings; message text is intentionally ignored.
+  return { sessionId: sessionId && sessionId.length <= 256 ? sessionId : null };
+}
+
+/**
+ * Deliver notification taps to the router. This covers both a tap while the
+ * app is running and a cold start caused by a tap. A notification with no
+ * recognised metadata still opens Summit; future relay payloads can attach a
+ * `sessionId` without putting any chat content into Expo/APNs/FCM.
+ */
+export function observeNotificationResponses(
+  onOpen: (destination: NotificationDestination) => void,
+): () => void {
+  if (!pushSupported()) return () => {};
+  try {
+    const Notifications = require('expo-notifications') as typeof import('expo-notifications');
+    const delivered = new Set<string>();
+    const deliver = (response: import('expo-notifications').NotificationResponse) => {
+      const id = response.notification.request.identifier;
+      if (delivered.has(id)) return;
+      delivered.add(id);
+      onOpen(destinationFromResponse(response));
+    };
+
+    const subscription = Notifications.addNotificationResponseReceivedListener(deliver);
+    const lastResponse = Notifications.getLastNotificationResponse();
+    if (lastResponse) {
+      deliver(lastResponse);
+      Notifications.clearLastNotificationResponse();
+    }
+
+    return () => {
+      subscription.remove();
+    };
+  } catch {
+    // As with registration, native notification support is optional.
+    return () => {};
+  }
+}

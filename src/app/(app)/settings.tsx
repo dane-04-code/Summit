@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView, View, Text, Pressable, StyleSheet, Alert, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import Constants from 'expo-constants';
-import { Bot, Clock, ChevronRight } from 'lucide-react-native';
+import { Bell, Bot, Clock, ChevronRight } from 'lucide-react-native';
 
 import { useAuth } from '@/context/AuthContext';
 import { useAgents } from '@/agents/AgentProvider';
@@ -110,6 +110,18 @@ export default function Settings() {
               icon={<Clock size={17} color={colors.ink} strokeWidth={1.5} />}
               label="History & data"
               onPress={() => router.push('/(app)/data' as '/')}
+            />
+          </Card>
+        </View>
+
+        <View style={styles.group}>
+          <SectionLabel>Notifications</SectionLabel>
+          <Card>
+            <Row
+              icon={<Bell size={17} color={colors.ink} strokeWidth={1.5} />}
+              label="Notifications"
+              sublabel="Choose what this agent can send while you are away"
+              onPress={() => router.push('/(app)/notifications' as '/')}
             />
           </Card>
         </View>

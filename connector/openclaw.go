@@ -428,6 +428,7 @@ func latestUserMessage(msgs []ChatMessage) string {
 func handleChatOpenClaw(conn *websocket.Conn, writeMu *sync.Mutex, f Frame, oc *ocClient) {
 	for frame := range oc.chat(latestUserMessage(f.Messages), f.ReqID) {
 		frame.ReqID = f.ReqID
+		frame.SessionID = f.SessionID
 		if err := writeFrame(conn, writeMu, frame); err != nil {
 			return
 		}

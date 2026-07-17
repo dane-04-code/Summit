@@ -1,4 +1,10 @@
-import type { AnyFrame, PairedFrame, PairErrorFrame, PeerGoneFrame } from '../../protocol/protocol';
+import type {
+  AnyFrame,
+  NotificationMode,
+  PairedFrame,
+  PairErrorFrame,
+  PeerGoneFrame,
+} from '../../protocol/protocol';
 
 export type ConnectorInfo = { framework: string; agentName: string; agentVersion: string };
 
@@ -8,6 +14,8 @@ export type ChannelState = {
   connectorConnected: boolean;
   /** Expo push token registered by the app; survives hibernation + reconnects. */
   pushToken: string | null;
+  /** The device's chosen relay-notification policy. */
+  notificationMode: NotificationMode;
   /** Whether an app socket is currently attached — pushes only fire when it isn't. */
   appConnected: boolean;
   /** When the 6-digit code stops being usable for pairing (short-lived handshake). */
@@ -42,7 +50,7 @@ const defaultMintToken = () => {
 export type SideEffect =
   | { to: 'connector'; frame: AnyFrame }
   | { to: 'app'; frame: AnyFrame }
-  | { to: 'push'; token: string; title: string; body: string };
+  | { to: 'push'; token: string; title: string; body: string; data?: { sessionId?: string } };
 
 export type HandleResult = { state: ChannelState; effects: SideEffect[]; occupied?: boolean };
 
@@ -56,6 +64,7 @@ export function makeInitialState(): ChannelState {
     connectorInfo: null,
     connectorConnected: false,
     pushToken: null,
+    notificationMode: 'all',
     appConnected: false,
     codeExpiresAt: null,
     sessionToken: null,
@@ -81,13 +90,25 @@ export function handleAppOpen(state: ChannelState): ChannelState {
 }
 
 /** Push effect for an agent event, or null when the app is watching / no token. */
-function pushFor(state: ChannelState, title: string | undefined, body: string | undefined): SideEffect | null {
-  if (state.appConnected || !state.pushToken) return null;
+function pushFor(
+  state: ChannelState,
+  kind: 'reply' | 'attention',
+  title: string | undefined,
+  body: string | undefined,
+  sessionId?: string,
+): SideEffect | null {
+  if (
+    state.appConnected
+    || !state.pushToken
+    || state.notificationMode === 'off'
+    || (state.notificationMode === 'attention' && kind === 'reply')
+  ) return null;
   return {
     to: 'push',
     token: state.pushToken,
     title: title || state.connectorInfo?.agentName || 'Your agent',
     body: body || 'Needs your attention.',
+    ...(sessionId ? { data: { sessionId } } : {}),
   };
 }
 
@@ -116,7 +137,7 @@ export function handleConnectorMessage(state: ChannelState, frame: AnyFrame, now
     if (state.appConnected) {
       return { state, effects: [{ to: 'app', frame }] };
     }
-    const push = pushFor(state, frame.title, frame.body);
+    const push = pushFor(state, 'attention', frame.title, frame.body);
     return { state, effects: push ? [push] : [] };
   }
   // chunk / done / error — forward to app; a finished turn the app didn't see
@@ -124,15 +145,15 @@ export function handleConnectorMessage(state: ChannelState, frame: AnyFrame, now
   // Expo/Apple servers; the transcript is on-device only).
   const effects: SideEffect[] = [{ to: 'app', frame }];
   if (frame.t === 'done') {
-    const push = pushFor(state, undefined, 'Finished a reply — open Summit to read it.');
+    const push = pushFor(state, 'reply', undefined, 'Finished a reply — open Summit to read it.', frame.sessionId);
     if (push) effects.push(push);
   } else if (frame.t === 'error') {
-    const push = pushFor(state, undefined, 'Hit a problem and needs you.');
+    const push = pushFor(state, 'attention', undefined, 'Hit a problem and needs you.', frame.sessionId);
     if (push) effects.push(push);
   } else if (frame.t === 'approval_req') {
     // A blocked run waiting on the user is the strongest push case of all —
     // but the command stays out of the notification (content-free).
-    const push = pushFor(state, undefined, 'Waiting for your approval.');
+    const push = pushFor(state, 'attention', undefined, 'Waiting for your approval.');
     if (push) effects.push(push);
   }
   return { state, effects };
@@ -197,7 +218,14 @@ export function handleAppMessage(
     };
   }
   if (frame.t === 'register_push') {
-    return { state: { ...state, pushToken: frame.token }, effects: [] };
+    return {
+      state: {
+        ...state,
+        ...(frame.token ? { pushToken: frame.token } : {}),
+        notificationMode: frame.mode,
+      },
+      effects: [],
+    };
   }
   // chat — forward to connector
   return { state, effects: [{ to: 'connector', frame }] };
