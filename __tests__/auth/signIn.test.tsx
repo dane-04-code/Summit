@@ -3,6 +3,7 @@ import { act, render, screen, fireEvent } from '@testing-library/react-native';
 
 const mockSignIn = jest.fn();
 jest.mock('@/lib/supabase', () => ({
+  SUPABASE_CONFIGURED: true,
   supabase: { auth: { signInWithPassword: (...a: unknown[]) => mockSignIn(...a) } },
 }));
 jest.mock('expo-apple-authentication', () => ({

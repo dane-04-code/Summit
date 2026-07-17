@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { SUPABASE_CONFIGURED, supabase } from '@/lib/supabase';
 
 type AuthContextValue = {
   session: Session | null;
@@ -18,9 +18,11 @@ const AuthContext = createContext<AuthContextValue>({
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(SUPABASE_CONFIGURED);
 
   useEffect(() => {
+    if (!SUPABASE_CONFIGURED) return;
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);

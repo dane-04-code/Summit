@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, useRouter } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { supabase } from '@/lib/supabase';
+import { SUPABASE_CONFIGURED, supabase } from '@/lib/supabase';
 import { SIGNUP_ENABLED } from '@/config';
 import { BrandMark } from '@/ui/BrandMark';
 import { EyeIcon, AppleLogo } from '@/ui/authIcons';
@@ -52,6 +52,10 @@ export default function SignUpScreen() {
 
   async function handleSignUp() {
     setError(null);
+    if (!SUPABASE_CONFIGURED) {
+      setError('Sign up is not configured for this build yet.');
+      return;
+    }
     setLoading(true);
     const { error } = await supabase.auth.signUp({
       email: email.trim(),
@@ -65,6 +69,10 @@ export default function SignUpScreen() {
 
   async function handleApple() {
     setError(null);
+    if (!SUPABASE_CONFIGURED) {
+      setError('Sign in is not configured for this build yet.');
+      return;
+    }
     try {
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [

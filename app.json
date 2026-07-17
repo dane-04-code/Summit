@@ -12,7 +12,6 @@
       "bundleIdentifier": "com.dane04code.agentmessenger",
       "entitlements": {
         "com.apple.developer.applesignin": [
-          "Default",
           "Default"
         ]
       },
