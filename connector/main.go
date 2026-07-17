@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,22 +16,23 @@ import (
 
 // Frame is the shared JSON envelope for all relay protocol messages.
 type Frame struct {
-	T            string        `json:"t"`
-	Framework    string        `json:"framework,omitempty"`
-	AgentName    string        `json:"agentName,omitempty"`
-	AgentVersion string        `json:"agentVersion,omitempty"`
-	Code         string        `json:"code,omitempty"`
-	ReqID        string        `json:"reqId,omitempty"`
-	Delta        string        `json:"delta,omitempty"`
-	Message      string        `json:"message,omitempty"`
-	Messages     []ChatMessage `json:"messages,omitempty"`
-	SessionID    string        `json:"sessionId,omitempty"`
-	SessionKey   string        `json:"sessionKey,omitempty"`
-	Method       string        `json:"method,omitempty"`
-	Path         string        `json:"path,omitempty"`
-	Status       int           `json:"status,omitempty"`
-	Body         string        `json:"body,omitempty"`
-	Title        string        `json:"title,omitempty"`
+	T              string        `json:"t"`
+	Framework      string        `json:"framework,omitempty"`
+	AgentName      string        `json:"agentName,omitempty"`
+	AgentVersion   string        `json:"agentVersion,omitempty"`
+	Code           string        `json:"code,omitempty"`
+	ConnectorToken string        `json:"connectorToken,omitempty"`
+	ReqID          string        `json:"reqId,omitempty"`
+	Delta          string        `json:"delta,omitempty"`
+	Message        string        `json:"message,omitempty"`
+	Messages       []ChatMessage `json:"messages,omitempty"`
+	SessionID      string        `json:"sessionId,omitempty"`
+	SessionKey     string        `json:"sessionKey,omitempty"`
+	Method         string        `json:"method,omitempty"`
+	Path           string        `json:"path,omitempty"`
+	Status         int           `json:"status,omitempty"`
+	Body           string        `json:"body,omitempty"`
+	Title          string        `json:"title,omitempty"`
 	// Push approvals (OpenClaw): connector → app `approval_req`, app →
 	// connector `approval_resolve` with decision approve|deny.
 	ApprovalID string `json:"approvalId,omitempty"`
@@ -99,26 +101,28 @@ func main() {
 	}
 }
 
-func savedPairingCode() string {
+func savedRelayIdentity() (string, string) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ""
+		return "", ""
 	}
-	data, err := os.ReadFile(filepath.Join(home, ".summit", "pairing_code"))
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(data))
+	dir := filepath.Join(home, ".summit")
+	code, _ := os.ReadFile(filepath.Join(dir, "pairing_code"))
+	token, _ := os.ReadFile(filepath.Join(dir, "connector_token"))
+	return strings.TrimSpace(string(code)), strings.TrimSpace(string(token))
 }
 
 func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, openclawToken string, notify *notifier) error {
 	target := relayURL
-	if code := savedPairingCode(); code != "" {
-		target += "?claim=" + code
+	if code, token := savedRelayIdentity(); code != "" {
+		target += "?claim=" + url.QueryEscape(code)
+		if token != "" {
+			target += "&token=" + url.QueryEscape(token)
+		}
 	}
 	conn, _, err := websocket.DefaultDialer.Dial(target, nil)
 	if err != nil {
-		return fmt.Errorf("dial relay %s: %w", target, err)
+		return fmt.Errorf("dial relay %s: %w", relayURL, err)
 	}
 	defer conn.Close()
 	var writeMu sync.Mutex
@@ -178,11 +182,12 @@ func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, open
 		}
 		switch f.T {
 		case "code":
-			fmt.Printf("\n┌──────────────────────────┐\n│   Pairing code: %-6s   │\n└──────────────────────────┘\n\nEnter this code in the Summit app.\n\n", f.Code)
+			fmt.Printf("\n┌──────────────────────────┐\n│   Pairing code: %-6s   │\n└──────────────────────────┘\n\nEnter this code in the Summit app. Never share it with anyone else.\n\n", f.Code)
 			if home, err := os.UserHomeDir(); err == nil {
 				dir := filepath.Join(home, ".summit")
 				os.MkdirAll(dir, 0700)
 				os.WriteFile(filepath.Join(dir, "pairing_code"), []byte(f.Code+"\n"), 0600)
+				os.WriteFile(filepath.Join(dir, "connector_token"), []byte(f.ConnectorToken+"\n"), 0600)
 			}
 		case "chat":
 			if oc != nil {

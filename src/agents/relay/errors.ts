@@ -12,15 +12,17 @@ export type RelayErrorCode =
   | 'code_not_found' // relay has no connector waiting on this code
   | 'code_expired' // the pairing code has aged out
   | 'already_paired' // the code was already claimed
+  | 'code_locked' // too many attempts against this pairing channel
   | 'agent_disconnected'; // the connector dropped mid-handshake
 
 export const RELAY_ERROR_MESSAGES: Record<RelayErrorCode, string> = {
   relay_unreachable:
-    'Agent disconnected. Check that the connector is running and try again.',
+    "Can't reach the Summit relay. Check your internet connection and try again.",
   code_not_found:
     "That code wasn't found. Make sure your agent's connector is still running, then re-check the code.",
   code_expired: 'That pairing code has expired. Ask your agent for a fresh code.',
   already_paired: 'That code was already used. Ask your agent for a new one.',
+  code_locked: 'Too many attempts. Wait 15 minutes, then ask your agent for a new code.',
   agent_disconnected:
     'Your agent went offline. Restart the connector and try again.',
 };
@@ -34,7 +36,8 @@ export function isPairingCodeError(code: RelayErrorCode): boolean {
   return (
     code === 'code_not_found' ||
     code === 'code_expired' ||
-    code === 'already_paired'
+    code === 'already_paired' ||
+    code === 'code_locked'
   );
 }
 

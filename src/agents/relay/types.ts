@@ -1,10 +1,11 @@
 /** App-side relay protocol types. Mirror of /protocol/protocol.ts — keep in sync. */
 
 export type HelloFrame      = { t: 'hello'; framework: string; agentName: string; agentVersion: string };
-export type CodeFrame       = { t: 'code'; code: string };
+export type CodeFrame       = { t: 'code'; code: string; connectorToken: string };
 export type PairFrame       = { t: 'pair'; code: string };
-export type PairedFrame     = { t: 'paired'; framework: string; agentName: string; agentVersion: string };
-export type PairErrorFrame  = { t: 'pair_error'; reason: 'not_found' | 'expired' | 'already_paired' };
+export type ResumeFrame     = { t: 'resume'; token: string };
+export type PairedFrame     = { t: 'paired'; framework: string; agentName: string; agentVersion: string; sessionToken: string };
+export type PairErrorFrame  = { t: 'pair_error'; reason: 'not_found' | 'expired' | 'already_paired' | 'locked' };
 export type PeerGoneFrame   = { t: 'peer_gone' };
 export type PingFrame       = { t: 'ping' };
 export type PongFrame       = { t: 'pong' };
@@ -30,7 +31,7 @@ export type ApprovalReqFrame     = { t: 'approval_req'; approvalId: string; comm
 export type ApprovalResolveFrame = { t: 'approval_resolve'; approvalId: string; decision: 'approve' | 'deny' };
 
 export type AnyFrame =
-  | HelloFrame | CodeFrame | PairFrame | PairedFrame | PairErrorFrame
+  | HelloFrame | CodeFrame | PairFrame | ResumeFrame | PairedFrame | PairErrorFrame
   | PeerGoneFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | DoneFrame | ErrorFrame
   | ApiReqFrame | ApiResFrame | RegisterPushFrame | NotifyFrame
   | ApprovalReqFrame | ApprovalResolveFrame;

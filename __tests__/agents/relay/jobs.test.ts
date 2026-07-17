@@ -2,11 +2,11 @@
 // calls and reuses the shared normalizers — without touching a real WebSocket.
 
 const mockRequest = jest.fn();
-const mockPair = jest.fn().mockResolvedValue({ framework: 'hermes', agentName: 'H', agentVersion: '1' });
+const mockResume = jest.fn().mockResolvedValue({ framework: 'hermes', agentName: 'H', agentVersion: '1' });
 
 jest.mock('@/agents/relay/client', () => ({
   RelayClient: jest.fn().mockImplementation(() => ({
-    pair: mockPair,
+    resume: mockResume,
     request: mockRequest,
     disconnect: jest.fn(),
     subscribeConnectionState: jest.fn(() => () => {}),
@@ -29,7 +29,10 @@ const agent: Agent = {
 };
 
 function makeAdapter() {
-  return new RelayAdapter(agent, async () => '123456');
+  return new RelayAdapter(
+    agent,
+    async () => JSON.stringify({ code: '123456', token: 't'.repeat(43) }),
+  );
 }
 
 beforeEach(() => {

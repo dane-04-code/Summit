@@ -86,9 +86,11 @@ does not run agents or store transcripts (beyond what's needed in flight).
 
 - **Connector → relay:** the connector dials out over a persistent WebSocket, authenticates, and
   registers the agent.
-- **App → relay:** the app holds a per-device token and connects over WebSocket.
+- **App → relay:** the app holds a private 256-bit per-device token in Keychain and connects over
+  WebSocket. The relay authenticates it before forwarding chat, API, approval, or push frames.
 - **Pairing:** the connector surfaces a short-lived, single-use **6-digit code** (or QR). The user
-  enters it in the app; the relay binds that app device to that agent.
+  enters it in the app; the relay binds that app device to that agent and replaces the code with
+  separate 256-bit app and connector credentials. The code is never a persistent login secret.
 - **Forwarding:** chat messages, streamed response chunks, tool-progress events, status, and
   run/approval events all flow as WebSocket frames in both directions.
 

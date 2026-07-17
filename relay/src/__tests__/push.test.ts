@@ -22,13 +22,13 @@ describe('register_push', () => {
     const { state, effects } = handleAppMessage(paired(), {
       t: 'register_push',
       token: 'ExponentPushToken[t1]',
-    });
+    }, {}, true);
     expect(state.pushToken).toBe('ExponentPushToken[t1]');
     expect(effects).toEqual([]);
   });
 
   it('is never forwarded to the connector', () => {
-    const { effects } = handleAppMessage(paired(), { t: 'register_push', token: 'x' });
+    const { effects } = handleAppMessage(paired(), { t: 'register_push', token: 'x' }, {}, true);
     expect(effects.find((e) => e.to === 'connector')).toBeUndefined();
   });
 });

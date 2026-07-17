@@ -6,7 +6,22 @@ import {
   handleAppMessage,
   handleConnectorClose,
   handleAppClose,
+  credentialMatches,
 } from '../logic';
+
+describe('durable credentials', () => {
+  const token = 't'.repeat(43);
+
+  it('accepts only the complete strong credential', () => {
+    expect(credentialMatches(token, token)).toBe(true);
+    expect(credentialMatches(token, `${token.slice(0, -1)}x`)).toBe(false);
+    expect(credentialMatches(token, null)).toBe(false);
+  });
+
+  it('never treats a short pairing code as a durable credential', () => {
+    expect(credentialMatches('481920', '481920')).toBe(false);
+  });
+});
 
 describe('handleConnectorOpen', () => {
   it('stores the code with no effects (waits for hello)', () => {
@@ -24,7 +39,7 @@ describe('handleConnectorOpen', () => {
 
 describe('handleConnectorMessage — hello', () => {
   it('stores connector info and replies with code', () => {
-    const base = { ...makeInitialState(), code: '111111' };
+    const base = { ...makeInitialState(), code: '111111', connectorToken: 'c'.repeat(43) };
     const { state, effects } = handleConnectorMessage(
       base,
       { t: 'hello', framework: 'hermes', agentName: 'My Agent', agentVersion: '2.1' },
@@ -33,7 +48,8 @@ describe('handleConnectorMessage — hello', () => {
     expect(state.connectorInfo).toEqual({ framework: 'hermes', agentName: 'My Agent', agentVersion: '2.1' });
     // The code's short life starts when it's advertised (10-minute TTL).
     expect(state.codeExpiresAt).toBe(5_000 + 10 * 60_000);
-    expect(effects).toEqual([{ to: 'connector', frame: { t: 'code', code: '111111' } }]);
+    expect(effects[0]).toMatchObject({ to: 'connector', frame: { t: 'code', code: '111111' } });
+    expect(state.connectorToken).toBe('c'.repeat(43));
   });
 });
 
@@ -119,9 +135,15 @@ describe('handleAppMessage — passthrough', () => {
     expect(effects).toEqual([{ to: 'app', frame: { t: 'pong' } }]);
   });
 
-  it('forwards chat to connector', () => {
+  it('rejects chat before relay authentication', () => {
     const chat = { t: 'chat' as const, reqId: 'r1', messages: [{ role: 'user' as const, content: 'hi' }] };
     const { effects } = handleAppMessage(makeInitialState(), chat);
+    expect(effects).toEqual([{ to: 'app', frame: { t: 'error', message: 'Relay authentication required.' } }]);
+  });
+
+  it('forwards chat after relay authentication', () => {
+    const chat = { t: 'chat' as const, reqId: 'r1', messages: [{ role: 'user' as const, content: 'hi' }] };
+    const { effects } = handleAppMessage(makeInitialState(), chat, {}, true);
     expect(effects).toEqual([{ to: 'connector', frame: chat }]);
   });
 });

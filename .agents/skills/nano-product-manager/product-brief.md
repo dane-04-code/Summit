@@ -54,7 +54,9 @@ than the Telegram bot we replace* — disqualifying.
 - A small **connector sidecar** runs next to Hermes (Hermes can't dial out itself), talks to
   `localhost:8642`, and dials **outbound** to a relay we operate. The app connects to the relay.
   The relay is the meeting point — nothing on the user's network is exposed.
-- **Pairing = a 6-digit code.** No host URL, no API key on the phone, no accounts.
+- **Pairing = a 6-digit code.** It is a short-lived, single-use handshake only. Successful pairing
+  replaces it with private 256-bit app and connector credentials; the phone keeps its credential
+  in Keychain. No host URL or agent API key is needed on the phone.
 - **Agent-assisted onboarding (headline path):** the user pastes a prompt to their agent; the agent
   installs its own connector (deterministic one-liner, daemonized as a service) and reads back the
   6-digit code. The agent gives itself a phone.

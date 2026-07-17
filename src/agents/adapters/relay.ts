@@ -7,6 +7,7 @@ import { readJobRunResponse, readJobsResponse } from './jobs';
 import { RELAY_WS_URL } from '@/config';
 import { resolvePushToken } from '@/notifications/push';
 import { captureError } from '@/lib/errorReporting';
+import { decodeRelayCredential } from '../relay/credential';
 
 const enc = encodeURIComponent;
 
@@ -33,6 +34,7 @@ export class RelayAdapter implements AgentAdapter {
   readonly framework: AgentFramework;
   private client: RelayClient | null = null;
   private pairingCode: string | null = null;
+  private requestCounter = 0;
   private connectionState: ConnectionState = 'unknown';
   private listeners: Array<(state: ConnectionState) => void> = [];
 
@@ -46,12 +48,13 @@ export class RelayAdapter implements AgentAdapter {
 
   private async ensureConnected(): Promise<RelayClient> {
     if (this.client) return this.client;
-    const code = await this.getSecret();
-    if (!code) throw new Error('No pairing code stored for this agent.');
-    const wsUrl = `${RELAY_WS_URL}?code=${encodeURIComponent(code)}`;
+    const secret = await this.getSecret();
+    if (!secret) throw new Error('No relay credential stored for this agent.');
+    const { code, token } = decodeRelayCredential(secret);
+    const wsUrl = `${RELAY_WS_URL}?code=${encodeURIComponent(code)}&token=${encodeURIComponent(token)}`;
     const client = new RelayClient(wsUrl);
     client.subscribeConnectionState((state) => this.setConnectionState(state));
-    await client.pair(code);
+    await client.resume(token);
     this.client = client;
     this.pairingCode = code;
     this.registerPushToken(client);
@@ -92,7 +95,7 @@ export class RelayAdapter implements AgentAdapter {
   async *sendMessage(content: string, opts?: SendOptions): AsyncIterable<StreamEvent> {
     const client = await this.ensureConnected();
     const messages: ChatMessage[] = [{ role: 'user', content }];
-    const reqId = String(Date.now());
+    const reqId = `req-${++this.requestCounter}`;
     // Use the pairing code as a stable session ID — same device always maps to
     // the same Hermes session, giving persistent memory across chats like Telegram.
     yield* client.chat(messages, reqId, this.pairingCode ?? undefined, opts?.sessionKey);

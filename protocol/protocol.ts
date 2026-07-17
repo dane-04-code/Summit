@@ -1,7 +1,7 @@
 /** Canonical relay protocol frame types. Relay imports from here directly. */
 
 export type HelloFrame      = { t: 'hello'; framework: string; agentName: string; agentVersion: string };
-export type CodeFrame       = { t: 'code'; code: string };
+export type CodeFrame       = { t: 'code'; code: string; connectorToken: string };
 export type PairFrame       = { t: 'pair'; code: string };
 // Reconnect with the durable session token issued at pair time — the code is
 // single-use and short-lived, so the token (not the code) is the credential

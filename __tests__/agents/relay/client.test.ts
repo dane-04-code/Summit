@@ -29,6 +29,11 @@ let mockWs: MockWebSocket;
 let client: RelayClient;
 const OriginalWebSocket = (globalThis as any).WebSocket;
 
+function markAuthenticated(target: RelayClient) {
+  // Stream-routing tests start after the separately tested relay handshake.
+  (target as any).paired = true;
+}
+
 beforeEach(() => {
   mockWs = new MockWebSocket();
   (globalThis as any).WebSocket = jest.fn(() => mockWs);
@@ -49,9 +54,9 @@ describe('pair()', () => {
     await flush();
     expect(JSON.parse(mockWs.sent[0])).toEqual({ t: 'pair', code: '111111' });
 
-    mockWs.receive({ t: 'paired', framework: 'hermes', agentName: 'My Agent', agentVersion: '2.1' });
+    mockWs.receive({ t: 'paired', framework: 'hermes', agentName: 'My Agent', agentVersion: '2.1', sessionToken: 't'.repeat(43) });
     const info = await promise;
-    expect(info).toEqual({ framework: 'hermes', agentName: 'My Agent', agentVersion: '2.1' });
+    expect(info).toEqual({ framework: 'hermes', agentName: 'My Agent', agentVersion: '2.1', sessionToken: 't'.repeat(43) });
   });
 
   it.each([
@@ -90,7 +95,9 @@ describe('pair()', () => {
 describe('registerPush()', () => {
   it('sends a register_push frame with the token', async () => {
     client = new RelayClient('ws://localhost:8787?code=111111');
+    markAuthenticated(client);
     const promise = client.registerPush('ExponentPushToken[t1]');
+    await flush();
     mockWs.openNow();
     await flush();
     await promise;
@@ -101,9 +108,49 @@ describe('registerPush()', () => {
   });
 });
 
+describe('resume()', () => {
+  it('authenticates with the durable device token', async () => {
+    client = new RelayClient('ws://localhost:8787?code=111111&token=durable-token');
+    const promise = client.resume('durable-token');
+    mockWs.openNow();
+    await flush();
+    expect(JSON.parse(mockWs.sent[0])).toEqual({ t: 'resume', token: 'durable-token' });
+
+    mockWs.receive({
+      t: 'paired',
+      framework: 'hermes',
+      agentName: 'My Agent',
+      agentVersion: '2.1',
+      sessionToken: 'durable-token',
+    });
+    await expect(promise).resolves.toMatchObject({ sessionToken: 'durable-token' });
+  });
+});
+
 describe('chat()', () => {
+  it('yields an error after a period with no frames', async () => {
+    client = new RelayClient('ws://localhost:8787?code=111111', 10);
+    markAuthenticated(client);
+
+    const events: object[] = [];
+    const collecting = (async () => {
+      for await (const ev of client.chat([{ role: 'user', content: 'hi' }], 'req-timeout')) {
+        events.push(ev);
+      }
+    })();
+
+    await flush();
+    mockWs.openNow();
+    await collecting;
+
+    expect(events).toEqual([
+      { type: 'error', message: 'The agent stopped responding. Try again.' },
+    ]);
+  });
+
   it('yields delta events then done', async () => {
     client = new RelayClient('ws://localhost:8787?code=111111');
+    markAuthenticated(client);
 
     const events: object[] = [];
     const gen = client.chat([{ role: 'user', content: 'hi' }], 'req-1');
@@ -130,6 +177,7 @@ describe('chat()', () => {
 
   it('yields error event on error frame', async () => {
     client = new RelayClient('ws://localhost:8787?code=111111');
+    markAuthenticated(client);
 
     const events: object[] = [];
     const gen = client.chat([{ role: 'user', content: 'hi' }], 'req-2');
@@ -146,6 +194,7 @@ describe('chat()', () => {
 
   it('yields an approval event on approval_req and keeps streaming', async () => {
     client = new RelayClient('ws://localhost:8787?code=111111');
+    markAuthenticated(client);
 
     const events: object[] = [];
     const gen = client.chat([{ role: 'user', content: 'deploy' }], 'req-4');
@@ -172,6 +221,7 @@ describe('chat()', () => {
 
   it('yields error event on peer_gone', async () => {
     client = new RelayClient('ws://localhost:8787?code=111111');
+    markAuthenticated(client);
 
     const events: object[] = [];
     const gen = client.chat([{ role: 'user', content: 'hi' }], 'req-3');
@@ -190,7 +240,9 @@ describe('chat()', () => {
 describe('resolveApproval()', () => {
   it('sends an approval_resolve frame with the decision', async () => {
     client = new RelayClient('ws://localhost:8787?code=111111');
+    markAuthenticated(client);
     const promise = client.resolveApproval('ap-1', 'approve');
+    await flush();
     mockWs.openNow();
     await flush();
     await promise;

@@ -6,9 +6,10 @@ const PAIR_ERROR_CODE: Record<PairErrorFrame['reason'], RelayErrorCode> = {
   not_found: 'code_not_found',
   expired: 'code_expired',
   already_paired: 'already_paired',
+  locked: 'code_locked',
 };
 
-export type RelayAgentInfo = { framework: string; agentName: string; agentVersion: string };
+export type RelayAgentInfo = { framework: string; agentName: string; agentVersion: string; sessionToken: string };
 
 export class RelayClient {
   private ws: WebSocket | null = null;
@@ -17,10 +18,14 @@ export class RelayClient {
   private stateHandlers: Array<(state: ConnectionState) => void> = [];
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private pairCode: string | null = null;
+  private resumeToken: string | null = null;
   private paired = false;
   private state: ConnectionState = 'unknown';
 
-  constructor(private readonly wsUrl: string) {}
+  constructor(
+    private readonly wsUrl: string,
+    private readonly chatInactivityMs = 120_000,
+  ) {}
 
   getConnectionState(): ConnectionState {
     return this.state;
@@ -109,7 +114,12 @@ export class RelayClient {
           this.handlers = this.handlers.filter((h) => h !== handler);
           this.paired = true;
           this.setState('connected');
-          resolve({ framework: frame.framework, agentName: frame.agentName, agentVersion: frame.agentVersion });
+          resolve({
+            framework: frame.framework,
+            agentName: frame.agentName,
+            agentVersion: frame.agentVersion,
+            sessionToken: frame.sessionToken,
+          });
         } else if (frame.t === 'pair_error') {
           this.handlers = this.handlers.filter((h) => h !== handler);
           this.setState(frame.reason === 'expired' ? 'pairing_expired' : 'disconnected');
@@ -125,26 +135,73 @@ export class RelayClient {
     });
   }
 
+  async resume(token: string): Promise<RelayAgentInfo> {
+    this.resumeToken = token;
+    const ws = await this.connect();
+    return new Promise((resolve, reject) => {
+      const handler = (frame: AnyFrame) => {
+        if (frame.t === 'paired') {
+          this.handlers = this.handlers.filter((h) => h !== handler);
+          this.paired = true;
+          this.setState('connected');
+          resolve({
+            framework: frame.framework,
+            agentName: frame.agentName,
+            agentVersion: frame.agentVersion,
+            sessionToken: frame.sessionToken,
+          });
+        } else if (frame.t === 'pair_error' || frame.t === 'peer_gone') {
+          this.handlers = this.handlers.filter((h) => h !== handler);
+          this.setState('disconnected');
+          reject(new RelayError('agent_disconnected'));
+        }
+      };
+      this.handlers.push(handler);
+      ws.send(JSON.stringify({ t: 'resume', token }));
+    });
+  }
+
+  private async authenticate(): Promise<void> {
+    if (this.paired) return;
+    if (this.resumeToken) {
+      await this.resume(this.resumeToken);
+    } else if (this.pairCode) {
+      await this.pair(this.pairCode);
+    } else {
+      throw new Error('Relay authentication required. Pair this agent again.');
+    }
+  }
+
   /**
    * Store this device's Expo push token in the pairing channel so the relay
    * can reach the phone when the app is away. Idempotent — safe on every
    * (re)connect.
    */
   async registerPush(token: string): Promise<void> {
+    await this.authenticate();
     const ws = await this.connect();
     ws.send(JSON.stringify({ t: 'register_push', token }));
   }
 
   async *chat(messages: ChatMessage[], reqId: string, sessionId?: string, sessionKey?: string): AsyncIterable<StreamEvent> {
-    if (this.pairCode && !this.paired) {
-      await this.pair(this.pairCode);
-    }
+    await this.authenticate();
     const ws = await this.connect();
     ws.send(JSON.stringify({ t: 'chat', reqId, messages, sessionId, sessionKey }));
 
     const queue: StreamEvent[] = [];
     let notify: (() => void) | null = null;
     let done = false;
+    let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const resetInactivityTimer = () => {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => {
+        queue.push({ type: 'error', message: 'The agent stopped responding. Try again.' });
+        done = true;
+        notify?.();
+        notify = null;
+      }, this.chatInactivityMs);
+    };
 
     const handler = (frame: AnyFrame) => {
       if (frame.t === 'chunk' && frame.reqId === reqId) {
@@ -166,10 +223,12 @@ export class RelayClient {
       } else {
         return;
       }
+      resetInactivityTimer();
       notify?.();
       notify = null;
     };
     this.handlers.push(handler);
+    resetInactivityTimer();
 
     try {
       while (!done || queue.length > 0) {
@@ -179,6 +238,7 @@ export class RelayClient {
         while (queue.length > 0) yield queue.shift()!;
       }
     } finally {
+      if (inactivityTimer) clearTimeout(inactivityTimer);
       this.handlers = this.handlers.filter((h) => h !== handler);
     }
   }
@@ -186,6 +246,7 @@ export class RelayClient {
   /** Answer a pushed approval. Fire-and-forget: the connector resolves it on
    * the Gateway; the suspended run continues (or is denied) from there. */
   async resolveApproval(approvalId: string, decision: 'approve' | 'deny'): Promise<void> {
+    await this.authenticate();
     const ws = await this.connect();
     ws.send(JSON.stringify({ t: 'approval_resolve', approvalId, decision }));
   }
@@ -200,9 +261,7 @@ export class RelayClient {
     path: string,
     body?: unknown,
   ): Promise<{ status: number; body: string }> {
-    if (this.pairCode && !this.paired) {
-      await this.pair(this.pairCode);
-    }
+    await this.authenticate();
     const ws = await this.connect();
     const reqId = `api-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 

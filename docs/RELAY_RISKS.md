@@ -4,6 +4,45 @@ Known failure modes in the relay stack (connector + DO + app client). Ordered by
 
 ---
 
+## P0 — Privileged app frames were accepted before authentication
+
+**Risk:** Anyone who reached a pairing channel could attempt chat, API, approval, or push-token
+frames without first proving possession of the durable device credential.
+
+**Fix:** Successful pairing now mints a 256-bit device token. The app stores the token with the
+six-digit channel locator in Keychain, resumes with it on every connection, and the relay rejects
+all privileged frames from unauthenticated sockets. Unauthenticated sockets cannot change app
+presence or notify the connector when they close.
+
+**Migration:** Development installs that stored only a six-digit code must pair once again; those
+installs discarded the previously minted token, so there is no secure credential to migrate.
+
+**Status:** Fixed ✅
+
+---
+
+## P0 — Connector reconnect used the six-digit pairing code
+
+**Risk:** The short human-readable code was being reused as connector identity.
+
+**Fix:** The relay now mints a separate 256-bit connector credential on first connection. The
+connector stores it in a mode-0600 file and must present it when reclaiming its channel.
+
+**Status:** Fixed ✅
+
+---
+
+## P1 — Relay accepted unbounded or wrong-direction frames
+
+**Risk:** Oversized or role-inappropriate frames could waste memory or reach unintended handlers.
+
+**Fix:** The Durable Object closes frames over 1 MB, malformed JSON, and frame types not allowed
+for the app/connector side.
+
+**Status:** Fixed ✅
+
+---
+
 ## P0 — Connector HTTP client has no timeout
 
 **File:** `connector/hermes.go:44–45, 16`
@@ -51,7 +90,7 @@ scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1MB limit
 
 **Fix:** Add a `setTimeout` fallback inside the generator loop that pushes `{ type: 'error' }` after ~120s of no frames on an active reqId.
 
-**Status:** Open
+**Status:** Fixed ✅
 
 ---
 
@@ -68,7 +107,7 @@ private reqCounter = 0;
 private nextReqId = () => `req-${++this.reqCounter}`;
 ```
 
-**Status:** Open
+**Status:** Fixed ✅
 
 ---
 
@@ -83,7 +122,7 @@ private nextReqId = () => `req-${++this.reqCounter}`;
 - Socket open failure → "Can't reach Summit relay. Check your internet connection."
 - `peer_gone` during pair → "Agent disconnected. Restart the connector."
 
-**Status:** Open
+**Status:** Fixed ✅
 
 ---
 
@@ -94,6 +133,6 @@ private nextReqId = () => `req-${++this.reqCounter}`;
 
 `sendPush` fires a `fetch` to `exp.host` with no timeout. If the Expo Push API is slow, the `dispatch` loop for that Durable Object stalls, delaying all subsequent connector/app frames for that pairing channel.
 
-**Fix:** Wrap the fetch in a `Promise.race` with a 5s timeout.
+**Fix:** Cancel the fetch with an `AbortController` after 5 seconds.
 
-**Status:** Open
+**Status:** Fixed ✅

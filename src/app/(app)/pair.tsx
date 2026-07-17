@@ -24,6 +24,7 @@ import { RelayError, isPairingCodeError } from '@/agents/relay/errors';
 import { captureError } from '@/lib/errorReporting';
 import { RELAY_WS_URL } from '@/config';
 import { colors, space, radius, typography } from '@/theme';
+import { encodeRelayCredential } from '@/agents/relay/credential';
 
 const AGENT_PROMPT =
   `You're connecting yourself to the Summit mobile app so I can reach you from my phone. Run this exact command, then tell me the 6-digit code it prints:\n\n    curl -fsSL https://get.summitapp.dev/connect | sh\n\nIt installs a small background connector that bridges your local API to the Summit relay. If anything errors, paste the full output back to me.`;
@@ -73,19 +74,28 @@ export default function PairScreen() {
       const client = new RelayClient(wsUrl);
       clientRef.current = client;
       const info = await client.pair(trimmed);
+      client.disconnect();
+      clientRef.current = null;
+
+      const credential = encodeRelayCredential({ code: trimmed, token: info.sessionToken });
+      const authenticatedClient = new RelayClient(
+        `${RELAY_WS_URL}?code=${encodeURIComponent(trimmed)}&token=${encodeURIComponent(info.sessionToken)}`,
+      );
+      clientRef.current = authenticatedClient;
+      await authenticatedClient.resume(info.sessionToken);
 
       // The moment of intent: you just paired an agent, so this is when the
       // permission dialog makes sense. Failure never blocks pairing — the
       // adapter re-registers on every reconnect anyway.
       try {
         const pushToken = await resolvePushToken();
-        if (pushToken) await client.registerPush(pushToken);
+        if (pushToken) await authenticatedClient.registerPush(pushToken);
       } catch (e) {
         // push is an enhancement — carry on, but let us see when it breaks
         captureError(e, { where: 'push_register', transport: 'relay' });
       }
 
-      client.disconnect();
+      authenticatedClient.disconnect();
       clientRef.current = null;
 
       // The connector announces its framework in the paired frame; capability
@@ -99,7 +109,7 @@ export default function PairScreen() {
           baseUrl: null,
           capabilities: defaultCapabilitiesFor(framework),
         },
-        trimmed,
+        credential,
       );
       router.replace('/(app)');
     } catch (e) {
@@ -257,7 +267,7 @@ export default function PairScreen() {
 
             <View style={styles.expiryRow}>
               <Check size={14} color={colors.faint} strokeWidth={1.5} />
-              <Text style={styles.expiryText}>Codes expire after 10 minutes</Text>
+              <Text style={styles.expiryText}>Expires after 10 minutes · Never share this code</Text>
             </View>
           </View>
         </ScrollView>

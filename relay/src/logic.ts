@@ -14,6 +14,8 @@ export type ChannelState = {
   codeExpiresAt: number | null;
   /** Durable credential minted at pair time; the app reconnects with this, not the code. */
   sessionToken: string | null;
+  /** Strong credential used by the connector after its first connection. */
+  connectorToken: string | null;
   /** The code is single-use: true once a successful pair has happened. */
   paired: boolean;
   /** Consecutive failed pair attempts, for lockout. */
@@ -29,7 +31,13 @@ const LOCK_MS = 15 * 60_000;
 
 /** Injected clock + token source so the pure logic stays deterministic in tests. */
 export type AppDeps = { now?: number; mintToken?: () => string };
-const defaultMintToken = () => crypto.randomUUID();
+const defaultMintToken = () => {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...bytes))
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replaceAll('=', '');
+};
 
 export type SideEffect =
   | { to: 'connector'; frame: AnyFrame }
@@ -37,6 +45,10 @@ export type SideEffect =
   | { to: 'push'; token: string; title: string; body: string };
 
 export type HandleResult = { state: ChannelState; effects: SideEffect[]; occupied?: boolean };
+
+export function credentialMatches(expected: string | null | undefined, presented: string | null): boolean {
+  return typeof expected === 'string' && expected.length >= 43 && presented === expected;
+}
 
 export function makeInitialState(): ChannelState {
   return {
@@ -47,6 +59,7 @@ export function makeInitialState(): ChannelState {
     appConnected: false,
     codeExpiresAt: null,
     sessionToken: null,
+    connectorToken: null,
     paired: false,
     failedPairs: 0,
     lockedUntil: null,
@@ -80,14 +93,16 @@ function pushFor(state: ChannelState, title: string | undefined, body: string | 
 
 export function handleConnectorMessage(state: ChannelState, frame: AnyFrame, now: number = Date.now()): HandleResult {
   if (frame.t === 'hello') {
+    const connectorToken = state.connectorToken ?? defaultMintToken();
     return {
       state: {
         ...state,
+        connectorToken,
         connectorInfo: { framework: frame.framework, agentName: frame.agentName, agentVersion: frame.agentVersion },
         // The code is only advertised now, so start its short life here.
         codeExpiresAt: now + CODE_TTL_MS,
       },
-      effects: [{ to: 'connector', frame: { t: 'code', code: state.code! } }],
+      effects: [{ to: 'connector', frame: { t: 'code', code: state.code!, connectorToken } }],
     };
   }
   if (frame.t === 'ping') {
@@ -123,16 +138,17 @@ export function handleConnectorMessage(state: ChannelState, frame: AnyFrame, now
   return { state, effects };
 }
 
-export function handleAppMessage(state: ChannelState, frame: AnyFrame, deps: AppDeps = {}): HandleResult {
+export function handleAppMessage(
+  state: ChannelState,
+  frame: AnyFrame,
+  deps: AppDeps = {},
+  authenticated = false,
+): HandleResult {
   const now = deps.now ?? Date.now();
   const mintToken = deps.mintToken ?? defaultMintToken;
 
   if (frame.t === 'ping') {
     return { state, effects: [{ to: 'app', frame: { t: 'pong' } }] };
-  }
-
-  if (frame.t === 'register_push') {
-    return { state: { ...state, pushToken: frame.token }, effects: [] };
   }
 
   if (frame.t === 'resume') {
@@ -172,6 +188,16 @@ export function handleAppMessage(state: ChannelState, frame: AnyFrame, deps: App
       state: { ...state, paired: true, sessionToken, failedPairs: 0 },
       effects: [{ to: 'app', frame: reply }],
     };
+  }
+
+  if (!authenticated) {
+    return {
+      state,
+      effects: [{ to: 'app', frame: { t: 'error', message: 'Relay authentication required.' } }],
+    };
+  }
+  if (frame.t === 'register_push') {
+    return { state: { ...state, pushToken: frame.token }, effects: [] };
   }
   // chat — forward to connector
   return { state, effects: [{ to: 'connector', frame }] };

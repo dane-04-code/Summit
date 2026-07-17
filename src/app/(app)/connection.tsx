@@ -14,6 +14,7 @@ import { RefreshCw, KeyRound, Trash2 } from 'lucide-react-native';
 
 import { useAgents } from '@/agents/AgentProvider';
 import { RelayClient } from '@/agents/relay/client';
+import { encodeRelayCredential } from '@/agents/relay/credential';
 import { RELAY_WS_URL } from '@/config';
 import type { AgentCapabilities } from '@/agents/types';
 import { SettingsScreen, SectionLabel, Card, Row } from '@/ui/settings';
@@ -98,10 +99,13 @@ export default function Connection() {
     try {
       const client = new RelayClient(`${RELAY_WS_URL}?code=${encodeURIComponent(trimmed)}`);
       clientRef.current = client;
-      await client.pair(trimmed);
+      const info = await client.pair(trimmed);
       client.disconnect();
       clientRef.current = null;
-      await repairAgent(agent.id, trimmed);
+      await repairAgent(
+        agent.id,
+        encodeRelayCredential({ code: trimmed, token: info.sessionToken }),
+      );
       setPaired(true);
       setTimeout(() => {
         setRepairing(false);

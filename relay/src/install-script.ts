@@ -179,5 +179,5 @@ echo "┌───────────────────────�
 printf "│   Pairing code: %s   │\\n" "\${digits}"
 echo "└──────────────────────────┘"
 echo ""
-echo "Enter this code in the Summit app to connect."
+echo "Enter this code in the Summit app to connect. Never share it with anyone else."
 `;
