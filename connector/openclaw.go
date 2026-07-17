@@ -101,7 +101,7 @@ func buildConnect(token string) ([]byte, string) {
 			// operator.admin is what makes the Gateway push
 			// exec.approval.requested to this client (live-verified);
 			// operator.approvals alone only allows resolving.
-			"scopes": []string{"operator.read", "operator.write", "operator.approvals", "operator.admin"},
+			"scopes":      []string{"operator.read", "operator.write", "operator.approvals", "operator.admin"},
 			"caps":        []string{},
 			"commands":    []string{},
 			"permissions": map[string]any{},
@@ -180,6 +180,7 @@ type ocClient struct {
 	turnCh     chan Frame
 	turnRunID  string
 	onApproval func(ocApproval)
+	pending    []ocApproval
 	closed     bool
 	done       chan struct{}
 	closeOnce  sync.Once
@@ -201,7 +202,12 @@ func (c *ocClient) close() error {
 func (c *ocClient) setOnApproval(fn func(ocApproval)) {
 	c.mu.Lock()
 	c.onApproval = fn
+	pending := append([]ocApproval(nil), c.pending...)
+	c.pending = nil
 	c.mu.Unlock()
+	for _, ap := range pending {
+		fn(ap)
+	}
 }
 
 // resolveApproval answers a pushed approval. The app speaks approve/deny; the
@@ -237,6 +243,9 @@ func (c *ocClient) readLoop() {
 		if ap, ok := parseApproval(raw); ok {
 			c.mu.Lock()
 			cb := c.onApproval
+			if cb == nil {
+				c.pending = append(c.pending, ap)
+			}
 			c.mu.Unlock()
 			if cb != nil {
 				cb(ap)
