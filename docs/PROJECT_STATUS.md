@@ -25,7 +25,7 @@ the next meaningful proof, ahead of additional features or visual work.
 | App test gate | Not green as a whole | Focused relay tests pass and TypeScript passes. The last full root Jest run had four unrelated environment/time-out failures; resolve these before release. |
 | Relay deployment | Automated on pushes to `main` and `build/first-pages` | Confirm the Cloudflare token and production deployment in GitHub Actions. |
 | Connector release | Automated on pushes to `main` and `build/first-pages` | The approval-race fix at `2918972` fixes the previous CI test failure; confirm the resulting workflow run is green. |
-| Store configuration | Partly configured | iOS has `com.dane04code.agentmessenger`; Android does **not** yet have an `android.package`, so Android production builds/submission are not ready. |
+| Store configuration | Partly configured | iOS has `com.dane.agentmessenger.siwa`; Android does **not** yet have an `android.package`, so Android production builds/submission are not ready. |
 
 ## The ordered path forward
 
@@ -39,7 +39,7 @@ Keep one track: prove the actual product before expanding scope.
    and a real Hermes/OpenClaw installation, then test: fresh account, pair, message, background
    the app, receive push, approve/deny, restart the app, and reconnect.
 3. **Make the release identity explicit.** Before the first Android build, choose and reserve an
-   immutable Android package name (recommended: `com.dane04code.agentmessenger`, matching iOS),
+   immutable Android package name (recommended: `com.dane.agentmessenger.siwa`, matching iOS),
    create the Google Play Console app, and configure Android signing plus Expo's Google service
    account. Also verify Apple/Google sign-in and notification credentials on both platforms.
 4. **Make the first thirty seconds and failure states clear.** Use findings from the real-device

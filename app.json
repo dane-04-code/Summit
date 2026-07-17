@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.dane04code.agentmessenger",
+      "bundleIdentifier": "com.dane.agentmessenger.siwa",
       "entitlements": {
         "com.apple.developer.applesignin": [
           "Default",
