@@ -397,8 +397,21 @@ func (c *ocClient) chat(message, runID string) <-chan Frame {
 					return
 				}
 			case <-c.done:
-				out <- Frame{T: "error", Message: "gateway connection lost"}
-				return
+				// The gateway can close immediately after its terminal event. The
+				// read loop writes that event to turn before it observes the close,
+				// so drain it before reporting a connection error.
+				for {
+					select {
+					case f := <-turn:
+						out <- f
+						if f.T == "done" || f.T == "error" {
+							return
+						}
+					default:
+						out <- Frame{T: "error", Message: "gateway connection lost"}
+						return
+					}
+				}
 			}
 		}
 	}()
