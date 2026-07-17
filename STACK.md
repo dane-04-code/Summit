@@ -161,7 +161,7 @@ Read `FRAMEWORKS.md` and the `hermes-expert` skill before touching any of this.
 ## Build, release & CI
 
 - **Build & submit:** **EAS Build** + **EAS Submit** ✅ (`eas.json` — development/preview/production
-  profiles, `appVersionSource: remote`, `autoIncrement`). iOS bundle id `com.dane.agentmessenger.siwa`.
+  profiles, `appVersionSource: remote`, `autoIncrement`). iOS bundle id `com.dane04code.agentmessenger`.
 - **OTA updates:** **EAS Update** 🔜 — ship JS-only fixes without an App Store round-trip. Pairs with
   EAS Build; wire the runtime version policy when we cut the first build.
 - **CI:** **GitHub Actions** 🔜 — run `tsc --noEmit` + `jest` + `expo lint` on every PR (the green
