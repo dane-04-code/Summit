@@ -1,7 +1,7 @@
 # Onboarding & Auth Pages — Design
 
 **Date:** 2026-07-05
-**Status:** Approved (built autonomously at Dane's request — "plan, build, implement the full onboarding flow")
+**Status:** Superseded in part on 2026-07-18 (welcome screen redesigned; auth forms unchanged)
 
 ## Goal
 
@@ -14,7 +14,7 @@ moment at all.
 ## Flow
 
 ```
-signed out ──▶ /(auth)/welcome ── Get started ──▶ /(auth)/sign-up ──▶ session
+signed out ──▶ /(auth)/welcome ── Connect your agent ──▶ /(auth)/sign-up ──▶ session
                      │                                                  │
                      └── Sign in ──▶ /(auth)/sign-in ──────────────────┘
                                                                         ▼
@@ -30,23 +30,15 @@ instead of sign-up, and the sign-up footer link is hidden (existing behaviour pr
 
 ## Screens
 
-### 1. Welcome — `src/app/(auth)/welcome.tsx` (new)
+### 1. Welcome — `src/app/(auth)/welcome.tsx` (redesigned 2026-07-18)
 
-- **Hero (upper half):** `logo-glow.png` as a soft accent backdrop behind a new
-  mountain-peak Λ mark (SVG, recreated from the app icon), the "Summit" wordmark
-  (`typography.title`, tightened letter-spacing), and a one-line tagline:
-  *"Your agent, in your pocket."*
-- **Feature pager (middle):** horizontally paging swipe strip with 4 cards + pagination
-  dots (active dot = `accent`). Cards are icon + heading + two lines, framework-agnostic:
-  1. **Talk to it anywhere** — a real chat with your self-hosted agent, wherever you are.
-  2. **Watch it work** — replies stream in live, with proper markdown and code.
-  3. **Stay in control** — approve or stop runs from your phone the moment it asks.
-  4. **Private by design** — keys stay in your keychain; messages go only to your server.
-- **CTA stack (bottom):** primary button (light `ink` fill, per design system — not
-  accent) "Get started" → sign-up; quiet text link "I already have an account" → sign-in.
-- **Motion:** single gentle fade-up on mount using core RN `Animated` (not Reanimated —
-  keeps tests dependency-free and matches the restrained aesthetic). Pager dots update on
-  `onMomentumScrollEnd`.
+- **Header:** the real transparent Summit image mark + wordmark, with a direct sign-in action.
+- **Hero:** left-aligned, flow-led promise: *"Stay close to the work."* No blue glow or decorative
+  background.
+- **Product preview:** one compact operator-cockpit card showing connection status, a completed run,
+  and the signature approval moment. This explains the product in one glance instead of four slides.
+- **CTA stack:** a single light "Connect your agent" action plus a precise key-location reassurance.
+- **Motion:** none. The screen is static, immediately scannable, and has no paging gesture.
 
 ### 2. Sign in — `src/app/(auth)/sign-in.tsx` (rebuilt UI, same logic)
 
@@ -78,9 +70,9 @@ the `(auth)` group, needs no guard changes.
 
 ## Testing
 
-- `__tests__/auth/welcome.test.tsx` — renders hero + all four feature cards; primary CTA
-  navigates to sign-up when signup enabled; "already have an account" navigates to
-  sign-in. (Async `render` per repo convention.)
+- `__tests__/auth/welcome.test.tsx` — renders the hero and operator-cockpit preview; the primary CTA
+  navigates to sign-up when signup is enabled; the header sign-in action navigates to sign-in.
+  (Async `render` per repo convention.)
 - `__tests__/auth/signIn.test.tsx` — renders rebuilt structure; submit calls
   `supabase.auth.signInWithPassword`; error message surfaces.
 - Green bar: `npx tsc --noEmit` + `npm test`.

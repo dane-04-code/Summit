@@ -16,6 +16,7 @@ export function ScreenHeader({
   title,
   subtitle,
   onBack,
+  showBack = true,
   right,
 }: {
   title: string;
@@ -23,19 +24,23 @@ export function ScreenHeader({
   subtitle?: React.ReactNode;
   /** Defaults to `router.back()`. */
   onBack?: () => void;
+  /** Pairing is a root onboarding surface, so it intentionally has no back destination. */
+  showBack?: boolean;
   right?: React.ReactNode;
 }) {
   return (
     <View style={styles.header}>
-      <Pressable
-        onPress={onBack ?? (() => router.back())}
-        hitSlop={8}
-        accessibilityRole="button"
-        accessibilityLabel="Back"
-        style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
-      >
-        <ChevronLeft size={22} color={colors.muted} strokeWidth={1.9} />
-      </Pressable>
+      {showBack ? (
+        <Pressable
+          onPress={onBack ?? (() => router.back())}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
+        >
+          <ChevronLeft size={22} color={colors.muted} strokeWidth={1.9} />
+        </Pressable>
+      ) : null}
       <View style={styles.center}>
         <Text style={styles.title} numberOfLines={1}>
           {title}

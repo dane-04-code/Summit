@@ -15,3 +15,9 @@ it('renders title, subtitle, accessory, and fires onBack', async () => {
   fireEvent.press(screen.getByLabelText('Back'));
   expect(onBack).toHaveBeenCalled();
 });
+
+it('can hide the back affordance for a root onboarding screen', async () => {
+  await render(<ScreenHeader title="Pair your agent" showBack={false} />);
+  expect(screen.getByText('Pair your agent')).toBeTruthy();
+  expect(screen.queryByLabelText('Back')).toBeNull();
+});

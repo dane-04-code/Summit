@@ -6,29 +6,30 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
+// The router mock must be registered before the route module is evaluated.
+// eslint-disable-next-line import/first
 import WelcomeScreen from '@/app/(auth)/welcome';
 
 beforeEach(() => mockPush.mockClear());
 
-it('renders the hero and all four feature cards', async () => {
+it('renders the static operator-cockpit welcome screen', async () => {
   await render(<WelcomeScreen />);
 
   expect(screen.getByText('Summit')).toBeTruthy();
-  expect(screen.getByText('Your agent, in your pocket.')).toBeTruthy();
-  expect(screen.getByText('Talk to it anywhere')).toBeTruthy();
-  expect(screen.getByText('Watch it work')).toBeTruthy();
-  expect(screen.getByText('Stay in control')).toBeTruthy();
-  expect(screen.getByText('Private by design')).toBeTruthy();
+  expect(screen.getByText('Stay close to the work.')).toBeTruthy();
+  expect(screen.getByText('Production checks passed')).toBeTruthy();
+  expect(screen.getByText('Deploy the new release?')).toBeTruthy();
+  expect(screen.getByText('Your agent key stays on your server')).toBeTruthy();
 });
 
-it('routes Get started to sign-up (signup enabled in dev/test)', async () => {
+it('routes Connect your agent to sign-up (signup enabled in dev/test)', async () => {
   await render(<WelcomeScreen />);
-  fireEvent.press(screen.getByText('Get started'));
+  fireEvent.press(screen.getByText('Connect your agent'));
   expect(mockPush).toHaveBeenCalledWith('/(auth)/sign-up');
 });
 
-it('routes the sign-in link to sign-in', async () => {
+it('routes Sign in to sign-in', async () => {
   await render(<WelcomeScreen />);
-  fireEvent.press(screen.getByText(/Already have an account/));
+  fireEvent.press(screen.getByText('Sign in'));
   expect(mockPush).toHaveBeenCalledWith('/(auth)/sign-in');
 });

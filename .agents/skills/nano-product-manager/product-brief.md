@@ -62,8 +62,8 @@ than the Telegram bot we replace* — disqualifying.
   installs its own connector (deterministic one-liner, daemonized as a service) and reads back the
   6-digit code. The agent gives itself a phone.
 - **Direct mode (advanced fallback/dev path):** paste a reachable host + API key
-  (Tailscale/tunnel/domain). Useful for development and no-middleman users, but not sufficient for
-  MVP because it makes the user solve reachability.
+  (Tailscale/tunnel/domain). The implementation remains available for development, but it is hidden
+  from first-run onboarding for the beta so pairing has one clear path.
 - **Bonuses of the relay:** API key never leaves the server; app reads WebSocket (not brittle RN
   SSE); push notifications fall out of the same channel (connection relay = push relay).
 - **Production domain:** `summitapp.dev`, with `relay.summitapp.dev` for WebSocket relay traffic,
@@ -112,8 +112,8 @@ manual, not magic).
 
 ## 8. Open decisions (live — good territory for PM thinking)
 
-1. **Connection transport sub-decisions:** hosted vs self-host-only relay for v1; how visible direct
-   mode should be as an advanced fallback; E2E encryption vs TLS-to-relay.
+1. **Connection transport sub-decisions:** hosted vs self-host-only relay for v1; when to resurface
+   direct mode after beta; E2E encryption vs TLS-to-relay.
 2. **Monetization:** open-core (free app + paid hosted relay) vs paid tier vs none — in tension with
    the community's OSS/free preference. Validate appetite before investing.
 3. **Community validation:** post in Hermes/OpenClaw Discord to confirm real demand before building.
@@ -129,6 +129,15 @@ gets a quiet container; the agent's output flows full-width (so markdown/code/ap
 room). Feel target: Claude/ChatGPT fluency wearing Linear's operator clothes, with one warm accent
 reserved for the human's Approve decision. The signature element is the **Action Request card**
 (inline approve/stop on a blocking run).
+
+First-open onboarding uses one static, grayscale welcome composition rather than a feature carousel:
+a concise flow-led promise, a compact operator-cockpit preview, and one clear connection action. It
+uses the real Summit mark without the blue app-icon field; there are no decorative glows or paging
+gestures before account setup.
+
+Pairing is a compact two-step root screen: copy one agent-ready prompt, then enter the returned
+six-digit code. It has no back route into the advanced direct-server form, no optional naming field,
+and no duplicated installer card; the connected agent supplies its own display name.
 
 ## 10. How to judge a new idea (the filter)
 

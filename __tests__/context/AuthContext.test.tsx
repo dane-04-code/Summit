@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from '@/context/AuthContext';
 const mockUnsubscribe = jest.fn();
 
 jest.mock('@/lib/supabase', () => ({
+  SUPABASE_CONFIGURED: true,
   supabase: {
     auth: {
       getSession: jest.fn().mockResolvedValue({ data: { session: null }, error: null }),
@@ -26,7 +27,7 @@ function TestConsumer() {
 
 describe('AuthProvider', () => {
   it('resolves to signed-out when no session', async () => {
-    render(
+    await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -36,13 +37,13 @@ describe('AuthProvider', () => {
   });
 
   it('calls unsubscribe on unmount', async () => {
-    render(
+    await render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
     );
     await waitFor(() => screen.getByTestId('session'));
-    cleanup();
+    await cleanup();
     expect(mockUnsubscribe).toHaveBeenCalled();
   });
 });
