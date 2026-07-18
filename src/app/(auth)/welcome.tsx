@@ -100,7 +100,6 @@ export default function WelcomeScreen() {
           >
             <Text style={styles.primaryText}>Connect your agent</Text>
           </Pressable>
-          <Text style={styles.supportText}>Hermes today · OpenClaw support in progress</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -253,10 +252,4 @@ const styles = StyleSheet.create({
   },
   primaryPressed: { backgroundColor: colors.ink2 },
   primaryText: { ...typography.body, color: colors.bg, fontWeight: '600' },
-  supportText: {
-    ...typography.caption,
-    color: colors.faint,
-    textAlign: 'center',
-    marginTop: space.md,
-  },
 });

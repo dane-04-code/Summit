@@ -25,8 +25,8 @@ Three screens before pairing. The pair screen already handles "paste this prompt
 the 6-digit code" and the no-agent guard already lands new users there — it is **not
 modified** by this work.
 
-When `SIGNUP_ENABLED` is false (production), Welcome's primary CTA goes to sign-in
-instead of sign-up, and the sign-up footer link is hidden (existing behaviour preserved).
+Self-serve signup is enabled in production and beta builds. Welcome's primary CTA routes to sign-up,
+and sign-in always includes the create-account route.
 
 ## Screens
 
@@ -45,8 +45,9 @@ instead of sign-up, and the sign-up footer link is hidden (existing behaviour pr
 Mirrors the sign-up page's structure: brand mark, "Welcome back" title, subtitle,
 labeled inputs with focus states, password visibility toggle, `Continue with Apple`
 (same `signInWithIdToken` call — works for sign-in identically), error line, footer
-link to sign-up (gated on `SIGNUP_ENABLED`). Supabase calls unchanged. No password
-reset link — no reset flow exists yet (YAGNI).
+link to sign-up. The scroll view uses native iOS keyboard insets rather than resizing the whole
+screen, so focusing an input does not collapse and jump the brand area. Supabase calls unchanged.
+No password reset link — no reset flow exists yet (YAGNI).
 
 ### 3. Sign up — `src/app/(auth)/sign-up.tsx` (touch-up only)
 

@@ -48,6 +48,11 @@ import { defaultCapabilitiesFor, frameworkLabel } from '@/agents/frameworks';
 import type { ConnectionState } from '@/agents/adapters/types';
 import { initialTurn, reduceTurn, turnToBlocks, settleBlocks, shouldFlush } from '@/ui/chat/streamReducer';
 import type { ChatSession } from '@/agents/types';
+import {
+  COMPOSER_MAX_HEIGHT,
+  COMPOSER_MIN_HEIGHT,
+  composerHeightFor,
+} from '@/ui/chat/composerHeight';
 
 // ---------------------------------------------------------------------------
 // Live streaming helpers
@@ -56,8 +61,6 @@ import type { ChatSession } from '@/agents/types';
 const AGENT_NAME = 'Hermes';
 const RUNNING_HINT = 'working…';
 
-const COMPOSER_MIN_HEIGHT = 24;
-const COMPOSER_MAX_HEIGHT = 120;
 const COMPOSER_VERTICAL_CHROME = 20;
 
 function genId(): string {
@@ -174,6 +177,7 @@ export default function AgentScreen() {
 
   const flashListRef = useRef<FlashListRef<Message>>(null);
   const inputRef = useRef<TextInput>(null);
+  const inputValueRef = useRef('');
   const sessionRef = useRef<ChatSession | null>(null);
   const cancelledRef = useRef(false);
   // Set by the stop button; the stream loop checks it and ends the turn early.
@@ -198,6 +202,11 @@ export default function AgentScreen() {
   });
 
   const canSend = input.trim().length > 0 && !streaming;
+
+  const updateInput = useCallback((text: string) => {
+    inputValueRef.current = text;
+    setInput(text);
+  }, []);
 
   // Guard against setState after the screen unmounts mid-stream.
   useEffect(() => {
@@ -314,19 +323,19 @@ export default function AgentScreen() {
     sessionRef.current = null;
     setActiveSessionId('');
     setMessages([]);
-    setInput('');
+    updateInput('');
     setComposerHeight(COMPOSER_MIN_HEIGHT);
     setStreaming(false);
     setStatus('idle');
     setSidebarOpen(false);
-  }, []);
+  }, [updateInput]);
 
   // Web auto-grow. react-native-web reports `textarea.scrollHeight` for
   // `onContentSizeChange`, and scrollHeight is `max(content, clientHeight)` —
   // so measuring while our own height is applied makes the box ratchet to its
   // cap and never shrink. Collapse to 0 first to read the true content height.
   const measureComposer = useCallback((text: string) => {
-    setInput(text);
+    updateInput(text);
     if (Platform.OS !== 'web') return;
     const node = inputRef.current as unknown as HTMLTextAreaElement | null;
     if (!node) return;
@@ -334,10 +343,8 @@ export default function AgentScreen() {
     node.style.height = '0px';
     const contentHeight = node.scrollHeight;
     node.style.height = applied;
-    setComposerHeight(
-      Math.min(COMPOSER_MAX_HEIGHT, Math.max(COMPOSER_MIN_HEIGHT, contentHeight)),
-    );
-  }, []);
+    setComposerHeight(composerHeightFor(contentHeight, text.length > 0));
+  }, [updateInput]);
 
   const handleMenu = useCallback(() => {
     Haptics.selectionAsync().catch(() => {});
@@ -401,16 +408,16 @@ export default function AgentScreen() {
     (cmd: SlashCommand) => {
       Haptics.selectionAsync().catch(() => {});
       if (cmd.scope === 'app') {
-        setInput('');
+        updateInput('');
         setComposerHeight(COMPOSER_MIN_HEIGHT);
         if (cmd.action === 'settings') handleOpenSettings();
         else handleNewChat(); // 'new' and 'clear' both start a fresh thread in v1
         return;
       }
-      setInput(cmd.send);
+      updateInput(cmd.send);
       inputRef.current?.focus();
     },
-    [handleOpenSettings, handleNewChat],
+    [handleOpenSettings, handleNewChat, updateInput],
   );
 
   const handleOpenCron = useCallback(() => {
@@ -489,7 +496,7 @@ export default function AgentScreen() {
     const text = input.trim();
     if (!text || streaming || !activeAgent) return;
     stopRef.current = false;
-    setInput('');
+    updateInput('');
     setComposerHeight(COMPOSER_MIN_HEIGHT);
 
     const session = await ensureSession();
@@ -589,7 +596,7 @@ export default function AgentScreen() {
     sessionRef.current = updated;
     setActiveSessionId(updated.id);
     await loadSessionSummaries();
-  }, [input, streaming, activeAgent, adapterFor, repo, ensureSession, loadSessionSummaries]);
+  }, [input, streaming, activeAgent, adapterFor, repo, ensureSession, loadSessionSummaries, updateInput]);
 
   return (
     <>
@@ -658,7 +665,7 @@ export default function AgentScreen() {
             >
               <TextInput
                 ref={inputRef}
-                style={[styles.textField]}
+                style={[styles.textField, { height: composerHeight }]}
                 value={input}
                 onChangeText={measureComposer}
                 placeholder="Message…"
@@ -675,14 +682,12 @@ export default function AgentScreen() {
                   Platform.OS === 'web'
                     ? undefined
                     : (event) => {
-                        // Small buffer so the last line never clips the frame.
+                        // Empty text always wins over a late size event from
+                        // the previously sent multi-line message.
                         setComposerHeight(
-                          Math.min(
-                            COMPOSER_MAX_HEIGHT,
-                            Math.max(
-                              COMPOSER_MIN_HEIGHT,
-                              event.nativeEvent.contentSize.height + 2,
-                            ),
+                          composerHeightFor(
+                            event.nativeEvent.contentSize.height,
+                            inputValueRef.current.length > 0,
                           ),
                         );
                       }

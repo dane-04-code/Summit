@@ -139,6 +139,11 @@ Pairing is a compact two-step root screen: copy one agent-ready prompt, then ent
 six-digit code. It has no back route into the advanced direct-server form, no optional naming field,
 and no duplicated installer card; the connected agent supplies its own display name.
 
+Self-serve account creation is available in beta and release builds. Sign-in always offers a route
+to create a distinct account; existing users sign in with their existing email rather than deleting
+their account. Framework roadmap/status copy is not shown on the welcome screen because it reads
+like live connection state and distracts from the first-run action.
+
 ## 10. How to judge a new idea (the filter)
 
 Run any proposed feature/product through these. A "no" isn't fatal, but name it:

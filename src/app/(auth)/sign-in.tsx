@@ -7,7 +7,6 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -91,133 +90,131 @@ export default function SignInScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
+      <ScrollView
+        testID="sign-in-scroll"
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.container}>
-            {/* brand */}
-            <View style={styles.brandArea}>
-              <BrandMark />
-              <Text style={[styles.title, styles.brandTitle]}>Welcome back</Text>
-              <Text style={[styles.subtitle, styles.brandSubtitle]}>
-                Sign in to pick up where you and your agent left off.
-              </Text>
+        <View style={styles.container}>
+          {/* brand */}
+          <View style={styles.brandArea}>
+            <BrandMark />
+            <Text style={[styles.title, styles.brandTitle]}>Welcome back</Text>
+            <Text style={[styles.subtitle, styles.brandSubtitle]}>
+              Sign in to pick up where you and your agent left off.
+            </Text>
+          </View>
+
+          {/* form */}
+          <View style={styles.form}>
+            <View>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={[styles.input, focused === 'email' && styles.inputFocused]}
+                placeholder="you@example.com"
+                placeholderTextColor={colors.faint}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                textContentType="emailAddress"
+                autoComplete="email"
+                onFocus={() => setFocused('email')}
+                onBlur={() => setFocused(null)}
+              />
             </View>
 
-            {/* form */}
-            <View style={styles.form}>
-              <View>
-                <Text style={styles.label}>Email</Text>
+            <View>
+              <Text style={styles.label}>Password</Text>
+              <View style={styles.passwordWrap}>
                 <TextInput
-                  style={[styles.input, focused === 'email' && styles.inputFocused]}
-                  placeholder="you@example.com"
+                  style={[
+                    styles.input,
+                    styles.passwordInput,
+                    focused === 'password' && styles.inputFocused,
+                  ]}
+                  placeholder="Your password"
                   placeholderTextColor={colors.faint}
-                  value={email}
-                  onChangeText={setEmail}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
                   autoCapitalize="none"
-                  keyboardType="email-address"
-                  textContentType="emailAddress"
-                  autoComplete="email"
-                  onFocus={() => setFocused('email')}
+                  textContentType="password"
+                  autoComplete="current-password"
+                  onFocus={() => setFocused('password')}
                   onBlur={() => setFocused(null)}
+                  onSubmitEditing={handleEmailSignIn}
+                  returnKeyType="go"
                 />
+                <Pressable
+                  style={styles.eyeBtn}
+                  onPress={() => setShowPassword((s) => !s)}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  hitSlop={8}
+                >
+                  <EyeIcon off={showPassword} />
+                </Pressable>
               </View>
-
-              <View>
-                <Text style={styles.label}>Password</Text>
-                <View style={styles.passwordWrap}>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      styles.passwordInput,
-                      focused === 'password' && styles.inputFocused,
-                    ]}
-                    placeholder="Your password"
-                    placeholderTextColor={colors.faint}
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                    textContentType="password"
-                    autoComplete="current-password"
-                    onFocus={() => setFocused('password')}
-                    onBlur={() => setFocused(null)}
-                    onSubmitEditing={handleEmailSignIn}
-                    returnKeyType="go"
-                  />
-                  <Pressable
-                    style={styles.eyeBtn}
-                    onPress={() => setShowPassword((s) => !s)}
-                    accessibilityRole="button"
-                    accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-                    hitSlop={8}
-                  >
-                    <EyeIcon off={showPassword} />
-                  </Pressable>
-                </View>
-              </View>
-
-              {error ? <Text style={styles.error}>{error}</Text> : null}
             </View>
 
-            {/* actions */}
-            <View style={styles.actions}>
-              <Pressable
-                style={[styles.primaryBtn, loading && styles.btnDisabled]}
-                onPress={handleEmailSignIn}
-                disabled={loading}
-              >
-                {loading ? (
-                  <ActivityIndicator color={colors.bg} />
-                ) : (
-                  <Text style={styles.primaryBtnText}>Sign in</Text>
-                )}
-              </Pressable>
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+          </View>
 
-              {appleAvailable && (
-                <>
-                  <View style={styles.divider}>
-                    <View style={styles.dividerLine} />
-                    <Text style={styles.dividerText}>or</Text>
-                    <View style={styles.dividerLine} />
-                  </View>
-
-                  <Pressable
-                    style={[styles.appleBtn, loading && styles.btnDisabled]}
-                    onPress={handleApple}
-                    disabled={loading}
-                  >
-                    <AppleLogo />
-                    <Text style={styles.appleBtnText}>Continue with Apple</Text>
-                  </Pressable>
-                </>
+          {/* actions */}
+          <View style={styles.actions}>
+            <Pressable
+              style={[styles.primaryBtn, loading && styles.btnDisabled]}
+              onPress={handleEmailSignIn}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color={colors.bg} />
+              ) : (
+                <Text style={styles.primaryBtnText}>Sign in</Text>
               )}
-            </View>
+            </Pressable>
 
-            {/* footer */}
-            {SIGNUP_ENABLED && (
-              <View style={styles.footer}>
-                <Text style={styles.footerText}>
-                  No account yet?{' '}
-                  <Text
-                    style={styles.footerLink}
-                    onPress={() => router.replace('/(auth)/sign-up')}
-                  >
-                    Create one
-                  </Text>
-                </Text>
-              </View>
+            {appleAvailable && (
+              <>
+                <View style={styles.divider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>or</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                <Pressable
+                  style={[styles.appleBtn, loading && styles.btnDisabled]}
+                  onPress={handleApple}
+                  disabled={loading}
+                >
+                  <AppleLogo />
+                  <Text style={styles.appleBtnText}>Continue with Apple</Text>
+                </Pressable>
+              </>
             )}
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+
+          {/* footer */}
+          {SIGNUP_ENABLED && (
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>
+                No account yet?{' '}
+                <Text
+                  style={styles.footerLink}
+                  onPress={() => router.replace('/(auth)/sign-up')}
+                >
+                  Create one
+                </Text>
+              </Text>
+            </View>
+          )}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

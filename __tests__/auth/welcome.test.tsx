@@ -20,6 +20,7 @@ it('renders the static operator-cockpit welcome screen', async () => {
   expect(screen.getByText('Production checks passed')).toBeTruthy();
   expect(screen.getByText('Deploy the new release?')).toBeTruthy();
   expect(screen.getByText('Your agent key stays on your server')).toBeTruthy();
+  expect(screen.queryByText(/OpenClaw support/)).toBeNull();
 });
 
 it('routes Connect your agent to sign-up (signup enabled in dev/test)', async () => {
