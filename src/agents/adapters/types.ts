@@ -24,8 +24,21 @@ export type StreamEvent =
   // A tool call gated behind an approval policy. The run pauses until resolved
   // via approveRun/stopRun. Only Tier-1 agents with `hasRunApproval` emit this.
   | { type: 'approval'; runId: string; title: string; command: string }
-  | { type: 'done' }
-  | { type: 'error'; message: string };
+  // The phone-side socket vanished, but the connector-owned turn continues.
+  // The settled result arrives through background sync on reconnect.
+  | { type: 'detached' }
+  | { type: 'done'; eventId?: string }
+  | { type: 'error'; message: string; eventId?: string };
+
+export type SettledReply = {
+  id: string;
+  reqId: string;
+  sessionId: string;
+  status: 'done' | 'error';
+  content: string;
+  error?: string;
+  createdAt: number;
+};
 
 export type SendOptions = {
   /** X-Hermes-Session-Id — transcript-scoped, rotates on a new chat. */
@@ -65,6 +78,10 @@ export interface AgentAdapter {
   getConnectionState(): ConnectionState;
   subscribeConnectionState(listener: (state: ConnectionState) => void): () => void;
   retryConnection(): Promise<void>;
+
+  /** Relay-only durable delivery hooks; direct adapters have no remote outbox. */
+  syncPendingReplies?(): Promise<SettledReply[]>;
+  acknowledgeReplies?(ids: string[]): Promise<void>;
 
   // Runs API — Hermes only in v1 (gate on capabilities.hasRunApproval).
   approveRun(runId: string, approved: boolean): Promise<void>;

@@ -44,6 +44,8 @@ export function reduceTurn(turn: LiveTurn, event: StreamEvent): LiveTurn {
           command: event.command,
         },
       };
+    case 'detached':
+      return { ...turn, status: 'idle', done: true };
     case 'done':
       return { ...turn, status: 'idle', done: true };
     case 'error':
@@ -170,4 +172,13 @@ export function settleBlocks(text: string): AgentBlock[] {
   }
 
   return [{ kind: 'markdown', source: text }];
+}
+
+/** Keep useful partial output visible when a stream ends in an error. */
+export function settleErrorBlocks(text: string, error: string): AgentBlock[] {
+  const blocks = text.trim() ? settleBlocks(text) : [];
+  return [
+    ...blocks,
+    { kind: 'text', spans: [{ text: error }], tone: 'muted' } as AgentBlock,
+  ];
 }

@@ -28,6 +28,9 @@ type Frame struct {
 	Messages       []ChatMessage `json:"messages,omitempty"`
 	SessionID      string        `json:"sessionId,omitempty"`
 	SessionKey     string        `json:"sessionKey,omitempty"`
+	EventID        string        `json:"eventId,omitempty"`
+	Reply          *SettledReply `json:"reply,omitempty"`
+	IDs            []string      `json:"ids,omitempty"`
 	Method         string        `json:"method,omitempty"`
 	Path           string        `json:"path,omitempty"`
 	Status         int           `json:"status,omitempty"`
@@ -76,6 +79,10 @@ func main() {
 	framework, agentName := agentIdentity(os.Getenv("AGENT_FRAMEWORK"), os.Getenv("AGENT_NAME"))
 	openclawWSURL := strings.TrimRight(os.Getenv("OPENCLAW_WS_URL"), "/")
 	openclawToken := os.Getenv("OPENCLAW_TOKEN")
+	outbox, err := defaultReplyOutbox()
+	if err != nil {
+		log.Fatalf("open reply outbox: %v", err)
+	}
 
 	if framework != "openclaw" && (hermesBase == "" || apiKey == "") {
 		log.Fatal("HERMES_BASE_URL and HERMES_API_KEY must be set")
@@ -94,7 +101,7 @@ func main() {
 	startNotifyServer(notify, notifyPort)
 
 	for {
-		if err := run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, openclawToken, notify); err != nil {
+		if err := run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, openclawToken, notify, outbox); err != nil {
 			log.Printf("disconnected: %v — reconnecting in 5s", err)
 		}
 		time.Sleep(5 * time.Second)
@@ -112,7 +119,7 @@ func savedRelayIdentity() (string, string) {
 	return strings.TrimSpace(string(code)), strings.TrimSpace(string(token))
 }
 
-func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, openclawToken string, notify *notifier) error {
+func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, openclawToken string, notify *notifier, outbox *replyOutbox) error {
 	target := relayURL
 	if code, token := savedRelayIdentity(); code != "" {
 		target += "?claim=" + url.QueryEscape(code)
@@ -191,9 +198,15 @@ func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, open
 			}
 		case "chat":
 			if oc != nil {
-				go handleChatOpenClaw(conn, &writeMu, f, oc)
+				go handleChatOpenClaw(conn, &writeMu, f, oc, outbox)
 			} else {
-				go handleChat(conn, &writeMu, f, f.SessionID, f.SessionKey, hermesBase, apiKey)
+				go handleChat(conn, &writeMu, f, f.SessionID, f.SessionKey, hermesBase, apiKey, outbox)
+			}
+		case "sync_req":
+			go handleSync(conn, &writeMu, f.ReqID, outbox)
+		case "ack_replies":
+			if err := outbox.ack(f.IDs); err != nil {
+				log.Printf("ack reply outbox: %v", err)
 			}
 		case "api_req":
 			go handleApiReq(conn, &writeMu, f, hermesBase, apiKey)
@@ -219,14 +232,47 @@ func writeFrame(conn *websocket.Conn, writeMu *sync.Mutex, frame Frame) error {
 	return conn.WriteJSON(frame)
 }
 
-func handleChat(conn *websocket.Conn, writeMu *sync.Mutex, f Frame, sessionID, sessionKey, hermesBase, apiKey string) {
-	for frame := range streamChat(f.Messages, sessionID, sessionKey, hermesBase, apiKey) {
+func handleChat(conn *websocket.Conn, writeMu *sync.Mutex, f Frame, sessionID, sessionKey, hermesBase, apiKey string, outbox *replyOutbox) {
+	forwardChatFrames(conn, writeMu, f, streamChat(f.Messages, sessionID, sessionKey, hermesBase, apiKey), outbox)
+}
+
+func forwardChatFrames(conn *websocket.Conn, writeMu *sync.Mutex, f Frame, frames <-chan Frame, outbox *replyOutbox) {
+	var content strings.Builder
+	for frame := range frames {
 		frame.ReqID = f.ReqID
 		frame.SessionID = f.SessionID
+		if frame.T == "chunk" {
+			content.WriteString(frame.Delta)
+		}
+		if frame.T == "done" || frame.T == "error" {
+			reply := SettledReply{
+				ID: newEventID(), ReqID: f.ReqID, SessionID: f.SessionID,
+				Status: frame.T, Content: content.String(), Error: frame.Message,
+				CreatedAt: time.Now().UnixMilli(),
+			}
+			if err := outbox.add(reply); err != nil {
+				log.Printf("save settled reply: %v", err)
+			}
+			frame.EventID = reply.ID
+		}
 		if err := writeFrame(conn, writeMu, frame); err != nil {
 			log.Printf("write frame: %v", err)
+			// The connector-owned turn and outbox continue even if the phone-side
+			// delivery path disappears; a reconnect can sync the settled reply.
+		}
+	}
+}
+
+func handleSync(conn *websocket.Conn, writeMu *sync.Mutex, reqID string, outbox *replyOutbox) {
+	for _, reply := range outbox.list() {
+		r := reply
+		if err := writeFrame(conn, writeMu, Frame{T: "sync_reply", ReqID: reqID, Reply: &r}); err != nil {
+			log.Printf("write sync_reply: %v", err)
 			return
 		}
+	}
+	if err := writeFrame(conn, writeMu, Frame{T: "sync_done", ReqID: reqID}); err != nil {
+		log.Printf("write sync_done: %v", err)
 	}
 }
 

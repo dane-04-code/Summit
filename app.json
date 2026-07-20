@@ -48,7 +48,14 @@
       "expo-apple-authentication",
       "expo-sqlite",
       "expo-sharing",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Summit to use the microphone for message dictation.",
+          "speechRecognitionPermission": "Allow Summit to turn your speech into message text."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

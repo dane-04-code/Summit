@@ -91,6 +91,10 @@ func streamChat(messages []ChatMessage, sessionID, sessionKey, baseURL, apiKey s
 				ch <- Frame{T: "chunk", Delta: ev.Choices[0].Delta.Content}
 			}
 		}
+		if err := scanner.Err(); err != nil {
+			ch <- Frame{T: "error", Message: fmt.Sprintf("stream: %v", err)}
+			return
+		}
 		ch <- Frame{T: "done"}
 	}()
 	return ch

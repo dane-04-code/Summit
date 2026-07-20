@@ -9,8 +9,8 @@
  * Local mode verifies the whole pipe on one machine. Cloud mode is for testing
  * with a real phone: the connector dials wss://relay.summitapp.dev (already
  * deployed with the push logic), so the phone never needs to reach this PC —
- * point its dev build at the prod relay with
- *   EXPO_PUBLIC_RELAY_URL=wss://relay.summitapp.dev npx expo start
+ * The app defaults to production. For fully local app testing, start Expo with
+ *   EXPO_PUBLIC_RELAY_URL=ws://localhost:8787 npx expo start
  *
  * Ctrl+C tears everything down.
  */

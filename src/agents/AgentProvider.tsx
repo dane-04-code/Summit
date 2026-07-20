@@ -139,13 +139,19 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
   }, [activeAgent]);
 
   useEffect(() => {
+    const reconnect = () => {
+      const agent = activeAgentRef.current;
+      if (agent?.transport === 'relay') reconnectIfDropped(adapterFor(agent));
+    };
+    // Cold starts do not emit an AppState transition. Connect once as soon as
+    // the persisted relay agent has rehydrated so its outbox can be synced.
+    reconnect();
     const sub = AppState.addEventListener('change', (next) => {
       if (next !== 'active') return;
-      const agent = activeAgentRef.current;
-      if (agent) reconnectIfDropped(adapterFor(agent));
+      reconnect();
     });
     return () => sub.remove();
-  }, [adapterFor]);
+  }, [activeAgent, adapterFor]);
 
   const value: AgentContextValue = {
     ready,

@@ -15,8 +15,24 @@ export type PongFrame       = { t: 'pong' };
 export type ChatMessage     = { role: 'user' | 'assistant' | 'system'; content: string };
 export type ChatFrame       = { t: 'chat'; reqId: string; messages: ChatMessage[]; sessionId?: string; sessionKey?: string };
 export type ChunkFrame      = { t: 'chunk'; reqId: string; delta: string; sessionId?: string };
-export type DoneFrame       = { t: 'done'; reqId: string; sessionId?: string };
-export type ErrorFrame      = { t: 'error'; reqId?: string; message: string; sessionId?: string };
+export type DoneFrame       = { t: 'done'; reqId: string; sessionId?: string; eventId?: string };
+export type ErrorFrame      = { t: 'error'; reqId?: string; message: string; sessionId?: string; eventId?: string };
+// Durable background delivery. The connector keeps settled replies in a
+// bounded local outbox until the app has persisted and acknowledged them. The
+// relay only forwards these frames; it never stores transcript content.
+export type SettledReply = {
+  id: string;
+  reqId: string;
+  sessionId: string;
+  status: 'done' | 'error';
+  content: string;
+  error?: string;
+  createdAt: number;
+};
+export type SyncReqFrame     = { t: 'sync_req'; reqId: string };
+export type SyncReplyFrame   = { t: 'sync_reply'; reqId: string; reply: SettledReply };
+export type SyncDoneFrame    = { t: 'sync_done'; reqId: string };
+export type AckRepliesFrame  = { t: 'ack_replies'; ids: string[] };
 // Allow-listed request/response proxy: the app asks the connector to make a
 // specific Hermes REST call (jobs, runs approval/stop). The connector enforces
 // the allow-list — see connector/hermes.go. `body` is a JSON string.
@@ -40,5 +56,6 @@ export type ApprovalResolveFrame = { t: 'approval_resolve'; approvalId: string; 
 export type AnyFrame =
   | HelloFrame | CodeFrame | PairFrame | ResumeFrame | PairedFrame | PairErrorFrame
   | PeerGoneFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | DoneFrame | ErrorFrame
+  | SyncReqFrame | SyncReplyFrame | SyncDoneFrame | AckRepliesFrame
   | ApiReqFrame | ApiResFrame | RegisterPushFrame | NotifyFrame
   | ApprovalReqFrame | ApprovalResolveFrame;

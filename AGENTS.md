@@ -1,6 +1,6 @@
 # Agents: Connection, Storage & Persistence
 
-**Status:** Backend + relay walking skeleton built | Last updated 2026-06-29
+**Status:** Backend + relay background delivery built | Last updated 2026-07-19
 
 How an agent (Hermes today, OpenClaw later, anything else after) gets **added**, **connected**,
 **stored on the phone**, and **kept alive across app restarts** — including saved chat history.
@@ -87,7 +87,7 @@ extension point).
 
 ## 4. What gets stored, and where
 
-Three stores, by sensitivity:
+On the phone, three stores by sensitivity:
 
 ```
 ┌─ Keychain (expo-secure-store) ─ SECRETS ONLY ────────────────────────┐
@@ -106,6 +106,18 @@ Three stores, by sensitivity:
 │  agent + in-flight streaming. Never the source of truth.               │
 └───────────────────────────────────────────────────────────────────────┘
 ```
+
+Background delivery adds one bounded, temporary store on the user's connector host:
+
+```text
+~/.summit/reply_outbox.json  owner-only (0600), at most 100 settled replies
+```
+
+The connector writes a settled reply before emitting its terminal frame. On cold start/reconnect,
+the app requests pending replies, persists each into SQLite, then acknowledges the connector so it
+can delete them. This is the narrow exception to phone-only transcript storage required for turns
+to finish while iOS suspends or kills Summit. The hosted relay never persists reply content, and
+push payloads remain content-free.
 
 **The rule:** secrets live *only* in the Keychain. SQLite never holds an API key or device token.
 `base_url` (a host, not a credential) lives in SQLite so the registry can list agents without
@@ -187,6 +199,8 @@ On every cold start, `AgentProvider` (wrapped at the root, beside `AuthProvider`
    where the user left it.
 5. The secret is **not** loaded yet — it's fetched from the Keychain only when the first network
    call is made.
+6. For relay agents, the provider establishes the socket on cold start and the chat syncs any
+   connector-owned settled replies that completed while the app was unavailable.
 
 Because the source of truth is SQLite + Keychain (both survive process death and reboots, and are
 wiped only on uninstall), the agent and its chats persist with zero server round-trip. Reinstall /
@@ -228,7 +242,7 @@ src/agents/
                         before framework switch
   relay/
     client.ts           RelayClient — WS manager: pair(code) → AgentInfo,
-                        chat(messages) → AsyncIterable<StreamEvent>
+                        chat(messages) → AsyncIterable<StreamEvent>, settled-reply sync/ack
     types.ts            AnyFrame + all frame subtypes mirrored from /protocol/
 src/db/
   schema.ts             DDL + migration runner
@@ -247,6 +261,7 @@ relay/                  Cloudflare Worker + PairingChannel Durable Object
 connector/              Go binary (gorilla/websocket)
   main.go               Dials relay, sends hello, prints 6-digit code, bridges chat frames
   hermes.go             streamChat() — POSTs to Hermes /v1/chat/completions, emits chunks
+  outbox.go             bounded owner-only settled reply queue; survives phone/connector restarts
 
 protocol/
   protocol.ts           Canonical JSON frame types (AnyFrame + subtypes)

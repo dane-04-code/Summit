@@ -9,11 +9,12 @@ export const SIGNUP_ENABLED = true;
 
 /**
  * WebSocket base URL for the relay. Pairing code is appended as ?code=NNNNNN.
- * In dev, `wrangler dev` runs locally on 8787.
+ * Device development uses production by default so a phone and an installed
+ * agent plugin cannot silently land on different relays. Local relay tests
+ * must opt in with EXPO_PUBLIC_RELAY_URL=ws://localhost:8787.
  */
 export const RELAY_WS_URL =
-  process.env.EXPO_PUBLIC_RELAY_URL ||
-  (__DEV__ ? 'ws://localhost:8787' : 'wss://relay.summitapp.dev');
+  process.env.EXPO_PUBLIC_RELAY_URL || 'wss://relay.summitapp.dev';
 
 /**
  * Optional PostHog project settings. Analytics stays disabled until

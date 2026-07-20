@@ -7,13 +7,28 @@ export type ResumeFrame     = { t: 'resume'; token: string };
 export type PairedFrame     = { t: 'paired'; framework: string; agentName: string; agentVersion: string; sessionToken: string };
 export type PairErrorFrame  = { t: 'pair_error'; reason: 'not_found' | 'expired' | 'already_paired' | 'locked' };
 export type PeerGoneFrame   = { t: 'peer_gone' };
+/** Client-local sentinel; never sent over the relay protocol. */
+export type SocketClosedFrame = { t: 'socket_closed' };
 export type PingFrame       = { t: 'ping' };
 export type PongFrame       = { t: 'pong' };
 export type ChatMessage     = { role: 'user' | 'assistant' | 'system'; content: string };
 export type ChatFrame       = { t: 'chat'; reqId: string; messages: ChatMessage[]; sessionId?: string; sessionKey?: string };
 export type ChunkFrame      = { t: 'chunk'; reqId: string; delta: string; sessionId?: string };
-export type DoneFrame       = { t: 'done'; reqId: string; sessionId?: string };
-export type ErrorFrame      = { t: 'error'; reqId?: string; message: string; sessionId?: string };
+export type DoneFrame       = { t: 'done'; reqId: string; sessionId?: string; eventId?: string };
+export type ErrorFrame      = { t: 'error'; reqId?: string; message: string; sessionId?: string; eventId?: string };
+export type SettledReply = {
+  id: string;
+  reqId: string;
+  sessionId: string;
+  status: 'done' | 'error';
+  content: string;
+  error?: string;
+  createdAt: number;
+};
+export type SyncReqFrame     = { t: 'sync_req'; reqId: string };
+export type SyncReplyFrame   = { t: 'sync_reply'; reqId: string; reply: SettledReply };
+export type SyncDoneFrame    = { t: 'sync_done'; reqId: string };
+export type AckRepliesFrame  = { t: 'ack_replies'; ids: string[] };
 // Allow-listed REST proxy over the relay (jobs, run approval/stop). `body` is a
 // JSON string. The connector enforces which method+path pairs are permitted.
 export type ApiReqFrame     = { t: 'api_req'; reqId: string; method: string; path: string; body?: string };
@@ -33,6 +48,7 @@ export type ApprovalResolveFrame = { t: 'approval_resolve'; approvalId: string; 
 
 export type AnyFrame =
   | HelloFrame | CodeFrame | PairFrame | ResumeFrame | PairedFrame | PairErrorFrame
-  | PeerGoneFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | DoneFrame | ErrorFrame
+  | PeerGoneFrame | SocketClosedFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | DoneFrame | ErrorFrame
+  | SyncReqFrame | SyncReplyFrame | SyncDoneFrame | AckRepliesFrame
   | ApiReqFrame | ApiResFrame | RegisterPushFrame | NotifyFrame
   | ApprovalReqFrame | ApprovalResolveFrame;

@@ -1,7 +1,7 @@
 # Summit — Product Brief
 
 *The single source of product truth for the nano product manager. Synthesizes `PRD.md`,
-`FRAMEWORKS.md`, and `CONNECTION.md`. When those change, update this. Last synced: 2026-07-17.*
+`FRAMEWORKS.md`, and `CONNECTION.md`. When those change, update this. Last synced: 2026-07-19.*
 
 ---
 
@@ -93,19 +93,32 @@ support until real-world beta validation.
 
 **MVP (Phase 1–2, build first):** agent-assisted pairing onboarding · chat with streaming markdown ·
 proper markdown rendering (tables/headings/code, partial-stream-safe) · agent status (idle/running/
-error) · reply from app · approve/stop actions.
+error) · auto-growing mobile composer with OS speech-to-text dictation · reply from app ·
+approve/stop actions.
 
 **Phase 2:** relay push notifications now have per-agent modes (all activity / attention only / off)
 and privacy-safe tap-to-thread routing; physical-device delivery verification is still required.
-Quick-reply from notification · multi-agent (multiple host+key pairs) remain follow-ons.
+Background continuity is server-owned, not phone-owned: the connector and relay keep the agent
+reachable while iOS suspends Summit, and the app is woken only by push/tap/reopen. A foreground
+WebSocket must never be treated as the durable worker. Quick-reply from notification · multi-agent
+(multiple host+key pairs) remain follow-ons.
 
 **Backlog (v2+, don't start until MVP validates):** cross-agent search · "last result" pin per agent
 · cost/usage glance · agent-defined status widgets (JSON → card) · broader OpenClaw support · formal
 adapter abstraction (build from real cases, not guessed).
 
+**Connection packaging direction (active pre-beta plan):** make native Hermes/OpenClaw channel
+plugins the recommended agent-side install while keeping the relay protocol and hosted relay. Ship
+Hermes first, then OpenClaw. Host two public repositories under the Summit company GitHub
+organisation because Hermes is a Python platform plugin and OpenClaw is a TypeScript channel
+package with a separate release/compatibility model. There are no existing users to migrate. Keep
+the Go connector frozen as an internal parity reference and optional generic/legacy fallback until
+the plugins pass real-host and real-device testing; do not advertise it as the future path.
+
 ## 7. Explicit non-goals (ruled OUT — flag if an idea lands here)
 
-Built-in voice (already native in Hermes/OpenClaw) · reactions, read receipts, typing indicators ·
+Voice conversations and agent audio replies (already native in Hermes/OpenClaw; lightweight composer
+dictation is in scope) · reactions, read receipts, social typing indicators ·
 group chats / multi-human social features · file upload in v1 (Hermes can't) · Matrix/E2EE
 privacy-maximalist segment · automatic compatibility with arbitrary new frameworks (the adapter is
 manual, not magic).
@@ -117,9 +130,12 @@ manual, not magic).
 2. **Monetization:** open-core (free app + paid hosted relay) vs paid tier vs none — in tension with
    the community's OSS/free preference. Validate appetite before investing.
 3. **Community validation:** post in Hermes/OpenClaw Discord to confirm real demand before building.
-4. **OpenClaw API shape:** unresearched; don't assume Hermes parity.
+4. **Native approval proof:** Hermes and OpenClaw expose native messaging/plugin surfaces, but the
+   supported in-process path for resolving structured mobile approvals still requires a proof spike.
 5. **Demo/launch plan:** short screen recording — lead with the *flow* (pair → fluid chat → one-tap
    approve), not just markdown.
+6. **Plugin release gate:** native plugins become the public onboarding path only after they match
+   the connector's pairing, background replay, reconnect, and control reliability in real tests.
 
 ## 9. Design direction (for grounding feature ideas — full system TBD in `docs/DESIGN.md`)
 

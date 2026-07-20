@@ -17,10 +17,10 @@ type ChannelEnv = { PUSH_URL?: string };
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const MAX_FRAME_BYTES = 1024 * 1024;
 const APP_FRAME_TYPES = new Set([
-  'ping', 'pair', 'resume', 'register_push', 'chat', 'api_req', 'approval_resolve',
+  'ping', 'pair', 'resume', 'register_push', 'chat', 'sync_req', 'ack_replies', 'api_req', 'approval_resolve',
 ]);
 const CONNECTOR_FRAME_TYPES = new Set([
-  'hello', 'ping', 'notify', 'chunk', 'done', 'error', 'api_res', 'approval_req',
+  'hello', 'ping', 'notify', 'chunk', 'done', 'error', 'sync_reply', 'sync_done', 'api_res', 'approval_req',
 ]);
 
 export class PairingChannel {

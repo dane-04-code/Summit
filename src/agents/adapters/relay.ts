@@ -1,4 +1,4 @@
-import type { AgentAdapter, AgentStatus, ConnectionState, SendOptions, StreamEvent } from './types';
+import type { AgentAdapter, AgentStatus, ConnectionState, SendOptions, SettledReply, StreamEvent } from './types';
 import type { AgentCapabilities, AgentFramework, Agent } from '../types';
 import type { ChatMessage } from '../relay/types';
 import type { CronJob, CronRun } from '@/ui/cron/types';
@@ -38,7 +38,7 @@ export class RelayAdapter implements AgentAdapter {
   private pairingCode: string | null = null;
   private requestCounter = 0;
   private connectionState: ConnectionState = 'unknown';
-  private listeners: Array<(state: ConnectionState) => void> = [];
+  private listeners: ((state: ConnectionState) => void)[] = [];
 
   constructor(
     private readonly agent: Agent,
@@ -97,6 +97,14 @@ export class RelayAdapter implements AgentAdapter {
     this.client?.disconnect();
     this.client = null;
     await this.ensureConnected();
+  }
+
+  async syncPendingReplies(): Promise<SettledReply[]> {
+    return (await this.ensureConnected()).syncReplies();
+  }
+
+  async acknowledgeReplies(ids: string[]): Promise<void> {
+    await (await this.ensureConnected()).acknowledgeReplies(ids);
   }
 
   async *sendMessage(content: string, opts?: SendOptions): AsyncIterable<StreamEvent> {

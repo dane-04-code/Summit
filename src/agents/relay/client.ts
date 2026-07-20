@@ -1,4 +1,4 @@
-import type { AnyFrame, ChatMessage, NotificationMode, PairErrorFrame } from './types';
+import type { AnyFrame, ChatMessage, NotificationMode, PairErrorFrame, SettledReply } from './types';
 import type { ConnectionState, StreamEvent } from '../adapters/types';
 import { RelayError, type RelayErrorCode } from './errors';
 
@@ -14,8 +14,8 @@ export type RelayAgentInfo = { framework: string; agentName: string; agentVersio
 export class RelayClient {
   private ws: WebSocket | null = null;
   private opening: Promise<WebSocket> | null = null;
-  private handlers: Array<(frame: AnyFrame) => void> = [];
-  private stateHandlers: Array<(state: ConnectionState) => void> = [];
+  private handlers: ((frame: AnyFrame) => void)[] = [];
+  private stateHandlers: ((state: ConnectionState) => void)[] = [];
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private pairCode: string | null = null;
   private resumeToken: string | null = null;
@@ -56,7 +56,6 @@ export class RelayClient {
       ws.onopen = () => {
         this.opening = null;
         this.startHeartbeat();
-        this.setState('connected');
         resolve(ws);
       };
       ws.onerror = () => {
@@ -72,9 +71,9 @@ export class RelayClient {
         this.setState('disconnected');
         // Only wins the opening promise if the socket closed before it opened —
         // i.e. we never reached the relay. A mid-session drop settles this reject
-        // as a no-op and instead reaches live handlers via the peer_gone below.
+        // as a no-op and instead reaches live handlers via socket_closed below.
         reject(new RelayError('relay_unreachable'));
-        for (const h of this.handlers) h({ t: 'peer_gone' });
+        for (const h of this.handlers) h({ t: 'socket_closed' });
       };
       ws.onmessage = (e) => {
         const frame = JSON.parse(e.data as string) as AnyFrame;
@@ -128,6 +127,10 @@ export class RelayClient {
           this.handlers = this.handlers.filter((h) => h !== handler);
           this.setState('disconnected');
           reject(new RelayError('agent_disconnected'));
+        } else if (frame.t === 'socket_closed') {
+          this.handlers = this.handlers.filter((h) => h !== handler);
+          this.setState('disconnected');
+          reject(new RelayError('relay_unreachable'));
         }
       };
       this.handlers.push(handler);
@@ -150,7 +153,7 @@ export class RelayClient {
             agentVersion: frame.agentVersion,
             sessionToken: frame.sessionToken,
           });
-        } else if (frame.t === 'pair_error' || frame.t === 'peer_gone') {
+        } else if (frame.t === 'pair_error' || frame.t === 'peer_gone' || frame.t === 'socket_closed') {
           this.handlers = this.handlers.filter((h) => h !== handler);
           this.setState('disconnected');
           reject(new RelayError('agent_disconnected'));
@@ -211,14 +214,18 @@ export class RelayClient {
         // it through resolveApproval() with the Gateway approval id as runId.
         queue.push({ type: 'approval', runId: frame.approvalId, title: 'Run a command', command: frame.command });
       } else if (frame.t === 'done' && frame.reqId === reqId) {
-        queue.push({ type: 'done' });
+        queue.push({ type: 'done', ...(frame.eventId ? { eventId: frame.eventId } : {}) });
         done = true;
       } else if (frame.t === 'error' && (!frame.reqId || frame.reqId === reqId)) {
-        queue.push({ type: 'error', message: frame.message });
+        queue.push({ type: 'error', message: frame.message, ...(frame.eventId ? { eventId: frame.eventId } : {}) });
         done = true;
       } else if (frame.t === 'peer_gone') {
         this.setState('disconnected');
         queue.push({ type: 'error', message: 'Agent disconnected.' });
+        done = true;
+      } else if (frame.t === 'socket_closed') {
+        this.setState('disconnected');
+        queue.push({ type: 'detached' });
         done = true;
       } else {
         return;
@@ -241,6 +248,52 @@ export class RelayClient {
       if (inactivityTimer) clearTimeout(inactivityTimer);
       this.handlers = this.handlers.filter((h) => h !== handler);
     }
+  }
+
+  /** Fetch settled turns the connector completed while the app was suspended. */
+  async syncReplies(): Promise<SettledReply[]> {
+    await this.authenticate();
+    const ws = await this.connect();
+    const reqId = `sync-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const replies: SettledReply[] = [];
+
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.handlers = this.handlers.filter((h) => h !== handler);
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error('The agent did not finish syncing in time.'));
+      }, 15000);
+      const handler = (frame: AnyFrame) => {
+        if (frame.t === 'sync_reply' && frame.reqId === reqId) {
+          replies.push(frame.reply);
+        } else if (frame.t === 'sync_done' && frame.reqId === reqId) {
+          cleanup();
+          resolve(replies);
+        } else if (frame.t === 'error' && frame.reqId === reqId) {
+          cleanup();
+          reject(new Error(frame.message));
+        } else if (frame.t === 'peer_gone') {
+          cleanup();
+          reject(new Error('Agent disconnected.'));
+        } else if (frame.t === 'socket_closed') {
+          cleanup();
+          reject(new Error('Relay connection closed.'));
+        }
+      };
+      this.handlers.push(handler);
+      ws.send(JSON.stringify({ t: 'sync_req', reqId }));
+    });
+  }
+
+  /** Remove replies only after SQLite has accepted them. Safe to repeat. */
+  async acknowledgeReplies(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.authenticate();
+    const ws = await this.connect();
+    ws.send(JSON.stringify({ t: 'ack_replies', ids }));
   }
 
   /** Answer a pushed approval. Fire-and-forget: the connector resolves it on
@@ -285,6 +338,10 @@ export class RelayClient {
           cleanup();
           this.setState('disconnected');
           reject(new Error('Agent disconnected.'));
+        } else if (frame.t === 'socket_closed') {
+          cleanup();
+          this.setState('disconnected');
+          reject(new Error('Relay connection closed.'));
         }
       };
       this.handlers.push(handler);

@@ -176,6 +176,24 @@ describe('chat()', () => {
     ]);
   });
 
+  it('carries the connector event id on a settled turn', async () => {
+    client = new RelayClient('ws://localhost:8787?code=111111');
+    markAuthenticated(client);
+    const events: object[] = [];
+    const collecting = (async () => {
+      for await (const ev of client.chat([{ role: 'user', content: 'hi' }], 'req-event')) events.push(ev);
+    })();
+
+    await flush();
+    mockWs.openNow();
+    await flush();
+    mockWs.receive({ t: 'chunk', reqId: 'req-event', delta: 'Hello' });
+    mockWs.receive({ t: 'done', reqId: 'req-event', eventId: 'event-1' });
+
+    await collecting;
+    expect(events[events.length - 1]).toEqual({ type: 'done', eventId: 'event-1' });
+  });
+
   it('yields error event on error frame', async () => {
     client = new RelayClient('ws://localhost:8787?code=111111');
     markAuthenticated(client);
@@ -235,6 +253,48 @@ describe('chat()', () => {
     mockWs.receive({ t: 'peer_gone' });
     await collecting;
     expect(events).toEqual([{ type: 'error', message: 'Agent disconnected.' }]);
+  });
+
+  it('detaches without declaring agent failure when only the phone socket closes', async () => {
+    client = new RelayClient('ws://localhost:8787?code=111111');
+    markAuthenticated(client);
+    const events: object[] = [];
+    const collecting = (async () => {
+      for await (const ev of client.chat([{ role: 'user', content: 'hi' }], 'req-away')) events.push(ev);
+    })();
+
+    await flush();
+    mockWs.openNow();
+    await flush();
+    mockWs.receive({ t: 'chunk', reqId: 'req-away', delta: 'Partial' });
+    mockWs.close();
+
+    await collecting;
+    expect(events).toEqual([{ type: 'delta', text: 'Partial' }, { type: 'detached' }]);
+  });
+});
+
+describe('background reply sync', () => {
+  it('collects connector-owned settled replies and acknowledges them', async () => {
+    client = new RelayClient('ws://localhost:8787?code=111111');
+    markAuthenticated(client);
+    const syncing = client.syncReplies();
+    await flush();
+    mockWs.openNow();
+    await flush();
+
+    const syncReq = JSON.parse(mockWs.sent[0]);
+    expect(syncReq.t).toBe('sync_req');
+    const reply = {
+      id: 'event-1', reqId: 'req-1', sessionId: 'session-1', status: 'done',
+      content: 'Finished while away', createdAt: 123,
+    };
+    mockWs.receive({ t: 'sync_reply', reqId: syncReq.reqId, reply });
+    mockWs.receive({ t: 'sync_done', reqId: syncReq.reqId });
+    await expect(syncing).resolves.toEqual([reply]);
+
+    await client.acknowledgeReplies(['event-1']);
+    expect(JSON.parse(mockWs.sent[mockWs.sent.length - 1])).toEqual({ t: 'ack_replies', ids: ['event-1'] });
   });
 });
 

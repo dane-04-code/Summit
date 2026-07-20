@@ -10,26 +10,23 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import {
   View,
   Text,
-  TextInput,
   Pressable,
   StyleSheet,
   KeyboardAvoidingView,
   Keyboard,
   Platform,
-  Animated,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { FlashList, FlashListRef } from '@shopify/flash-list';
-import { ArrowUp, Square } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 import * as Clipboard from 'expo-clipboard';
 
 import { colors, space, radius, typography, screenPadding } from '@/theme';
-import { usePressAnim } from '@/ui/usePressAnim';
 import { Header } from '@/ui/chat/Header';
 import { AgentMessage } from '@/ui/chat/AgentMessage';
+import { ChatComposer, type ChatComposerHandle } from '@/ui/chat/ChatComposer';
 import { ApprovalCard } from '@/ui/chat/ApprovalCard';
 import { Sidebar } from '@/ui/chat/Sidebar';
 import { MdReader } from '@/ui/chat/MdReader';
@@ -46,13 +43,9 @@ import { useAgents } from '@/agents/AgentProvider';
 import { captureError } from '@/lib/errorReporting';
 import { defaultCapabilitiesFor, frameworkLabel } from '@/agents/frameworks';
 import type { ConnectionState } from '@/agents/adapters/types';
-import { initialTurn, reduceTurn, turnToBlocks, settleBlocks, shouldFlush } from '@/ui/chat/streamReducer';
+import { initialTurn, reduceTurn, turnToBlocks, settleBlocks, settleErrorBlocks, shouldFlush } from '@/ui/chat/streamReducer';
+import { recoverPendingReplies, recoveredMessageId } from '@/ui/chat/recoverReplies';
 import type { ChatSession } from '@/agents/types';
-import {
-  COMPOSER_MAX_HEIGHT,
-  COMPOSER_MIN_HEIGHT,
-  composerHeightFor,
-} from '@/ui/chat/composerHeight';
 
 // ---------------------------------------------------------------------------
 // Live streaming helpers
@@ -60,8 +53,6 @@ import {
 
 const AGENT_NAME = 'Hermes';
 const RUNNING_HINT = 'working…';
-
-const COMPOSER_VERTICAL_CHROME = 20;
 
 function genId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -171,40 +162,19 @@ export default function AgentScreen() {
   const [openFile, setOpenFile] = useState<MarkdownFile | null>(null);
   const [chatGroups, setChatGroups] = useState<ChatGroup[]>([]);
   const [activeSessionId, setActiveSessionId] = useState('');
-  const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
   const [copiedAt, setCopiedAt] = useState(0);
-  const [connectionState, setConnectionState] = useState<ConnectionState>('unknown');
+  const [adapterConnectionState, setConnectionState] = useState<ConnectionState>('unknown');
+  const connectionState: ConnectionState = activeAgent ? adapterConnectionState : 'unknown';
 
   const flashListRef = useRef<FlashListRef<Message>>(null);
-  const inputRef = useRef<TextInput>(null);
-  const inputValueRef = useRef('');
+  const composerRef = useRef<ChatComposerHandle>(null);
   const sessionRef = useRef<ChatSession | null>(null);
   const cancelledRef = useRef(false);
   // Set by the stop button; the stream loop checks it and ends the turn early.
   const stopRef = useRef(false);
+  const syncingAgentRef = useRef<string | null>(null);
   const insets = useSafeAreaInsets();
-  const sendAnim = usePressAnim({ scale: 0.9 });
-
-  // Smoothly lift the input border from grey → lighter grey on focus.
-  const focusAnim = useRef(new Animated.Value(0)).current;
-  const animateFocus = useCallback(
-    (to: number) =>
-      Animated.timing(focusAnim, {
-        toValue: to,
-        duration: 160,
-        useNativeDriver: false, // border colour can't run on the native driver
-      }).start(),
-    [focusAnim],
-  );
-  const fieldBorderColor = focusAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [colors.line, colors.lineFocus],
-  });
-
-  const canSend = input.trim().length > 0 && !streaming;
-
   const updateInput = useCallback((text: string) => {
-    inputValueRef.current = text;
     setInput(text);
   }, []);
 
@@ -216,12 +186,8 @@ export default function AgentScreen() {
   }, []);
 
   useEffect(() => {
-    if (!activeAgent) {
-      setConnectionState('unknown');
-      return;
-    }
+    if (!activeAgent) return;
     const adapter = adapterFor(activeAgent);
-    setConnectionState(adapter.getConnectionState());
     return adapter.subscribeConnectionState(setConnectionState);
   }, [activeAgent, adapterFor]);
 
@@ -271,6 +237,33 @@ export default function AgentScreen() {
     },
     [repo],
   );
+
+  // Telegram-style delivery: on every authenticated reconnect, pull replies
+  // the connector finished while iOS had the app suspended, persist them, and
+  // only then acknowledge the connector's outbox.
+  useEffect(() => {
+    if (!activeAgent || connectionState !== 'connected' || syncingAgentRef.current === activeAgent.id) return;
+    const adapter = adapterFor(activeAgent);
+    if (!adapter.syncPendingReplies) return;
+    let cancelled = false;
+    syncingAgentRef.current = activeAgent.id;
+    void recoverPendingReplies(repo, adapter)
+      .then(async (changedSessionIds) => {
+        if (cancelled || changedSessionIds.length === 0) return;
+        const current = sessionRef.current;
+        if (current && changedSessionIds.includes(current.id)) {
+          await loadSession(current);
+        }
+        if (!cancelled) await loadSessionSummaries();
+      })
+      .catch((e) => captureError(e, { where: 'reply_sync', transport: 'relay' }))
+      .finally(() => {
+        if (syncingAgentRef.current === activeAgent.id) syncingAgentRef.current = null;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAgent, adapterFor, connectionState, loadSession, loadSessionSummaries, repo]);
 
   // Restore the most recent thread for the active agent (docs/AGENTS.md §6).
   useEffect(() => {
@@ -324,26 +317,9 @@ export default function AgentScreen() {
     setActiveSessionId('');
     setMessages([]);
     updateInput('');
-    setComposerHeight(COMPOSER_MIN_HEIGHT);
     setStreaming(false);
     setStatus('idle');
     setSidebarOpen(false);
-  }, [updateInput]);
-
-  // Web auto-grow. react-native-web reports `textarea.scrollHeight` for
-  // `onContentSizeChange`, and scrollHeight is `max(content, clientHeight)` —
-  // so measuring while our own height is applied makes the box ratchet to its
-  // cap and never shrink. Collapse to 0 first to read the true content height.
-  const measureComposer = useCallback((text: string) => {
-    updateInput(text);
-    if (Platform.OS !== 'web') return;
-    const node = inputRef.current as unknown as HTMLTextAreaElement | null;
-    if (!node) return;
-    const applied = node.style.height;
-    node.style.height = '0px';
-    const contentHeight = node.scrollHeight;
-    node.style.height = applied;
-    setComposerHeight(composerHeightFor(contentHeight, text.length > 0));
   }, [updateInput]);
 
   const handleMenu = useCallback(() => {
@@ -409,13 +385,12 @@ export default function AgentScreen() {
       Haptics.selectionAsync().catch(() => {});
       if (cmd.scope === 'app') {
         updateInput('');
-        setComposerHeight(COMPOSER_MIN_HEIGHT);
         if (cmd.action === 'settings') handleOpenSettings();
         else handleNewChat(); // 'new' and 'clear' both start a fresh thread in v1
         return;
       }
       updateInput(cmd.send);
-      inputRef.current?.focus();
+      composerRef.current?.focus();
     },
     [handleOpenSettings, handleNewChat, updateInput],
   );
@@ -497,7 +472,6 @@ export default function AgentScreen() {
     if (!text || streaming || !activeAgent) return;
     stopRef.current = false;
     updateInput('');
-    setComposerHeight(COMPOSER_MIN_HEIGHT);
 
     const session = await ensureSession();
     const now = Date.now();
@@ -519,13 +493,28 @@ export default function AgentScreen() {
 
     let turn = initialTurn;
     let lastFlushAt = 0;
+    let settledEventId: string | undefined;
+    let detached = false;
+    const acknowledgeSettledReply = async () => {
+      if (!settledEventId) return;
+      try {
+        await adapterFor(activeAgent).acknowledgeReplies?.([settledEventId]);
+      } catch (e) {
+        // SQLite already owns the message. A lost ack is safe: stable event
+        // IDs make the next replay idempotent.
+        captureError(e, { where: 'reply_ack', transport: 'relay' });
+      }
+    };
     try {
-      const stream = adapterFor(activeAgent).sendMessage(text, {
+      const adapter = adapterFor(activeAgent);
+      const stream = adapter.sendMessage(text, {
         sessionId: session.id,
         sessionKey: session.remoteSessionKey ?? undefined,
       });
       for await (const event of stream) {
         if (stopRef.current) break;
+        if (event.type === 'done' || event.type === 'error') settledEventId = event.eventId;
+        if (event.type === 'detached') detached = true;
         turn = reduceTurn(turn, event);
         if (cancelledRef.current) return;
         const now = Date.now();
@@ -548,6 +537,14 @@ export default function AgentScreen() {
     if (cancelledRef.current) return;
     setStreaming(false);
 
+    // The connector still owns this turn. Remove the temporary stream row;
+    // reconnect sync will insert the settled reply with its durable event ID.
+    if (detached) {
+      setStatus('idle');
+      setMessages((prev) => prev.filter((m) => m.id !== agentId));
+      return;
+    }
+
     // A reply stopped before any text arrived just disappears — nothing to keep.
     if (stopRef.current && turn.text.trim() === '') {
       setStatus('idle');
@@ -557,30 +554,31 @@ export default function AgentScreen() {
 
     if (turn.status === 'error') {
       setStatus('error');
+      const finalAgentId = settledEventId ? recoveredMessageId(settledEventId) : agentId;
       const errorMsg: Message = {
-        id: agentId,
+        id: finalAgentId,
         role: 'agent',
-        blocks: [
-          { kind: 'text', spans: [{ text: turn.error ?? 'Something went wrong.' }], tone: 'muted' },
-        ],
+        blocks: settleErrorBlocks(turn.text, turn.error ?? 'Something went wrong.'),
       };
       setMessages((prev) =>
         prev.map((m) =>
           m.id === agentId ? errorMsg : m,
         ),
       );
-      await repo.appendMessage({ id: agentId, sessionId: session.id, message: errorMsg, createdAt: Date.now() });
+      await repo.appendMessage({ id: errorMsg.id, sessionId: session.id, message: errorMsg, createdAt: Date.now() });
       const title = session.title ?? text.slice(0, 40);
       const updated: ChatSession = { ...session, title, updatedAt: Date.now() };
       await repo.upsertSession(updated);
       sessionRef.current = updated;
       setActiveSessionId(updated.id);
+      await acknowledgeSettledReply();
       await loadSessionSummaries();
       return;
     }
 
     setStatus('idle');
-    const settled: Message = { id: agentId, role: 'agent', blocks: settleBlocks(turn.text) };
+    const finalAgentId = settledEventId ? recoveredMessageId(settledEventId) : agentId;
+    const settled: Message = { id: finalAgentId, role: 'agent', blocks: settleBlocks(turn.text) };
     // Snap from streaming markdown to the settled form (file card for pasted .md content, etc.)
     setMessages((prev) => prev.map((m) => (m.id === agentId ? settled : m)));
     // An approval gate holds the run open without `done` — surface the card so
@@ -589,12 +587,13 @@ export default function AgentScreen() {
     if (pending) {
       setMessages((prev) => [...prev, buildApprovalMessage(genId(), pending)]);
     }
-    await repo.appendMessage({ id: agentId, sessionId: session.id, message: settled, createdAt: Date.now() });
+    await repo.appendMessage({ id: settled.id, sessionId: session.id, message: settled, createdAt: Date.now() });
     const title = session.title ?? text.slice(0, 40);
     const updated: ChatSession = { ...session, title, updatedAt: Date.now() };
     await repo.upsertSession(updated);
     sessionRef.current = updated;
     setActiveSessionId(updated.id);
+    await acknowledgeSettledReply();
     await loadSessionSummaries();
   }, [input, streaming, activeAgent, adapterFor, repo, ensureSession, loadSessionSummaries, updateInput]);
 
@@ -649,88 +648,15 @@ export default function AgentScreen() {
 
           <SlashCommandMenu commands={slashMatches} onSelect={handleSlashSelect} />
 
-          {/* ── Input bar — pinned above keyboard ─────────── */}
-          <View
-            style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, space.md) }]}
-          >
-            <View style={styles.composerRow}>
-            <Animated.View
-              style={[
-                styles.fieldWrap,
-                {
-                  borderColor: fieldBorderColor,
-                  maxHeight: COMPOSER_MAX_HEIGHT + COMPOSER_VERTICAL_CHROME,
-                },
-              ]}
-            >
-              <TextInput
-                ref={inputRef}
-                style={[styles.textField, { height: composerHeight }]}
-                value={input}
-                onChangeText={measureComposer}
-                placeholder="Message…"
-                placeholderTextColor={colors.muted}
-                onFocus={() => animateFocus(1)}
-                onBlur={() => animateFocus(0)}
-                autoCorrect
-                multiline
-                scrollEnabled={composerHeight >= COMPOSER_MAX_HEIGHT}
-                // Native only: iOS/Android report a frame-independent content
-                // size, so this settles. Web is handled in `measureComposer` —
-                // wiring it here would re-introduce the scrollHeight ratchet.
-                onContentSizeChange={
-                  Platform.OS === 'web'
-                    ? undefined
-                    : (event) => {
-                        // Empty text always wins over a late size event from
-                        // the previously sent multi-line message.
-                        setComposerHeight(
-                          composerHeightFor(
-                            event.nativeEvent.contentSize.height,
-                            inputValueRef.current.length > 0,
-                          ),
-                        );
-                      }
-                }
-                textAlignVertical="top"
-                accessibilityLabel="Message input"
-              />
-            </Animated.View>
-
-            <Pressable
-              onPress={streaming ? handleStopStream : handleSend}
-              onPressIn={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                sendAnim.onPressIn();
-              }}
-              onPressOut={sendAnim.onPressOut}
-              disabled={!streaming && !canSend}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={streaming ? 'Stop reply' : 'Send message'}
-              accessibilityState={{ disabled: !streaming && !canSend }}
-            >
-              <Animated.View
-                style={[
-                  styles.sendBtn,
-                  sendAnim.animStyle,
-                  !streaming && !canSend && styles.sendBtnDisabled,
-                ]}
-              >
-                {streaming ? (
-                  <Square
-                    size={14}
-                    color={colors.onAccentBtn}
-                    fill={colors.onAccentBtn}
-                    strokeWidth={2}
-                  />
-                ) : (
-                  <ArrowUp size={20} color={colors.onAccentBtn} strokeWidth={2.5} />
-                )}
-              </Animated.View>
-            </Pressable>
-            </View>
-          </View>
+          <ChatComposer
+            ref={composerRef}
+            value={input}
+            onChangeText={updateInput}
+            onSend={handleSend}
+            onStop={handleStopStream}
+            streaming={streaming}
+            bottomInset={insets.bottom}
+          />
         </KeyboardAvoidingView>
 
         <CopiedToast shownAt={copiedAt} />
@@ -803,47 +729,4 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
 
-  // ── Input bar ─────────────────────────────────────────────────────────────
-  inputBar: {
-    paddingHorizontal: space.lg,
-    paddingTop: space.sm + 2,
-    borderTopWidth: 1,
-    borderTopColor: colors.line,
-    backgroundColor: colors.bg,
-  },
-  composerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: space.sm + 2,
-  },
-  // Box chrome lives on the wrapper so its border colour can animate on focus.
-  fieldWrap: {
-    flex: 1,
-    minHeight: 44,
-    justifyContent: 'flex-start',
-    borderWidth: 1,
-    borderRadius: radius.input,
-    paddingHorizontal: space.md + 3,
-    paddingVertical: space.sm,
-    backgroundColor: colors.surface,
-  },
-  textField: {
-    ...typography.body,
-    width: '100%',
-    minWidth: 0,
-    flexShrink: 1,
-    color: colors.ink,
-    padding: 0, // strip RN's default vertical padding so text sits dead-centre
-  },
-  sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22, // circle
-    backgroundColor: colors.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendBtnDisabled: {
-    opacity: 0.38, // clearly reads as inactive when there's nothing to send
-  },
 });

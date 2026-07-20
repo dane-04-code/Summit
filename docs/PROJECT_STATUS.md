@@ -1,6 +1,6 @@
 # Summit — Current Status and Release Path
 
-_Last reviewed: 2026-07-17 · Source branch: `build/first-pages` · Latest reviewed commit: `2918972`._
+_Last reviewed: 2026-07-19 · Source branch: `build/first-pages` · Latest pushed commit: `33fba97`._
 
 This is the operational snapshot. [`LAUNCH_PLAN.md`](LAUNCH_PLAN.md) remains the one ordered launch
 track; this document says what is genuinely built, what is verified, and what must happen next.
@@ -12,8 +12,8 @@ threads, push plumbing, and action approvals. The production relay and connector
 workflows. The relay security register is fully addressed in code.
 
 The product is **implementation-complete enough for a real-device beta, not store-ready yet**.
-No one has yet walked the complete cold path on a physical phone or uploaded a store build. That is
-the next meaningful proof, ahead of additional features or visual work.
+An iOS build has been uploaded to TestFlight processing, but no one has yet walked the complete cold
+path on a physical phone. That is the next meaningful proof, ahead of additional feature work.
 
 | Area | State | Evidence / remaining proof |
 |---|---|---|
@@ -21,8 +21,9 @@ the next meaningful proof, ahead of additional features or visual work.
 | Hermes relay chat | Built | Unit, relay, connector, and cross-platform connector-build checks have passed. Needs a physical-device end-to-end run. |
 | OpenClaw relay chat and approvals | Built, live protocol work completed | Needs repeat testing against the intended production OpenClaw version before public support is promised. |
 | Push notifications | Built; physical delivery unverified | Per-agent All activity / Needs attention / Off controls, privacy-safe tap-to-thread data, and local relay testing are in place. Real APNs/FCM delivery still needs a physical device and production credentials. |
+| Background reply continuity | Built locally; deployment/device proof pending | Connector-owned, bounded disk outbox; app syncs settled replies on cold start/reconnect and acknowledges only after SQLite persistence. Hosted relay remains transcript-free. |
 | Account/authentication | Built | Needs real iOS and Android sign-in testing, including redirect/error cases. |
-| App test gate | Not green as a whole | Focused relay tests pass and TypeScript passes. The last full root Jest run had four unrelated environment/time-out failures; resolve these before release. |
+| Automated verification | Tests green; repo lint still has existing failures | Full root Jest, TypeScript, relay Vitest, and connector Go tests pass. `expo lint` still reports 10 existing React/ESLint errors outside this background-delivery slice. |
 | Relay deployment | Automated on pushes to `main` and `build/first-pages` | Confirm the Cloudflare token and production deployment in GitHub Actions. |
 | Connector release | Automated on pushes to `main` and `build/first-pages` | The approval-race fix at `2918972` fixes the previous CI test failure; confirm the resulting workflow run is green. |
 | Store configuration | Partly configured | iOS has `com.dane04code.agentmessenger`; Android does **not** yet have an `android.package`, so Android production builds/submission are not ready. |

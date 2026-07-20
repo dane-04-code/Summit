@@ -5,7 +5,7 @@
  * with copy, and a tool-status chip.
  */
 
-import React, { useCallback, useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
@@ -136,31 +136,37 @@ function ToolChip({ state, label }: { state: RunState; label: string }) {
   );
 }
 
-// ── Typing indicator (shown while a reply is streaming but still empty) ──────
+// ── Working signal (shown while a reply is streaming but still empty) ────────
 
-function TypingDots() {
-  const dots = useRef([0, 1, 2].map(() => new Animated.Value(0.3))).current;
+function WorkingSignal() {
+  const [bars] = useState(() => [0, 1, 2, 3].map(() => new Animated.Value(0.35)));
 
   useEffect(() => {
-    const loops = dots.map((d, i) =>
+    const loops = bars.map((bar, index) =>
       Animated.loop(
         Animated.sequence([
-          Animated.delay(i * 160),
-          Animated.timing(d, { toValue: 1, duration: 320, useNativeDriver: true }),
-          Animated.timing(d, { toValue: 0.3, duration: 320, useNativeDriver: true }),
-          Animated.delay((2 - i) * 160),
+          Animated.delay(index * 100),
+          Animated.timing(bar, { toValue: 1, duration: 280, useNativeDriver: true }),
+          Animated.timing(bar, { toValue: 0.35, duration: 280, useNativeDriver: true }),
+          Animated.delay((3 - index) * 100),
         ]),
       ),
     );
     loops.forEach((l) => l.start());
     return () => loops.forEach((l) => l.stop());
-  }, [dots]);
+  }, [bars]);
 
   return (
-    <View style={styles.typing} accessibilityLabel="Agent is replying">
-      {dots.map((d, i) => (
-        <Animated.View key={i} style={[styles.typingDot, { opacity: d }]} />
-      ))}
+    <View style={styles.working} accessibilityLabel="Agent is working" accessibilityLiveRegion="polite">
+      <View style={styles.workingSignal} accessibilityElementsHidden>
+        {bars.map((bar, index) => (
+          <Animated.View
+            key={index}
+            style={[styles.workingBar, { transform: [{ scaleY: bar }] }]}
+          />
+        ))}
+      </View>
+      <Text style={styles.workingLabel}>Working</Text>
     </View>
   );
 }
@@ -198,7 +204,7 @@ export function AgentMessage({
             );
           case 'markdown':
             return block.source.trim() === '' ? (
-              <TypingDots key={i} />
+              <WorkingSignal key={i} />
             ) : (
               <RichMarkdown key={i} source={block.source} onOpenMdFile={onOpenFile} />
             );
@@ -321,18 +327,35 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
 
-  // Typing indicator
-  typing: {
+  // Agent working signal
+  working: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.xs + 2,
-    height: typography.body.lineHeight, // hold a line's height so layout is stable
+    alignSelf: 'flex-start',
+    gap: space.sm,
+    minHeight: typography.body.lineHeight,
+    paddingHorizontal: space.sm + 2,
+    paddingVertical: space.xs + 1,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
   },
-  typingDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: colors.muted,
+  workingSignal: {
+    height: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  workingBar: {
+    width: 2,
+    height: 11,
+    borderRadius: 2,
+    backgroundColor: colors.accent,
+  },
+  workingLabel: {
+    ...typography.caption,
+    color: colors.ink2,
   },
 
   // Chip
