@@ -15,6 +15,8 @@ export type PongFrame       = { t: 'pong' };
 export type ChatMessage     = { role: 'user' | 'assistant' | 'system'; content: string };
 export type ChatFrame       = { t: 'chat'; reqId: string; messages: ChatMessage[]; sessionId?: string; sessionKey?: string };
 export type ChunkFrame      = { t: 'chunk'; reqId: string; delta: string; sessionId?: string };
+/** Ephemeral operational status. Never persisted or included in notifications. */
+export type ActivityFrame   = { t: 'activity'; reqId: string; label: string; sessionId?: string };
 export type DoneFrame       = { t: 'done'; reqId: string; sessionId?: string; eventId?: string };
 export type ErrorFrame      = { t: 'error'; reqId?: string; message: string; sessionId?: string; eventId?: string };
 // Durable background delivery. The connector keeps settled replies in a
@@ -55,7 +57,7 @@ export type ApprovalResolveFrame = { t: 'approval_resolve'; approvalId: string; 
 
 export type AnyFrame =
   | HelloFrame | CodeFrame | PairFrame | ResumeFrame | PairedFrame | PairErrorFrame
-  | PeerGoneFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | DoneFrame | ErrorFrame
+  | PeerGoneFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | ActivityFrame | DoneFrame | ErrorFrame
   | SyncReqFrame | SyncReplyFrame | SyncDoneFrame | AckRepliesFrame
   | ApiReqFrame | ApiResFrame | RegisterPushFrame | NotifyFrame
   | ApprovalReqFrame | ApprovalResolveFrame;

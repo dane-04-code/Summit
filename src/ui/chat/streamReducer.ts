@@ -32,7 +32,7 @@ export const initialTurn: LiveTurn = {
 export function reduceTurn(turn: LiveTurn, event: StreamEvent): LiveTurn {
   switch (event.type) {
     case 'delta':
-      return { ...turn, text: turn.text + event.text };
+      return { ...turn, text: turn.text + event.text, toolLabel: null };
     case 'tool':
       return { ...turn, toolLabel: event.label };
     case 'approval':
@@ -45,11 +45,11 @@ export function reduceTurn(turn: LiveTurn, event: StreamEvent): LiveTurn {
         },
       };
     case 'detached':
-      return { ...turn, status: 'idle', done: true };
+      return { ...turn, toolLabel: null, status: 'idle', done: true };
     case 'done':
-      return { ...turn, status: 'idle', done: true };
+      return { ...turn, toolLabel: null, status: 'idle', done: true };
     case 'error':
-      return { ...turn, status: 'error', error: event.message, done: true };
+      return { ...turn, toolLabel: null, status: 'error', error: event.message, done: true };
     default:
       return turn;
   }
@@ -66,9 +66,11 @@ export function shouldFlush(lastFlushAt: number, now: number, done: boolean): bo
   return done || now - lastFlushAt >= STREAM_FLUSH_MS;
 }
 
-/** The agent message body for a turn: a single markdown block of accumulated text. */
+/** Live reply text plus an ephemeral operational status when the agent is quiet. */
 export function turnToBlocks(turn: LiveTurn): AgentBlock[] {
-  return [{ kind: 'markdown', source: turn.text }];
+  const blocks: AgentBlock[] = turn.text ? [{ kind: 'markdown', source: turn.text }] : [];
+  if (!turn.done && turn.toolLabel) blocks.push({ kind: 'activity', label: turn.toolLabel });
+  return blocks.length > 0 ? blocks : [{ kind: 'markdown', source: '' }];
 }
 
 // ── Post-stream settling ─────────────────────────────────────────────────────
@@ -177,8 +179,9 @@ export function settleBlocks(text: string): AgentBlock[] {
 /** Keep useful partial output visible when a stream ends in an error. */
 export function settleErrorBlocks(text: string, error: string): AgentBlock[] {
   const blocks = text.trim() ? settleBlocks(text) : [];
+  const reason = error.trim() || 'Something went wrong.';
   return [
     ...blocks,
-    { kind: 'text', spans: [{ text: error }], tone: 'muted' } as AgentBlock,
+    { kind: 'text', spans: [{ text: `Failed: ${reason}` }], tone: 'error' },
   ];
 }

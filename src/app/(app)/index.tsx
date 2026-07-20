@@ -52,7 +52,6 @@ import type { ChatSession } from '@/agents/types';
 // ---------------------------------------------------------------------------
 
 const AGENT_NAME = 'Hermes';
-const RUNNING_HINT = 'working…';
 
 function genId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -531,7 +530,12 @@ export default function AgentScreen() {
     } catch (e) {
       captureError(e, { where: 'chat_stream', framework: activeAgent.framework });
       setConnectionState('disconnected');
-      turn = { ...turn, status: 'error', error: 'Agent disconnected.', done: true };
+      const reason = e instanceof Error && e.message.trim()
+        ? e.message
+        : typeof e === 'string' && e.trim()
+          ? e
+          : 'Agent disconnected.';
+      turn = { ...turn, status: 'error', error: reason, done: true };
     }
 
     if (cancelledRef.current) return;
@@ -613,7 +617,6 @@ export default function AgentScreen() {
           statusLabel={statusLabel}
           connectionState={connectionState}
           frameworkLabel={agentFrameworkLabel}
-          hint={RUNNING_HINT}
           onRetryConnection={handleRetryConnection}
           onMenu={handleMenu}
           onNewChat={handleNewChat}

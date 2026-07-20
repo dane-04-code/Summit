@@ -31,9 +31,17 @@ const DOT: Record<RunState, string> = {
 
 // ── Inline spans (text + inline code) ───────────────────────────────────────
 
-function Paragraph({ spans, muted }: { spans: Span[]; muted?: boolean }) {
+function Paragraph({
+  spans,
+  tone = 'default',
+}: {
+  spans: Span[];
+  tone?: 'default' | 'muted' | 'error';
+}) {
   return (
-    <Text style={muted ? styles.textMuted : styles.text}>
+    <Text
+      style={tone === 'muted' ? styles.textMuted : tone === 'error' ? styles.textError : styles.text}
+    >
       {spans.map((s, i) =>
         s.code ? (
           <Text key={i} style={styles.inlineCode}>
@@ -136,37 +144,32 @@ function ToolChip({ state, label }: { state: RunState; label: string }) {
   );
 }
 
-// ── Working signal (shown while a reply is streaming but still empty) ────────
+// ── Typing indicator (shown while a reply is streaming but still empty) ──────
 
-function WorkingSignal() {
-  const [bars] = useState(() => [0, 1, 2, 3].map(() => new Animated.Value(0.35)));
+function ActivityIndicator({ label }: { label?: string }) {
+  const [dots] = useState(() => [0, 1, 2].map(() => new Animated.Value(0.3)));
 
   useEffect(() => {
-    const loops = bars.map((bar, index) =>
+    const loops = dots.map((dot, index) =>
       Animated.loop(
         Animated.sequence([
-          Animated.delay(index * 100),
-          Animated.timing(bar, { toValue: 1, duration: 280, useNativeDriver: true }),
-          Animated.timing(bar, { toValue: 0.35, duration: 280, useNativeDriver: true }),
-          Animated.delay((3 - index) * 100),
+          Animated.delay(index * 160),
+          Animated.timing(dot, { toValue: 1, duration: 320, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0.3, duration: 320, useNativeDriver: true }),
+          Animated.delay((2 - index) * 160),
         ]),
       ),
     );
     loops.forEach((l) => l.start());
     return () => loops.forEach((l) => l.stop());
-  }, [bars]);
+  }, [dots]);
 
   return (
-    <View style={styles.working} accessibilityLabel="Agent is working" accessibilityLiveRegion="polite">
-      <View style={styles.workingSignal} accessibilityElementsHidden>
-        {bars.map((bar, index) => (
-          <Animated.View
-            key={index}
-            style={[styles.workingBar, { transform: [{ scaleY: bar }] }]}
-          />
-        ))}
-      </View>
-      <Text style={styles.workingLabel}>Working</Text>
+    <View style={styles.typing} accessibilityLabel="Agent is replying" accessibilityLiveRegion="polite">
+      {dots.map((dot, index) => (
+        <Animated.View key={index} style={[styles.typingDot, { opacity: dot }]} />
+      ))}
+      {label ? <Text style={styles.activityLabel}>{label}</Text> : null}
     </View>
   );
 }
@@ -191,7 +194,9 @@ export function AgentMessage({
               </Text>
             );
           case 'text':
-            return <Paragraph key={i} spans={block.spans} muted={block.tone === 'muted'} />;
+            return <Paragraph key={i} spans={block.spans} tone={block.tone} />;
+          case 'activity':
+            return <ActivityIndicator key={i} label={block.label} />;
           case 'table':
             return <StatusTable key={i} rows={block.rows} />;
           case 'code':
@@ -204,7 +209,7 @@ export function AgentMessage({
             );
           case 'markdown':
             return block.source.trim() === '' ? (
-              <WorkingSignal key={i} />
+              <ActivityIndicator key={i} />
             ) : (
               <RichMarkdown key={i} source={block.source} onOpenMdFile={onOpenFile} />
             );
@@ -231,6 +236,10 @@ const styles = StyleSheet.create({
   textMuted: {
     ...typography.small,
     color: colors.muted,
+  },
+  textError: {
+    ...typography.small,
+    color: colors.error,
   },
   inlineCode: {
     ...typography.mono,
@@ -327,35 +336,23 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
 
-  // Agent working signal
-  working: {
+  // Typing indicator
+  typing: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: space.sm,
-    minHeight: typography.body.lineHeight,
-    paddingHorizontal: space.sm + 2,
-    paddingVertical: space.xs + 1,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.surface,
+    gap: space.xs + 2,
+    height: typography.body.lineHeight,
   },
-  workingSignal: {
-    height: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
+  typingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.muted,
   },
-  workingBar: {
-    width: 2,
-    height: 11,
-    borderRadius: 2,
-    backgroundColor: colors.accent,
-  },
-  workingLabel: {
+  activityLabel: {
     ...typography.caption,
-    color: colors.ink2,
+    color: colors.muted,
+    marginLeft: space.xs,
   },
 
   // Chip

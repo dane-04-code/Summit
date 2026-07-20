@@ -1,8 +1,9 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { render, screen, waitFor, cleanup } from '@testing-library/react-native';
+import { render, waitFor, cleanup } from '@testing-library/react-native';
 
 import { RichMarkdown } from '@/ui/chat/richMarkdown';
+import { AgentMessage } from '@/ui/chat/AgentMessage';
 import { ALL_FIXTURES, WIDE_TABLE, MIXED_DOC } from './fixtures/markdown';
 
 afterEach(cleanup);
@@ -43,5 +44,23 @@ describe('type ramp', () => {
     const view = await render(<RichMarkdown source={'Plain paragraph.'} />);
     const el = await waitFor(() => view.getByText('Plain paragraph.'));
     expect(StyleSheet.flatten(el.props.style).fontSize).toBe(17);
+  });
+});
+
+describe('empty streaming reply', () => {
+  it('uses quiet typing dots without a Working label', async () => {
+    const view = await render(
+      <AgentMessage blocks={[{ kind: 'markdown', source: '' }]} />,
+    );
+    expect(view.getByLabelText('Agent is replying')).toBeTruthy();
+    expect(view.queryByText('Working')).toBeNull();
+  });
+
+  it('shows structured activity without a message bubble', async () => {
+    const view = await render(
+      <AgentMessage blocks={[{ kind: 'activity', label: 'Searching the web…' }]} />,
+    );
+    expect(view.getByText('Searching the web…')).toBeTruthy();
+    expect(view.queryByText('Working')).toBeNull();
   });
 });

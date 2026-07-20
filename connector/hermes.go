@@ -68,8 +68,13 @@ func streamChat(messages []ChatMessage, sessionID, sessionKey, baseURL, apiKey s
 
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+		eventType := ""
 		for scanner.Scan() {
 			line := scanner.Text()
+			if strings.HasPrefix(line, "event: ") {
+				eventType = strings.TrimSpace(strings.TrimPrefix(line, "event: "))
+				continue
+			}
 			if !strings.HasPrefix(line, "data: ") {
 				continue
 			}
@@ -77,6 +82,20 @@ func streamChat(messages []ChatMessage, sessionID, sessionKey, baseURL, apiKey s
 			if data == "[DONE]" {
 				break
 			}
+			if eventType == "hermes.tool.progress" {
+				var progress struct {
+					Label string `json:"label"`
+					Tool  string `json:"tool"`
+					Name  string `json:"name"`
+				}
+				if json.Unmarshal([]byte(data), &progress) == nil {
+					label := firstActivityLabel(progress.Label, progress.Tool, progress.Name)
+					ch <- Frame{T: "activity", Label: label}
+				}
+				eventType = ""
+				continue
+			}
+			eventType = ""
 			var ev struct {
 				Choices []struct {
 					Delta struct {
@@ -98,6 +117,21 @@ func streamChat(messages []ChatMessage, sessionID, sessionKey, baseURL, apiKey s
 		ch <- Frame{T: "done"}
 	}()
 	return ch
+}
+
+func firstActivityLabel(values ...string) string {
+	for _, value := range values {
+		label := strings.TrimSpace(value)
+		if label == "" {
+			continue
+		}
+		runes := []rune(label)
+		if len(runes) > 80 {
+			return string(runes[:79]) + "…"
+		}
+		return label
+	}
+	return "Thinking…"
 }
 
 // apiAllow is the fixed set of Hermes endpoints the app may reach through the

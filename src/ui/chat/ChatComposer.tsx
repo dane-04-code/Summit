@@ -231,6 +231,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
           />
 
           <Pressable
+            style={styles.control}
             onPress={toggleDictation}
             onPressIn={micAnim.onPressIn}
             onPressOut={micAnim.onPressOut}
@@ -253,6 +254,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
           </Pressable>
 
           <Pressable
+            style={styles.control}
             onPress={streaming ? onStop : onSend}
             onPressIn={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -301,7 +303,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     gap: 5,
   },
   textField: {
@@ -311,9 +313,11 @@ const styles = StyleSheet.create({
     minHeight: COMPOSER_MIN_HEIGHT,
     maxHeight: COMPOSER_MAX_HEIGHT,
     color: colors.ink,
-    paddingHorizontal: 0,
-    paddingTop: 7,
-    paddingBottom: 5,
+    padding: 0,
+    includeFontPadding: false,
+  },
+  control: {
+    alignSelf: 'flex-end',
   },
   iconButton: {
     width: 38,

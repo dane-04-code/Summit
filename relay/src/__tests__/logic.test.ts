@@ -54,11 +54,11 @@ describe('handleConnectorMessage — hello', () => {
 });
 
 describe('handleConnectorMessage — passthrough', () => {
-  it('forwards chunk/done/error to app', () => {
+  it('forwards ephemeral activity to the app without persisting it', () => {
     const base = { ...makeInitialState(), code: '111111' };
-    const chunk = { t: 'chunk' as const, reqId: 'r1', delta: 'hi' };
-    const { effects } = handleConnectorMessage(base, chunk);
-    expect(effects).toEqual([{ to: 'app', frame: chunk }]);
+    const activity = { t: 'activity' as const, reqId: 'r1', label: 'Thinking…' };
+    const { effects } = handleConnectorMessage(base, activity);
+    expect(effects).toEqual([{ to: 'app', frame: activity }]);
   });
 });
 

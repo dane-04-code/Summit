@@ -20,7 +20,7 @@ const APP_FRAME_TYPES = new Set([
   'ping', 'pair', 'resume', 'register_push', 'chat', 'sync_req', 'ack_replies', 'api_req', 'approval_resolve',
 ]);
 const CONNECTOR_FRAME_TYPES = new Set([
-  'hello', 'ping', 'notify', 'chunk', 'done', 'error', 'sync_reply', 'sync_done', 'api_res', 'approval_req',
+  'hello', 'ping', 'notify', 'chunk', 'activity', 'done', 'error', 'sync_reply', 'sync_done', 'api_res', 'approval_req',
 ]);
 
 export class PairingChannel {

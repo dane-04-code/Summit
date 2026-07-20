@@ -22,10 +22,7 @@ export class RelayClient {
   private paired = false;
   private state: ConnectionState = 'unknown';
 
-  constructor(
-    private readonly wsUrl: string,
-    private readonly chatInactivityMs = 120_000,
-  ) {}
+  constructor(private readonly wsUrl: string) {}
 
   getConnectionState(): ConnectionState {
     return this.state;
@@ -194,21 +191,13 @@ export class RelayClient {
     const queue: StreamEvent[] = [];
     let notify: (() => void) | null = null;
     let done = false;
-    let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const resetInactivityTimer = () => {
-      if (inactivityTimer) clearTimeout(inactivityTimer);
-      inactivityTimer = setTimeout(() => {
-        queue.push({ type: 'error', message: 'The agent stopped responding. Try again.' });
-        done = true;
-        notify?.();
-        notify = null;
-      }, this.chatInactivityMs);
-    };
 
     const handler = (frame: AnyFrame) => {
       if (frame.t === 'chunk' && frame.reqId === reqId) {
         queue.push({ type: 'delta', text: frame.delta });
+      } else if (frame.t === 'activity' && frame.reqId === reqId) {
+        const label = typeof frame.label === 'string' ? frame.label.trim().slice(0, 80) : '';
+        if (label) queue.push({ type: 'tool', label });
       } else if (frame.t === 'approval_req') {
         // Pushed exec approval — not tied to the chat reqId; the card resolves
         // it through resolveApproval() with the Gateway approval id as runId.
@@ -230,12 +219,10 @@ export class RelayClient {
       } else {
         return;
       }
-      resetInactivityTimer();
       notify?.();
       notify = null;
     };
     this.handlers.push(handler);
-    resetInactivityTimer();
 
     try {
       while (!done || queue.length > 0) {
@@ -245,7 +232,6 @@ export class RelayClient {
         while (queue.length > 0) yield queue.shift()!;
       }
     } finally {
-      if (inactivityTimer) clearTimeout(inactivityTimer);
       this.handlers = this.handlers.filter((h) => h !== handler);
     }
   }

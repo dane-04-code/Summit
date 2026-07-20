@@ -16,6 +16,8 @@ func TestStreamChat_parsesDeltas(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		fmt.Fprintln(w, `data: {"choices":[{"delta":{"content":"He"}}]}`)
+		fmt.Fprintln(w, `event: hermes.tool.progress`)
+		fmt.Fprintln(w, `data: {"label":"Searching the web…"}`)
 		fmt.Fprintln(w, `data: {"choices":[{"delta":{"content":"llo"}}]}`)
 		fmt.Fprintln(w, "data: [DONE]")
 		w.(http.Flusher).Flush()
@@ -30,17 +32,20 @@ func TestStreamChat_parsesDeltas(t *testing.T) {
 		got = append(got, f)
 	}
 
-	if len(got) != 3 {
-		t.Fatalf("expected 3 frames, got %d: %+v", len(got), got)
+	if len(got) != 4 {
+		t.Fatalf("expected 4 frames, got %d: %+v", len(got), got)
 	}
 	if got[0].T != "chunk" || got[0].Delta != "He" {
 		t.Errorf("frame 0: %+v", got[0])
 	}
-	if got[1].T != "chunk" || got[1].Delta != "llo" {
+	if got[1].T != "activity" || got[1].Label != "Searching the web…" {
 		t.Errorf("frame 1: %+v", got[1])
 	}
-	if got[2].T != "done" {
+	if got[2].T != "chunk" || got[2].Delta != "llo" {
 		t.Errorf("frame 2: %+v", got[2])
+	}
+	if got[3].T != "done" {
+		t.Errorf("frame 3: %+v", got[3])
 	}
 }
 

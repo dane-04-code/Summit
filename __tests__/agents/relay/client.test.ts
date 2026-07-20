@@ -129,23 +129,27 @@ describe('resume()', () => {
 });
 
 describe('chat()', () => {
-  it('yields an error after a period with no frames', async () => {
-    client = new RelayClient('ws://localhost:8787?code=111111', 10);
+  it('keeps a server-owned turn alive and yields operational activity', async () => {
+    client = new RelayClient('ws://localhost:8787?code=111111');
     markAuthenticated(client);
 
     const events: object[] = [];
     const collecting = (async () => {
-      for await (const ev of client.chat([{ role: 'user', content: 'hi' }], 'req-timeout')) {
+      for await (const ev of client.chat([{ role: 'user', content: 'hi' }], 'req-activity')) {
         events.push(ev);
       }
     })();
 
     await flush();
     mockWs.openNow();
+    await flush();
+    mockWs.receive({ t: 'activity', reqId: 'req-activity', label: 'Searching the web…' });
+    mockWs.receive({ t: 'done', reqId: 'req-activity' });
     await collecting;
 
     expect(events).toEqual([
-      { type: 'error', message: 'The agent stopped responding. Try again.' },
+      { type: 'tool', label: 'Searching the web…' },
+      { type: 'done' },
     ]);
   });
 

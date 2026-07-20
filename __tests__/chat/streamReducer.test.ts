@@ -1,4 +1,9 @@
-import { initialTurn, reduceTurn, turnToBlocks } from '@/ui/chat/streamReducer';
+import {
+  initialTurn,
+  reduceTurn,
+  settleErrorBlocks,
+  turnToBlocks,
+} from '@/ui/chat/streamReducer';
 
 describe('reduceTurn', () => {
   it('accumulates delta text and stays running', () => {
@@ -13,6 +18,16 @@ describe('reduceTurn', () => {
   it('records the latest tool label', () => {
     const t = reduceTurn(initialTurn, { type: 'tool', label: 'searching the web…' });
     expect(t.toolLabel).toBe('searching the web…');
+    expect(turnToBlocks(t)).toEqual([
+      { kind: 'activity', label: 'searching the web…' },
+    ]);
+  });
+
+  it('clears operational activity when answer text resumes', () => {
+    const active = reduceTurn(initialTurn, { type: 'tool', label: 'Reading files…' });
+    const resumed = reduceTurn(active, { type: 'delta', text: 'Found it.' });
+    expect(resumed.toolLabel).toBeNull();
+    expect(turnToBlocks(resumed)).toEqual([{ kind: 'markdown', source: 'Found it.' }]);
   });
 
   it('marks the turn done on done', () => {
@@ -51,5 +66,15 @@ describe('turnToBlocks', () => {
   it('wraps accumulated text in a single markdown block', () => {
     const t = reduceTurn(initialTurn, { type: 'delta', text: '# Hi' });
     expect(turnToBlocks(t)).toEqual([{ kind: 'markdown', source: '# Hi' }]);
+  });
+
+  it('labels the failure reason explicitly', () => {
+    expect(settleErrorBlocks('', 'Gateway restarted')).toEqual([
+      {
+        kind: 'text',
+        spans: [{ text: 'Failed: Gateway restarted' }],
+        tone: 'error',
+      },
+    ]);
   });
 });

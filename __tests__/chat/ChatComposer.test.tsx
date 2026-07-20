@@ -1,5 +1,7 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { ChatComposer, mergeDictation } from '@/ui/chat/ChatComposer';
 
 jest.mock('expo-speech-recognition', () => ({
   ExpoSpeechRecognitionModule: {
@@ -12,8 +14,6 @@ jest.mock('expo-speech-recognition', () => ({
   },
   useSpeechRecognitionEvent: jest.fn(),
 }));
-
-import { ChatComposer, mergeDictation } from '@/ui/chat/ChatComposer';
 
 const mockSpeech = jest.requireMock('expo-speech-recognition').ExpoSpeechRecognitionModule;
 
@@ -42,5 +42,23 @@ describe('ChatComposer', () => {
     await waitFor(() => expect(mockSpeech.start).toHaveBeenCalled());
     expect(mockSpeech.requestPermissionsAsync).toHaveBeenCalled();
     expect(mockSpeech.start.mock.calls.at(-1)?.[0]).not.toHaveProperty('recordingOptions');
+  });
+
+  it('does not squeeze a line of text between extra vertical padding', async () => {
+    await render(
+      <ChatComposer
+        value=""
+        onChangeText={jest.fn()}
+        onSend={jest.fn()}
+        onStop={jest.fn()}
+        streaming={false}
+        bottomInset={0}
+      />,
+    );
+
+    const style = StyleSheet.flatten(screen.getByLabelText('Message input').props.style);
+    expect(style.height).toBe(24);
+    expect(style.padding).toBe(0);
+    expect(style.includeFontPadding).toBe(false);
   });
 });

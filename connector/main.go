@@ -29,6 +29,7 @@ type Frame struct {
 	SessionID      string        `json:"sessionId,omitempty"`
 	SessionKey     string        `json:"sessionKey,omitempty"`
 	EventID        string        `json:"eventId,omitempty"`
+	Label          string        `json:"label,omitempty"`
 	Reply          *SettledReply `json:"reply,omitempty"`
 	IDs            []string      `json:"ids,omitempty"`
 	Method         string        `json:"method,omitempty"`
@@ -238,7 +239,24 @@ func handleChat(conn *websocket.Conn, writeMu *sync.Mutex, f Frame, sessionID, s
 
 func forwardChatFrames(conn *websocket.Conn, writeMu *sync.Mutex, f Frame, frames <-chan Frame, outbox *replyOutbox) {
 	var content strings.Builder
-	for frame := range frames {
+	activity := time.NewTicker(15 * time.Second)
+	defer activity.Stop()
+	for {
+		var frame Frame
+		select {
+		case next, ok := <-frames:
+			if !ok {
+				return
+			}
+			frame = next
+		case <-activity.C:
+			if err := writeFrame(conn, writeMu, Frame{
+				T: "activity", ReqID: f.ReqID, SessionID: f.SessionID, Label: "Thinking…",
+			}); err != nil {
+				log.Printf("write activity: %v", err)
+			}
+			continue
+		}
 		frame.ReqID = f.ReqID
 		frame.SessionID = f.SessionID
 		if frame.T == "chunk" {

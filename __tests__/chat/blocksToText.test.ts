@@ -5,6 +5,7 @@ describe('blocksToText', () => {
     const blocks: AgentBlock[] = [
       { kind: 'heading', text: 'Deploy status' },
       { kind: 'text', spans: [{ text: 'All ' }, { text: 'green', code: true }] },
+      { kind: 'activity', label: 'Running tests…' },
       { kind: 'code', lines: [{ segments: [{ text: 'npm run deploy' }] }] },
       { kind: 'markdown', source: '## Next steps' },
     ];

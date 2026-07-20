@@ -43,7 +43,9 @@ export type MarkdownFile = {
 
 export type AgentBlock =
   | { kind: 'heading'; text: string }
-  | { kind: 'text'; spans: Span[]; tone?: 'default' | 'muted' }
+  | { kind: 'text'; spans: Span[]; tone?: 'default' | 'muted' | 'error' }
+  /** Ephemeral live status. It is rendered during a turn and never persisted. */
+  | { kind: 'activity'; label: string }
   | { kind: 'table'; rows: ServiceRow[] }
   | { kind: 'code'; lines: CodeLine[] }
   | { kind: 'chip'; state: RunState; label: string }
@@ -95,6 +97,8 @@ export function blocksToText(blocks: AgentBlock[]): string {
           return b.text;
         case 'text':
           return b.spans.map((s) => s.text).join('');
+        case 'activity':
+          return '';
         case 'table':
           return b.rows.map((r) => `${r.service}  ${r.statusLabel}  ${r.p95}`).join('\n');
         case 'code':

@@ -1,7 +1,7 @@
 # Summit — Product Brief
 
 *The single source of product truth for the nano product manager. Synthesizes `PRD.md`,
-`FRAMEWORKS.md`, and `CONNECTION.md`. When those change, update this. Last synced: 2026-07-19.*
+`FRAMEWORKS.md`, and `CONNECTION.md`. When those change, update this. Last synced: 2026-07-20.*
 
 ---
 
@@ -93,8 +93,9 @@ support until real-world beta validation.
 
 **MVP (Phase 1–2, build first):** agent-assisted pairing onboarding · chat with streaming markdown ·
 proper markdown rendering (tables/headings/code, partial-stream-safe) · agent status (idle/running/
-error) · auto-growing mobile composer with OS speech-to-text dictation · reply from app ·
-approve/stop actions.
+error) with quiet, structured operational activity during long tool work (never chain-of-thought) ·
+auto-growing mobile composer with OS speech-to-text dictation · reply from app · approve/stop
+actions. Relay turns are server-owned: phone-side silence must not declare a live turn failed.
 
 **Phase 2:** relay push notifications now have per-agent modes (all activity / attention only / off)
 and privacy-safe tap-to-thread routing; physical-device delivery verification is still required.
