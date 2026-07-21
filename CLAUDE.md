@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Delivery-status override (2026-07-21):** the relay is operating reliably in active testing and
+> the native Hermes platform plugin is built in alpha. Treat the Go connector below as a compatibility
+> fallback, not the only Hermes path. Current V1 work is mobile chat/output polish plus real-device
+> proof of recovery, push, and proactive cron delivery. `docs/PROJECT_STATUS.md` and
+> `docs/LAUNCH_PLAN.md` are the current product/release source of truth.
+
 ## Working Style
 
 ### 1. Think Before Coding

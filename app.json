@@ -16,7 +16,8 @@
         ]
       },
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "Allow Summit to access your photo library so you can attach photos to messages."
       }
     },
     "android": {

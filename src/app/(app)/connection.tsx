@@ -42,6 +42,10 @@ function capsSummary(caps: AgentCapabilities | null): string {
   return parts.length ? parts.join(' · ') : 'Basic';
 }
 
+function availability(supported: boolean | undefined): string {
+  return supported ? 'Available' : 'Not available';
+}
+
 export default function Connection() {
   const { activeAgent, adapterFor, repairAgent, removeAgent, repo } = useAgents();
 
@@ -158,6 +162,20 @@ export default function Connection() {
         </View>
 
         <View style={styles.group}>
+          <SectionLabel>Agent abilities</SectionLabel>
+          <Card>
+            <Row label="Streaming replies" value={availability(agent.capabilities?.hasStreaming)} />
+            <Row label="Action approvals" value={availability(agent.capabilities?.hasRunApproval)} />
+            <Row label="Stop active work" value={availability(agent.capabilities?.hasRunStop)} />
+            <Row label="Scheduled jobs" value={availability(agent.capabilities?.hasJobs)} />
+            <Row label="Server sessions" value={availability(agent.capabilities?.hasSessions)} />
+          </Card>
+          <Text style={styles.capabilityHint}>
+            This is the feature information Summit received from the agent when it connected. Retest the connection to refresh it.
+          </Text>
+        </View>
+
+        <View style={styles.group}>
           <SectionLabel>Manage</SectionLabel>
           <Card>
             <Row
@@ -253,6 +271,7 @@ const styles = StyleSheet.create({
   result: { ...typography.caption, marginTop: space.sm, paddingHorizontal: 4 },
   resultOk: { color: colors.accent },
   resultErr: { color: colors.error },
+  capabilityHint: { ...typography.caption, color: colors.muted, marginTop: space.sm, paddingHorizontal: 4, lineHeight: 18 },
 
   repairCard: {
     backgroundColor: colors.drawer,

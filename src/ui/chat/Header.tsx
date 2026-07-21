@@ -26,6 +26,7 @@ interface HeaderProps {
   frameworkLabel: string;
   hint?: string | null;
   onRetryConnection?: () => void;
+  onOpenProfile: () => void;
   onMenu: () => void;
   onNewChat: () => void;
 }
@@ -60,6 +61,7 @@ export function Header({
   frameworkLabel,
   hint,
   onRetryConnection,
+  onOpenProfile,
   onMenu,
   onNewChat,
 }: HeaderProps) {
@@ -72,9 +74,17 @@ export function Header({
       </HeaderButton>
 
       <View style={styles.center}>
-        <Text style={styles.title} numberOfLines={1}>
-          {name}
-        </Text>
+        <Pressable
+          onPress={onOpenProfile}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${name} profile`}
+          style={({ pressed }) => pressed && styles.titlePressed}
+        >
+          <Text style={styles.title} numberOfLines={1}>
+            {name}
+          </Text>
+        </Pressable>
         <View
           style={styles.statusRow}
           accessibilityLabel={`Status: ${statusLabel}${showHint ? `, ${hint}` : ''}`}
@@ -136,6 +146,7 @@ const styles = StyleSheet.create({
     color: colors.ink,
     letterSpacing: 0,
   },
+  titlePressed: { opacity: 0.65 },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',

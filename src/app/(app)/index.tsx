@@ -33,6 +33,7 @@ import { MdReader } from '@/ui/chat/MdReader';
 import { SlashCommandMenu } from '@/ui/chat/SlashCommandMenu';
 import { matchCommands, type SlashCommand } from '@/ui/chat/slashCommands';
 import { CopiedToast } from '@/ui/chat/CopiedToast';
+import { EventDisclosure } from '@/ui/chat/EventDisclosure';
 import { useAuth } from '@/context/AuthContext';
 import { messageToText } from '@/ui/chat/types';
 import { approvalResolutions, type ApprovalCommand } from '@/ui/chat/approvalPrompt';
@@ -45,7 +46,7 @@ import { captureError } from '@/lib/errorReporting';
 import { defaultCapabilitiesFor, frameworkLabel } from '@/agents/frameworks';
 import type { ConnectionState } from '@/agents/adapters/types';
 import { initialTurn, reduceTurn, turnToBlocks, settleBlocks, settleErrorBlocks, shouldFlush } from '@/ui/chat/streamReducer';
-import { recoverPendingReplies, recoveredMessageId } from '@/ui/chat/recoverReplies';
+import { recoverPendingReplies, recoveredMessageId, type RecoveredReply } from '@/ui/chat/recoverReplies';
 import type { ChatSession } from '@/agents/types';
 
 // ---------------------------------------------------------------------------
@@ -94,6 +95,15 @@ function sessionGroupLabel(timestamp: number): string {
   if (d.toDateString() === today.toDateString()) return 'Today';
   if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
   return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+
+/** Human-sized elapsed time for the live, operational working indicator. */
+function formatElapsed(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +183,10 @@ export default function AgentScreen() {
   const [activeSessionId, setActiveSessionId] = useState('');
   const [copiedAt, setCopiedAt] = useState(0);
   const [adapterConnectionState, setConnectionState] = useState<ConnectionState>('unknown');
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [activeToolLabel, setActiveToolLabel] = useState<string | null>(null);
+  const [completionReceipt, setCompletionReceipt] = useState<RecoveredReply | null>(null);
   const connectionState: ConnectionState = activeAgent ? adapterConnectionState : 'unknown';
   const resolvedApprovalCommands = useMemo(() => approvalResolutions(messages), [messages]);
 
@@ -194,6 +208,17 @@ export default function AgentScreen() {
       cancelledRef.current = true;
     };
   }, []);
+
+  // This is intentionally operational status, not hidden model reasoning:
+  // it tells the user that a run is alive and, when Hermes reports it, which
+  // tool is currently active.
+  useEffect(() => {
+    if (!streaming || !runStartedAt) return undefined;
+    const tick = () => setElapsedMs(Date.now() - runStartedAt);
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [streaming, runStartedAt]);
 
   useEffect(() => {
     if (!activeAgent) return;
@@ -257,9 +282,11 @@ export default function AgentScreen() {
     if (!adapter.syncPendingReplies) return;
     let cancelled = false;
     syncingAgentRef.current = activeAgent.id;
-    void recoverPendingReplies(repo, adapter)
-      .then(async (changedSessionIds) => {
-        if (cancelled || changedSessionIds.length === 0) return;
+    void recoverPendingReplies(repo, adapter, activeAgent.id)
+      .then(async (recovered) => {
+        if (cancelled || recovered.length === 0) return;
+        const changedSessionIds = [...new Set(recovered.map((reply) => reply.sessionId))];
+        setCompletionReceipt(recovered[recovered.length - 1]);
         const current = sessionRef.current;
         if (current && changedSessionIds.includes(current.id)) {
           await loadSession(current);
@@ -274,6 +301,42 @@ export default function AgentScreen() {
       cancelled = true;
     };
   }, [activeAgent, adapterFor, connectionState, loadSession, loadSessionSummaries, repo]);
+
+  // A host can finish scheduled work while this foreground socket is idle.
+  // The relay carries only a content-free nudge; the durable reply still comes
+  // from the normal outbox sync before it is ever displayed.
+  useEffect(() => {
+    if (!activeAgent) return;
+    const adapter = adapterFor(activeAgent);
+    if (!adapter.subscribeProactiveDelivery) return;
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+    const sync = () => {
+      if (syncingAgentRef.current === activeAgent.id) return;
+      syncingAgentRef.current = activeAgent.id;
+      void recoverPendingReplies(repo, adapter, activeAgent.id)
+        .then(async (recovered) => {
+          if (cancelled || recovered.length === 0) return;
+          const changedSessionIds = [...new Set(recovered.map((reply) => reply.sessionId))];
+          setCompletionReceipt(recovered[recovered.length - 1]);
+          const current = sessionRef.current;
+          if (current && changedSessionIds.includes(current.id)) await loadSession(current);
+          if (!cancelled) await loadSessionSummaries();
+        })
+        .catch((e) => captureError(e, { where: 'proactive_reply_sync', transport: 'relay' }))
+        .finally(() => {
+          if (syncingAgentRef.current === activeAgent.id) syncingAgentRef.current = null;
+        });
+    };
+    void adapter.subscribeProactiveDelivery((sync)).then((stop) => {
+      if (cancelled) stop();
+      else unsubscribe = stop;
+    }).catch((e) => captureError(e, { where: 'proactive_reply_subscribe', transport: 'relay' }));
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [activeAgent, adapterFor, loadSession, loadSessionSummaries, repo]);
 
   // Restore the most recent thread for the active agent (docs/AGENTS.md §6).
   useEffect(() => {
@@ -307,7 +370,10 @@ export default function AgentScreen() {
   }, [activeAgent, notificationSessionId, repo, loadSession, loadSessionSummaries, selectAgent]);
 
   const statusLabel =
-    status === 'running' ? 'running' : status === 'error' ? 'connection error' : 'ready';
+    status === 'running' ? 'working' : status === 'error' ? 'connection error' : 'ready';
+  const statusHint = status === 'running'
+    ? [activeToolLabel, formatElapsed(elapsedMs)].filter(Boolean).join(' · ')
+    : null;
   // Capability-driven UI: features surface only when the agent supports them.
   // Agents paired before capabilities were captured fall back to framework
   // defaults — additive, never subtractive.
@@ -329,6 +395,9 @@ export default function AgentScreen() {
     updateInput('');
     setStreaming(false);
     setStatus('idle');
+    setRunStartedAt(null);
+    setElapsedMs(0);
+    setActiveToolLabel(null);
     setSidebarOpen(false);
   }, [updateInput]);
 
@@ -408,6 +477,10 @@ export default function AgentScreen() {
   const handleOpenCron = useCallback(() => {
     setSidebarOpen(false);
     router.push('/(app)/cron');
+  }, []);
+
+  const handleOpenAgentProfile = useCallback(() => {
+    router.push('/(app)/agent-profile' as '/');
   }, []);
 
   // Resolve an approval card through the adapter's Runs API, then swap the
@@ -496,6 +569,9 @@ export default function AgentScreen() {
     ]);
     setStreaming(true);
     setStatus('running');
+    setRunStartedAt(Date.now());
+    setElapsedMs(0);
+    setActiveToolLabel(null);
     // One deliberate scroll to the send; while streaming, FlashList's
     // maintainVisibleContentPosition follows the bottom only when the reader
     // is already there — scrolling up to read is never fought.
@@ -523,6 +599,9 @@ export default function AgentScreen() {
       });
       for await (const event of stream) {
         if (stopRef.current) break;
+        if (event.type === 'tool') setActiveToolLabel(event.label);
+        if (event.type === 'delta') setActiveToolLabel(null);
+        if (event.type === 'approval') setActiveToolLabel('Waiting for your approval');
         if (event.type === 'done' || event.type === 'error') settledEventId = event.eventId;
         if (event.type === 'detached') detached = true;
         turn = reduceTurn(turn, event);
@@ -551,6 +630,8 @@ export default function AgentScreen() {
 
     if (cancelledRef.current) return;
     setStreaming(false);
+    setRunStartedAt(null);
+    setActiveToolLabel(null);
 
     // The connector still owns this turn. Remove the temporary stream row;
     // reconnect sync will insert the settled reply with its durable event ID.
@@ -623,6 +704,15 @@ export default function AgentScreen() {
     [submitText],
   );
 
+  const handleOpenRecoveredConversation = useCallback(() => {
+    if (!completionReceipt) return;
+    void (async () => {
+      const session = await repo.getSession(completionReceipt.sessionId);
+      if (session) await loadSession(session);
+      setCompletionReceipt(null);
+    })();
+  }, [completionReceipt, loadSession, repo]);
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -637,12 +727,22 @@ export default function AgentScreen() {
           name={activeAgent?.name ?? AGENT_NAME}
           status={status}
           statusLabel={statusLabel}
+          hint={statusHint}
           connectionState={connectionState}
           frameworkLabel={agentFrameworkLabel}
           onRetryConnection={handleRetryConnection}
+          onOpenProfile={handleOpenAgentProfile}
           onMenu={handleMenu}
           onNewChat={handleNewChat}
         />
+
+        {completionReceipt && (
+          <EventDisclosure
+            receipt={completionReceipt}
+            onOpen={handleOpenRecoveredConversation}
+            onDismiss={() => setCompletionReceipt(null)}
+          />
+        )}
 
         <KeyboardAvoidingView
           style={styles.flex}

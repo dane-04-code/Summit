@@ -218,17 +218,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
               Platform.OS === 'web'
                 ? undefined
                 : (event) => {
-                    setHeight(
-                      // Native may report the new content size before
-                      // onChangeText updates valueRef. Preserve the measured
-                      // height; displayedHeight still collapses an empty value.
-                      composerHeightFor(event.nativeEvent.contentSize.height, true),
+                    // Apply the native intrinsic measurement exactly. Adding
+                    // padding here makes the measured height feed back into the
+                    // explicit height, causing the composer to resize repeatedly.
+                    const nextHeight = composerHeightFor(
+                      event.nativeEvent.contentSize.height,
+                      true,
+                    );
+                    setHeight((currentHeight) =>
+                      currentHeight === nextHeight ? currentHeight : nextHeight,
                     );
                   }
             }
-            textAlignVertical={
-              displayedHeight > COMPOSER_MIN_HEIGHT ? 'top' : 'center'
-            }
+            textAlignVertical="top"
             accessibilityLabel="Message input"
           />
 

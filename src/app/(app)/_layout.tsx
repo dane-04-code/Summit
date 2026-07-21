@@ -32,6 +32,7 @@ export default function AppLayout() {
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="account" options={{ headerShown: false }} />
         <Stack.Screen name="connection" options={{ headerShown: false }} />
+        <Stack.Screen name="agent-profile" options={{ headerShown: false }} />
         <Stack.Screen name="data" options={{ headerShown: false }} />
         <Stack.Screen name="notifications" options={{ headerShown: false }} />
         <Stack.Screen name="cron" options={{ headerShown: false }} />

@@ -6,7 +6,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Animated, Easing } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 
@@ -146,33 +146,51 @@ function ToolChip({ state, label }: { state: RunState; label: string }) {
   );
 }
 
-// ── Thought status (safe operational state, never hidden model reasoning) ────
+// ── Live operational status (safe state, never hidden model reasoning) ──────
 
-function ThoughtStatus({ label }: { label?: string }) {
-  const [pulse] = useState(() => new Animated.Value(0.4));
+/** A quiet, travelling shimmer: the active letter brightens as it passes. */
+function ActivityStatus({ label }: { label?: string }) {
   const visibleLabel = label?.trim() || 'Thinking…';
+  const characters = Array.from(visibleLabel);
+  const [progress] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
+    progress.setValue(0);
     const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 650, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.4, duration: 650, useNativeDriver: true }),
-      ]),
+      Animated.timing(progress, {
+        toValue: characters.length + 2,
+        duration: Math.max(1200, characters.length * 95),
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
     );
     loop.start();
     return () => loop.stop();
-  }, [pulse]);
+  }, [characters.length, progress, visibleLabel]);
 
   return (
     <View
-      style={styles.thoughtStatus}
+      accessible
+      style={styles.activityStatus}
       accessibilityLabel={`Agent status: ${visibleLabel}`}
       accessibilityLiveRegion="polite"
     >
-      <Animated.View
-        style={[styles.thoughtPulse, { opacity: pulse, transform: [{ scale: pulse }] }]}
-      />
-      <Text style={styles.thoughtLabel}>{visibleLabel}</Text>
+      <Text style={styles.activityLabel}>
+        {characters.map((character, index) => (
+          <Animated.Text
+            key={`${index}-${character}`}
+            style={{
+              opacity: progress.interpolate({
+                inputRange: [index - 1, index, index + 1],
+                outputRange: [0.38, 1, 0.38],
+                extrapolate: 'clamp',
+              }),
+            }}
+          >
+            {character}
+          </Animated.Text>
+        ))}
+      </Text>
     </View>
   );
 }
@@ -203,7 +221,7 @@ export function AgentMessage({
           case 'text':
             return <Paragraph key={i} spans={block.spans} tone={block.tone} />;
           case 'activity':
-            return <ThoughtStatus key={i} label={block.label} />;
+            return <ActivityStatus key={i} label={block.label} />;
           case 'table':
             return <StatusTable key={i} rows={block.rows} />;
           case 'code':
@@ -215,7 +233,7 @@ export function AgentMessage({
               <MdFileCard key={i} file={block.file} onOpen={() => onOpenFile?.(block.file)} />
             );
           case 'markdown': {
-            if (block.source.trim() === '') return <ThoughtStatus key={i} />;
+            if (block.source.trim() === '') return <ActivityStatus key={i} />;
             const selectApproval = onApprovalCommand;
             if (selectApproval) {
               const approval = parseApprovalPrompt(block.source);
@@ -268,8 +286,7 @@ const styles = StyleSheet.create({
   inlineCode: {
     ...typography.mono,
     fontSize: typography.small.fontSize,
-    color: colors.ink,
-    backgroundColor: colors.surface,
+    color: colors.ink2,
   },
   mutedText: {
     color: colors.muted,
@@ -360,29 +377,14 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
 
-  // Thought / operational status
-  thoughtStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // Live operational status — deliberately not a bubble or card.
+  activityStatus: {
     alignSelf: 'flex-start',
-    gap: space.sm,
-    minHeight: 30,
-    paddingHorizontal: space.md,
-    paddingVertical: space.xs + 2,
-    borderRadius: 9999,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.surface,
+    paddingVertical: space.xs,
   },
-  thoughtPulse: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.accent,
-  },
-  thoughtLabel: {
+  activityLabel: {
     ...typography.caption,
-    color: colors.ink2,
+    color: colors.muted,
   },
 
   // Chip

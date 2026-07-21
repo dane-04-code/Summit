@@ -1,6 +1,7 @@
-# Agents: Connection, Storage & Persistence
+# Agents: Product, Connection, Storage & Persistence
 
-**Status:** Backend + relay background delivery built | Last updated 2026-07-19
+**Status:** iOS production build 13 finished and is processing for TestFlight; app + relay delivery
+built; native Hermes plugin alpha implemented and under real-device validation | Last updated 2026-07-21
 
 How an agent (Hermes today, OpenClaw later, anything else after) gets **added**, **connected**,
 **stored on the phone**, and **kept alive across app restarts** — including saved chat history.
@@ -10,12 +11,54 @@ in `FRAMEWORKS.md` (API surfaces + hard constraints) and `docs/CONNECTION.md` (r
 
 ---
 
+## 0. Product and delivery state — read this first
+
+**Summit is a mobile operator cockpit for a self-hosted agent, not a generic chat client.** The
+product is the fluent loop: pair the agent, message it from away from the desk, see safe operational
+activity, receive a privacy-safe notification when it needs attention, and act on a decision. Rich
+markdown is important presentation, but it is not the product by itself.
+
+### What is real today
+
+- The iOS app has account onboarding, relay pairing, saved sessions, streamed chat, native markdown,
+  status/activity, settings, and notification plumbing. Production build 13 has finished; confirm its
+  App Store Connect/TestFlight processing and complete physical-device validation before release.
+- `../Summit-Hermes/` is a separate Git working copy for the **native Hermes platform plugin**. It
+  is not merely a future design: its alpha implements native Hermes session routing, draft streaming,
+  safe live tool activity, reconnect, and a durable acknowledged reply outbox. It talks to the same
+  Summit relay without a local HTTP/API-key bridge.
+- `connector/` remains a working Go compatibility fallback (and the current OpenClaw bridge). It is
+  not the preferred Hermes onboarding path once the native plugin passes beta proof.
+- `../summit-openclaw/` contains the native OpenClaw channel foundation, but it must not be presented
+  as equivalent live chat support yet: public SDK-backed dispatch, finalization, approval, and stop
+  still need proof.
+
+### What to do next
+
+1. Prove the existing Hermes-plugin flow on a real iPhone: pair, stream, background the app, receive
+   a push, reopen/sync the settled reply, and restart/reconnect Hermes.
+2. Prove proactive cron delivery through the existing async/home-session path.
+3. Fix only failures found in that path. Do **not** build a broad speculative plugin feature list.
+4. If real cron output is hard to scan, add one bounded typed `cron_run` event/card next (job, state,
+   duration, next run, short summary). The app owns rendering; plugins never send arbitrary React,
+   HTML, or unrestricted custom UI.
+
+### Plugin output guardrails
+
+The Hermes alpha currently emits the existing relay shapes: streamed text chunks, ephemeral safe
+activity labels, settled replies, errors, and replay/ack frames. It must never expose chain of
+thought, tool arguments, or raw tool output as activity. Native approval cards and rich attachments
+are not part of the Hermes alpha. Fenced code remains a normal markdown presentation concern; a
+plugin is an agent-side channel, not permission to invent a second UI system.
+
+---
+
 ## 1. The three identity layers (don't conflate them)
 
 | Layer | What it is | Where it lives | Built? |
 |---|---|---|---|
 | **Account** | The human (Supabase auth: Apple / Google / email). Holds billing + future relay-routing identity. **Low-sensitivity** — never holds a Hermes key. | Supabase (cloud) + session in Keychain | ✅ (`docs/AUTH.md`) |
-| **Agent** | One configured connection to one agent server. Hermes is **one-server-one-agent**, so "an agent" = one host+key (direct) or one paired connector (relay). | On-device: metadata in SQLite, secret in Keychain | ✅ this doc |
+| **Agent** | One configured connection to one agent runtime. Hermes is **one-server-one-agent**, so "an agent" = one host+key (direct) or one paired relay channel (native plugin preferred; Go connector fallback). | On-device: metadata in SQLite, secret in Keychain | ✅ this doc |
 | **Session** | One conversation thread with one agent. Maps to a Hermes session key (Honcho memory) / OpenClaw session key. | On-device: SQLite (`sessions` + `messages`) | ✅ this doc |
 
 The account sits **above** the agent; it does not replace pairing. One account can hold many agents
@@ -30,19 +73,20 @@ An agent's `transport` decides *how* the phone talks to it. The rest of the mode
 (sessions, messages, capabilities) is identical regardless of transport.
 
 ```
-direct (built):  phone ──► reachable host:8642  (Bearer API key on device)
-relay  (built):  phone ──► our relay ◄── connector ──► Hermes  (device token on device,
-                                                                  API key stays on server)
+direct (advanced): phone ──► reachable host:8642  (Bearer API key on device)
+relay  (default):  phone ──► our relay ◄── native Hermes plugin ──► Hermes Gateway
+                                      └── Go connector fallback ──► Hermes/OpenClaw
 ```
 
 - **`direct`** — host URL + API key. Works only where the host is reachable (LAN / Tailscale /
   tunnel / domain). See `ONBOARDING.md`. The API key is the on-device secret. Accessed via
   `src/app/(app)/connect.tsx`.
-- **`relay`** — a 6-digit pairing code binds the device to a connector that dials our relay
-  (`CONNECTION.md`). It is a short-lived, single-use handshake: a successful pairing mints a
-  256-bit device token, which is the on-device secret. The Hermes key never reaches the phone.
-  Primary onboarding path: `src/app/(app)/pair.tsx`. Relay is `relay/` (Cloudflare Worker),
-  connector is `connector/` (Go), frame types in `protocol/`.
+- **`relay`** — a 6-digit pairing code binds the device to an agent-side relay channel. For Hermes,
+  the preferred alpha path is the native platform plugin in `../Summit-Hermes/`; the Go connector
+  remains the fallback and currently bridges OpenClaw. It is a short-lived, single-use handshake:
+  successful pairing mints a 256-bit device token, which is the on-device secret. The Hermes API
+  key never reaches the phone. Primary onboarding path: `src/app/(app)/pair.tsx`. Relay is `relay/`
+  (Cloudflare Worker); frame types remain in `protocol/`.
 
 The secret's *meaning* differs by transport (API key vs device token), but storage is the same:
 one secret per agent in the Keychain (§4).
@@ -73,9 +117,9 @@ interface AgentAdapter {
 4. Add its connect/pair UI (a screen that produces an `Agent` row + a secret).
 
 The data model (transport, secrets, sessions, messages) is framework-agnostic, so a new agent
-reuses all of it. This is the "formal adapter abstraction, built from real cases" the brief earmarks
-for later — we lay the foundation now with the two real cases (Hermes built, OpenClaw stubbed as the
-extension point).
+reuses all of it. Agent-side packaging is separate from the app adapter: the direct Hermes adapter,
+the relay adapter, the native Hermes platform plugin, and the Go fallback all feed the same stored
+agent/session/message model.
 
 **Hard constraints the adapter must respect** (`FRAMEWORKS.md` — do not design around):
 - Hermes: no file upload (inline images only), model field cosmetic, `run_approval` is gated behind
@@ -107,17 +151,18 @@ On the phone, three stores by sensitivity:
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
-Background delivery adds one bounded, temporary store on the user's connector host:
+Background delivery adds one bounded, temporary store on the user's agent-side relay host:
 
 ```text
-~/.summit/reply_outbox.json  owner-only (0600), at most 100 settled replies
+native Hermes plugin: ~/.hermes/summit/reply_outbox.json  owner-only (0600), at most 100 replies
+Go connector fallback:  ~/.summit/reply_outbox.json        owner-only (0600), at most 100 replies
 ```
 
-The connector writes a settled reply before emitting its terminal frame. On cold start/reconnect,
-the app requests pending replies, persists each into SQLite, then acknowledges the connector so it
-can delete them. This is the narrow exception to phone-only transcript storage required for turns
-to finish while iOS suspends or kills Summit. The hosted relay never persists reply content, and
-push payloads remain content-free.
+The native plugin or fallback connector writes a settled reply before emitting its terminal frame.
+On cold start/reconnect, the app requests pending replies, persists each into SQLite, then
+acknowledges the agent-side channel so it can delete them. This is the narrow exception to
+phone-only transcript storage required for turns to finish while iOS suspends or kills Summit. The
+hosted relay never persists reply content, and push payloads remain content-free.
 
 **The rule:** secrets live *only* in the Keychain. SQLite never holds an API key or device token.
 `base_url` (a host, not a credential) lives in SQLite so the registry can list agents without
@@ -175,9 +220,9 @@ not just flattened text.
 4. Land in chat.
 
 ### Relay mode (slice 3a — `docs/CONNECTION.md`, `src/app/(app)/pair.tsx`)
-1. Pair screen: enter the 6-digit code printed by the connector. Treat it as a password: never
-   share it.
-2. `RelayClient.pair()` sends a `pair` frame; relay binds device ↔ connector, returns agent
+1. Pair screen: enter the 6-digit code printed by the native plugin or fallback connector. Treat it
+   as a password: never share it.
+2. `RelayClient.pair()` sends a `pair` frame; relay binds device ↔ agent-side relay channel, returns agent
    name/version and mints a durable 256-bit device token.
 3. Store the channel locator and **device token** in Keychain as `agent.<id>.secret`; store only
    metadata in SQLite (`transport: 'relay'`, `base_url: null`). Same `agents` row shape.
@@ -200,7 +245,7 @@ On every cold start, `AgentProvider` (wrapped at the root, beside `AuthProvider`
 5. The secret is **not** loaded yet — it's fetched from the Keychain only when the first network
    call is made.
 6. For relay agents, the provider establishes the socket on cold start and the chat syncs any
-   connector-owned settled replies that completed while the app was unavailable.
+   plugin- or connector-owned settled replies that completed while the app was unavailable.
 
 Because the source of truth is SQLite + Keychain (both survive process death and reboots, and are
 wiped only on uninstall), the agent and its chats persist with zero server round-trip. Reinstall /
@@ -263,6 +308,16 @@ connector/              Go binary (gorilla/websocket)
   hermes.go             streamChat() — POSTs to Hermes /v1/chat/completions, emits chunks
   outbox.go             bounded owner-only settled reply queue; survives phone/connector restarts
 
+../Summit-Hermes/       Separate native Hermes platform-plugin working copy (alpha)
+  summit_hermes/platform.py
+                        Native sessions, draft streaming, safe tool activity, relay transport,
+                        durable settled-reply outbox and replay
+  tests/                Unit coverage for plugin registration, protocol, turns, storage and relay
+
+../summit-openclaw/     Separate native OpenClaw channel working copy (foundation only)
+                        Config, relay boundary, durable state and reconnect exist; do not claim
+                        SDK-backed chat dispatch, finalization, approval or stop yet
+
 protocol/
   protocol.ts           Canonical JSON frame types (AnyFrame + subtypes)
 ```
@@ -274,8 +329,9 @@ are unit-testable against the in-memory version without a native SQLite module.
 
 ## 9. Out of scope here (tracked elsewhere)
 
-- The **relay server + connector sidecar** — separate infrastructure, not the app's on-device
-  backend (`docs/CONNECTION.md`).
-- Rewiring the chat screen's stub stream to the live `HermesAdapter` — frontend integration, a
-  follow-on once this backend lands (the screen still seeds + stubs today).
-- OpenClaw's real adapter — needs its own research pass (`FRAMEWORKS.md` §OpenClaw).
+- The **relay server and agent-side channels** — separate infrastructure/packages, not the app's
+  on-device backend (`docs/CONNECTION.md`, `../Summit-Hermes/`, `connector/`).
+- Arbitrary plugin-rendered UI, chain-of-thought/tool-log transcript output, rich attachments, and
+  native Hermes approval cards. Add only bounded typed events after a real device need is proven.
+- Native OpenClaw chat dispatch and controls — the separate OpenClaw plugin remains a foundation
+  until its public SDK contract is proven.

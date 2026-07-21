@@ -24,8 +24,12 @@ describe('recoverPendingReplies', () => {
       acknowledgeReplies,
     } as unknown as AgentAdapter;
 
-    await expect(recoverPendingReplies(repo, adapter)).resolves.toEqual(['session-1']);
-    await expect(recoverPendingReplies(repo, adapter)).resolves.toEqual(['session-1']);
+    await expect(recoverPendingReplies(repo, adapter)).resolves.toEqual([
+      { sessionId: 'session-1', createdAt: 20, scheduledWork: false },
+    ]);
+    await expect(recoverPendingReplies(repo, adapter)).resolves.toEqual([
+      { sessionId: 'session-1', createdAt: 20, scheduledWork: false },
+    ]);
 
     const stored = await repo.listMessages('session-1');
     expect(stored).toHaveLength(1);
@@ -44,6 +48,23 @@ describe('recoverPendingReplies', () => {
     await expect(recoverPendingReplies(repo, adapter)).resolves.toEqual([]);
     expect(acknowledgeReplies).toHaveBeenCalledWith(['event-1']);
     expect(await repo.getSession('session-1')).toBeNull();
+  });
+
+  it('creates the dedicated scheduled-work thread for a trusted host delivery', async () => {
+    const repo = new InMemoryRepository();
+    const scheduled = { ...reply, sessionId: 'summit-scheduled-0123456789abcdef01234567' };
+    const adapter = {
+      syncPendingReplies: jest.fn(async () => [scheduled]),
+      acknowledgeReplies: jest.fn(async () => {}),
+    } as unknown as AgentAdapter;
+
+    await expect(recoverPendingReplies(repo, adapter, 'agent-1')).resolves.toEqual([
+      { sessionId: scheduled.sessionId, createdAt: 20, scheduledWork: true },
+    ]);
+    expect(await repo.getSession(scheduled.sessionId)).toMatchObject({
+      agentId: 'agent-1',
+      title: 'Scheduled work',
+    });
   });
 
   it('keeps partial text before an error note', async () => {

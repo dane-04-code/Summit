@@ -27,7 +27,9 @@ export type StreamEvent =
   // The phone-side socket vanished, but the connector-owned turn continues.
   // The settled result arrives through background sync on reconnect.
   | { type: 'detached' }
-  | { type: 'done'; eventId?: string }
+  // Native transports can supply the authoritative final text when a draft
+  // was revised mid-turn. Other transports continue to use streamed deltas.
+  | { type: 'done'; eventId?: string; content?: string }
   | { type: 'error'; message: string; eventId?: string };
 
 export type SettledReply = {
@@ -82,6 +84,8 @@ export interface AgentAdapter {
   /** Relay-only durable delivery hooks; direct adapters have no remote outbox. */
   syncPendingReplies?(): Promise<SettledReply[]>;
   acknowledgeReplies?(ids: string[]): Promise<void>;
+  /** A content-free signal that a host-owned asynchronous reply is ready to sync. */
+  subscribeProactiveDelivery?(listener: () => void): Promise<() => void>;
 
   // Runs API — Hermes only in v1 (gate on capabilities.hasRunApproval).
   approveRun(runId: string, approved: boolean): Promise<void>;

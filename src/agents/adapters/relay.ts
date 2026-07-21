@@ -107,6 +107,10 @@ export class RelayAdapter implements AgentAdapter {
     await (await this.ensureConnected()).acknowledgeReplies(ids);
   }
 
+  async subscribeProactiveDelivery(listener: () => void): Promise<() => void> {
+    return (await this.ensureConnected()).subscribeNotifications(listener);
+  }
+
   async *sendMessage(content: string, opts?: SendOptions): AsyncIterable<StreamEvent> {
     const client = await this.ensureConnected();
     const messages: ChatMessage[] = [{ role: 'user', content }];

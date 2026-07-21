@@ -34,10 +34,42 @@ export const MAX_MARKDOWN_CHARS = 64000;
 export const MAX_MARKDOWN_LINES = 2000;
 export const MAX_MARKDOWN_LINE_CHARS = 2000;
 
+/**
+ * Agent output is untrusted presentation text. Keep ordinary markdown intact,
+ * while removing transport/terminal control bytes that otherwise show up as
+ * visual garbage in a mobile reply.
+ */
+export function normalizeMarkdownSource(source: string): string {
+  return source
+    .replace(/\r\n?/g, '\n')
+    // ANSI CSI and OSC sequences carry terminal styling, not reply content.
+    .replace(/\u001b(?:\][^\u0007\u001b]*(?:\u0007|\u001b\\)|\[[0-?]*[ -/]*[@-~])/g, '')
+    // Preserve normal whitespace, including newlines/tabs, while removing
+    // remaining invisible C0 control bytes and lone escape characters.
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '');
+}
+
+/** Close a fence only when truncation would put the safety notice inside code. */
+function closingFenceFor(source: string): string | null {
+  let open: { marker: '`' | '~'; length: number } | null = null;
+  for (const match of source.matchAll(/^(?: {0,3})(`{3,}|~{3,})(.*)$/gm)) {
+    const fence = match[1];
+    const marker = fence[0] as '`' | '~';
+    if (!open) open = { marker, length: fence.length };
+    // A closing markdown fence can only have trailing whitespace. Treat a
+    // fence-looking code line with content after it as normal code.
+    else if (open.marker === marker && fence.length >= open.length && match[2].trim() === '') {
+      open = null;
+    }
+  }
+  return open ? open.marker.repeat(open.length) : null;
+}
+
 export function boundMarkdownSource(source: string): string {
   let truncated = false;
-  const boundedLines = source
-    .split('\n')
+  const normalized = normalizeMarkdownSource(source);
+  const allLines = normalized.split('\n');
+  const boundedLines = allLines
     .slice(0, MAX_MARKDOWN_LINES)
     .map((line) => {
       if (line.length <= MAX_MARKDOWN_LINE_CHARS) return line;
@@ -45,7 +77,7 @@ export function boundMarkdownSource(source: string): string {
       return `${line.slice(0, MAX_MARKDOWN_LINE_CHARS)}\n\n[Line truncated for safety]`;
     });
 
-  if (source.split('\n').length > MAX_MARKDOWN_LINES) truncated = true;
+  if (allLines.length > MAX_MARKDOWN_LINES) truncated = true;
 
   let bounded = boundedLines.join('\n');
   if (bounded.length > MAX_MARKDOWN_CHARS) {
@@ -53,10 +85,15 @@ export function boundMarkdownSource(source: string): string {
     truncated = true;
   }
 
-  return truncated ? `${bounded}\n\n[Output truncated for safety]` : bounded;
+  if (!truncated) return bounded;
+  const closingFence = closingFenceFor(bounded);
+  if (closingFence) bounded = `${bounded}\n${closingFence}`;
+  return `${bounded}\n\n[Output truncated for safety]`;
 }
 
-const md = MarkdownIt({ typographer: false, linkify: false, breaks: false })
+// Agent replies often contain bare URLs. Make those practical links usable;
+// markdown-it still leaves URLs inside code fences and inline code literal.
+const md = MarkdownIt({ typographer: false, linkify: true, breaks: false })
   .use(markdownItMark)
   .use(richPlugins);
 
@@ -376,13 +413,18 @@ const mdStyles = StyleSheet.create({
 
   code_inline: {
     fontFamily: MONO,
-    fontSize: 13.5,
-    color: colors.ink,
-    backgroundColor: colors.surface2,
+    // react-native-markdown-display's default inline-code treatment is a
+    // padded, bordered chip. In a technical reply that turns a simple skill
+    // name or filename into a distracting series of dark rectangles. Keep the
+    // monospace signal, but let it sit naturally in the sentence instead.
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.ink2,
     borderWidth: 0,
-    borderRadius: 6,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    borderColor: 'transparent',
+    backgroundColor: 'transparent',
+    padding: 0,
+    borderRadius: 0,
   },
 
   table: {

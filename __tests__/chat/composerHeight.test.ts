@@ -10,7 +10,7 @@ describe('composerHeightFor', () => {
   });
 
   it('grows with content and stops at its maximum height', () => {
-    expect(composerHeightFor(48, true)).toBe(50);
+    expect(composerHeightFor(48, true)).toBe(48);
     expect(composerHeightFor(500, true)).toBe(COMPOSER_MAX_HEIGHT);
   });
 });

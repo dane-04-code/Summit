@@ -1,7 +1,20 @@
 # Summit Native Plugin Build Programme
 
-_Status: architecture approved for implementation planning. Hermes is first; OpenClaw follows.
-Last verified against upstream source: 2026-07-19._
+_Status: Hermes native plugin alpha is built and under active real-device proof. The relay is
+working reliably in active testing. OpenClaw remains a separate foundation, not a V1 dependency.
+Last reviewed: 2026-07-21._
+
+## Current V1 priority
+
+The connection shape is no longer the project risk. The Hermes plugin already carries native
+sessions, draft streaming, safe activity labels, reconnect, and durable settled-reply replay over
+the Summit relay. V1 should use and prove those capabilities through a better mobile conversation
+surface: answer first, quiet progress while useful work happens, and one real proactive/cron result.
+
+Do not block V1 on a broad protocol v2 or a catalogue of plugin features. Existing text chunks,
+activity, completion, and replay frames cover the current proof. Add a typed event only after a
+real test establishes a presentation need; a compact `cron_run` summary is the likely first case.
+Plugins never transmit arbitrary UI, raw tool arguments/output, or model reasoning.
 
 ## The decision in plain English
 
@@ -79,10 +92,11 @@ the main app's stale Expo licence.
 Both plugins speak one versioned protocol so the app and relay do not grow framework-specific
 transport branches. Framework differences are translated at the plugin boundary.
 
-### Protocol v2 work required before plugin beta
+### Protocol evolution after current V1 proof
 
-The current protocol already has pairing, chat chunks, settled reply replay, push nudges, API proxy,
-and approvals. Add these fields/events without breaking the Go connector's v1 path:
+The current protocol already has pairing, chat chunks, safe activity, settled reply replay, push
+nudges, API proxy, and approvals. The following is a future-compatible envelope to introduce only
+when a proven V1 output needs it, without breaking the Go connector's v1 path:
 
 - `protocolVersion`, `pluginVersion`, `frameworkVersion`, and negotiated `capabilities` in `hello`.
 - A structured `event` envelope with stable `eventId`, `reqId`, `sessionId`, `sequence`, `kind`,
@@ -125,20 +139,21 @@ Design protocol v2 so encrypted payloads can be introduced without changing fram
 
 ## Build order
 
-### 0. Shared contract foundation
+### 0. Existing foundation — built
 
-- Freeze v2 event names, limits, retry rules, and capability negotiation.
-- Produce JSON fixtures for pair, resume, chat, stream, approval, disconnect, sync, and ack.
-- Make app, relay, and Go connector pass the same compatibility fixtures.
-- Add an encrypted-payload placeholder to avoid a later routing redesign.
+- Relay pairing, native Hermes session routing, text draft streaming, safe tool activity, reconnect,
+  and durable settled-reply replay are implemented.
+- The app, relay, and Go connector retain their compatibility path; the connector is the fallback.
 
-### 1. Hermes proof and beta
+### 1. Hermes V1 proof and beta — current
 
-- Prove native text draft streaming, tool progress, approval presentation, stop, cron delivery, and
-  gateway restart behaviour with a minimal local platform plugin.
-- Build pairing, relay transport, durable outbox, and structured output.
-- Release a pinned GitHub beta and test on clean Linux/macOS Hermes hosts plus a real iPhone.
-- Keep the Go connector visible as the fallback.
+- Prove the existing native flow on clean Hermes hosts and a real iPhone: pairing, streaming,
+  background/restart recovery, and gateway restart.
+- Prove one proactive cron/home-session delivery. Add a bounded typed summary only if the ordinary
+  text/activity output is insufficient to scan.
+- Validate approval/stop presentation against live harness behaviour; do not claim native approval
+  cards until that path has evidence.
+- Release a pinned plugin beta and keep the Go connector visible as fallback.
 
 The full implementation map is in [HERMES_PLUGIN_BUILD_PLAN.md](./HERMES_PLUGIN_BUILD_PLAN.md).
 

@@ -1,7 +1,7 @@
 # Summit — Product Brief
 
 *The single source of product truth for the nano product manager. Synthesizes `PRD.md`,
-`FRAMEWORKS.md`, and `CONNECTION.md`. When those change, update this. Last synced: 2026-07-20.*
+`FRAMEWORKS.md`, and `CONNECTION.md`. When those change, update this. Last synced: 2026-07-21.*
 
 ---
 
@@ -13,8 +13,8 @@ agent: reach it from anywhere, message it fluidly, see its status, and act on bl
 with one tap. It is *not* a replacement for Telegram/Discord as everyday messengers — it fixes the
 specific things those break when you're working with an agent on your phone.
 
-**Codename:** Summit · **Stage:** implementation ready for real-device beta verification; not yet
-store-ready · **Author:** Dane
+**Codename:** Summit · **Stage:** Hermes native-plugin alpha and iOS app are ready for a real-device
+beta proof; not yet store-ready · **Author:** Dane
 
 ## 2. The positioning thesis (memorize this — it's the spine)
 
@@ -51,16 +51,17 @@ A self-hosted Hermes is **inbound-only** and sits behind NAT, so a phone off hom
 it directly. Making the app a "direct API client" would only work on WiFi and be *harder to set up
 than the Telegram bot we replace* — disqualifying.
 
-**Solution: relay-mandatory for MVP, mirroring Telegram's shape.**
-- A small **connector sidecar** runs next to Hermes (Hermes can't dial out itself), talks to
-  `localhost:8642`, and dials **outbound** to a relay we operate. The app connects to the relay.
-  The relay is the meeting point — nothing on the user's network is exposed.
+**Solution: relay-first, mirroring Telegram's shape.**
+- The native **Hermes platform plugin** is now the preferred agent-side connection. It runs inside
+  the Hermes gateway and dials **outbound** to the relay we operate; the app connects to that same
+  relay. Nothing on the user's network is exposed and the Hermes API key stays off the phone.
+- The Go **connector sidecar** remains a working compatibility fallback and the current OpenClaw
+  bridge. It is not the recommended Hermes path once native-plugin proof is complete.
 - **Pairing = a 6-digit code.** It is a short-lived, single-use handshake only. Successful pairing
   replaces it with private 256-bit app and connector credentials; the phone keeps its credential
   in Keychain. No host URL or agent API key is needed on the phone.
-- **Agent-assisted onboarding (headline path):** the user pastes a prompt to their agent; the agent
-  installs its own connector (deterministic one-liner, daemonized as a service) and reads back the
-  6-digit code. The agent gives itself a phone.
+- **Agent-assisted onboarding (headline path):** the user asks their agent to install/enable the
+  Summit Hermes plugin, then enters the 6-digit code it provides. The agent gives itself a phone.
 - **Direct mode (advanced fallback/dev path):** paste a reachable host + API key
   (Tailscale/tunnel/domain). The implementation remains available for development, but it is hidden
   from first-run onboarding for the beta so pairing has one clear path.
@@ -69,8 +70,9 @@ than the Telegram bot we replace* — disqualifying.
 - **Production domain:** `summitapp.dev`, with `relay.summitapp.dev` for WebSocket relay traffic,
   `api.summitapp.dev` for pairing/API requests, and `get.summitapp.dev` for the connector installer.
 
-*The one cost:* relay infra to run, and the connector to install (made trivial via agent-assisted
-onboarding). Mitigations: thin/self-hostable relay (open-core), direct mode bypasses it.
+*The one cost:* relay infrastructure to run and an agent-side integration to enable. The native
+Hermes plugin has reached alpha; the connector remains a compatibility path. Mitigations:
+thin/self-hostable relay (open-core), direct mode bypasses it.
 
 ## 5. Hard constraints (from `FRAMEWORKS.md` — do not propose around these)
 
@@ -89,13 +91,85 @@ in issue #20934), **has** file upload (images + PDFs), no `/v1/capabilities`. Th
 focused relay chat/approval implementation, but do not assume Hermes parity or promise broad
 support until real-world beta validation.
 
-## 6. Current scope
+## 6. Current V1 scope
+
+**Now:** connection is no longer the leading uncertainty. Finish chat display and the safe,
+user-facing output that comes from real agent harnesses: streamed response text, compact activity,
+settled reply recovery, and one proactive cron/result proof. The native Hermes plugin already
+provides the first three. Add a typed `cron_run` summary only if that real test needs it; do not
+expand into arbitrary plugin UI, raw logs, or a dashboard before release.
+
+**One output contract:** every transport produces the same durable, copyable markdown conversation.
+The native Hermes plugin may enrich a live turn with trusted, ephemeral activity and route an
+asynchronous result back to the correct session; it must not create a separate transcript format or
+an exposed tool trace. This keeps the baseline excellent for relay/connector users while making the
+native path calmer and more dependable.
+
+**Event disclosures:** Summit may use one app-owned, collapsed-by-default disclosure pattern for
+typed operational facts that earn context beyond a one-line notice. The first V1 use is the
+background-completion receipt (“Finished while you were away”); later fixed kinds may cover a
+scheduled run or a supported approval. Expanding reveals only the bounded fields Summit defines
+(for example outcome, time, duration, and a link to the owning thread), never arbitrary plugin UI,
+raw tool output, chain-of-thought, paths, or command arguments. The durable agent answer remains
+ordinary Markdown beside it.
+
+**Scheduled-work contract:** the Cron tab is the canonical, consistent view of an agent's scheduled
+jobs. For every supported Hermes transport it must load all available jobs and their useful state
+(schedule, enabled/running state, next run, last result/status, and safe controls). Chat is where a
+particular completed result is delivered, not where users manage their schedule. Native-plugin Jobs
+API parity is therefore a V1 requirement; do not call Cron complete until that bridge is proven.
+
+### Native-plugin quality plan (the next five multipliers)
+
+**Decision:** the native plugin is Summit's *quality and continuity layer*, not a channel for
+inventing a second UI or transcript. It may provide facts that only the agent host knows — native
+turn ownership, safe lifecycle state, settled delivery, scheduled work, and supported control
+requests. The phone owns presentation; all durable replies remain the same copyable Markdown for
+every transport.
+
+1. **Truthful live-turn status — V1 polish, build now.** A quiet, unboxed shimmering status line
+   should show only the current safe label—such as “Searching the web…” or “Reading files…”—as
+   Hermes actually changes tools. It must deduplicate repeated events, never reveal reasoning,
+   commands, paths, arguments, or tool output, and disappear into the final answer. The moving text
+   gives a technical user proof of progress without recreating a terminal or a second message card
+   on a phone. The plugin emits the trusted event; prove the exact real-device presentation before
+   calling the V1 flow finished.
+2. **Authoritative final-answer repair — V1 release gate, build now.** Hermes can revise a streamed
+   draft at a tool boundary. The plugin must send the settled final answer with the terminal event,
+   and Summit must replace a superseded draft before persisting it. This is not a decorative
+   enhancement: showing an old partial answer destroys trust in the core product. The protocol and
+   reducer are implemented; test a real revised turn and restart recovery before release.
+3. **Calm background completion — V1 release gate, build now.** When a user locks or kills the app,
+   the host keeps the turn alive, durably records the settled reply, and returns it to the owning
+   thread exactly once after reconnect. The app may show a small “finished while you were away”
+   state and use the existing notification policy, but it must not manufacture a second system
+   message or treat phone silence as a failed run. This is the plugin advantage users feel every
+   day versus a brittle bot.
+4. **Scheduled-work home — V1 proof, next.** The Cron tab remains the management surface; the
+   plugin's host-only, allow-listed Jobs API bridge supplies all jobs and safe controls. The
+   documented `summit-home` target resolves to a private per-agent **Scheduled work** thread; a
+   content-free relay nudge makes the app sync the durable Markdown result into that thread. Do not
+   add a raw log flood or a duplicate job editor in chat. Add a compact typed `cron_run` summary
+   only if the real test shows ordinary settled Markdown is not scannable enough. Prove a real
+   schedule end-to-end, including a failed run and a paused job. The native plugin must support
+   both gateway-owned and separate-process cron delivery through the same owner-only reply outbox.
+5. **Native intervention requests — Phase 2 proof, not a release blocker.** When Hermes exposes a
+   stable native approval/stop event with a run ID, the plugin can send a typed action request so
+   Summit renders one-tap approve/deny/stop controls. Until that integration is proven and the
+   runtime `run_approval` capability says it is available, keep the existing exact-command fallback.
+   Do not infer approvals from prose or send arbitrary host commands through the relay.
+
+**Explicitly not in this plan:** raw tool transcripts, chain-of-thought, agent-defined arbitrary
+widgets, a chat-based cron editor, social presence, and a generic plugin marketplace. Each would
+make Summit busier without strengthening the agent-to-phone flow.
 
 **MVP (Phase 1–2, build first):** agent-assisted pairing onboarding · chat with streaming markdown ·
 proper markdown rendering (tables/headings/code, partial-stream-safe) · agent status (idle/running/
 error) with quiet, structured operational activity during long tool work (never chain-of-thought) ·
 auto-growing mobile composer with OS speech-to-text dictation · reply from app · approve/stop
-actions. Relay turns are server-owned: phone-side silence must not declare a live turn failed.
+actions. Hermes text-fallback approval prompts render as one-tap native action grids while Hermes
+continues to own policy and command resolution. Relay turns are server-owned: phone-side silence
+must not declare a live turn failed.
 
 **Phase 2:** relay push notifications now have per-agent modes (all activity / attention only / off)
 and privacy-safe tap-to-thread routing; physical-device delivery verification is still required.
@@ -104,17 +178,27 @@ reachable while iOS suspends Summit, and the app is woken only by push/tap/reope
 WebSocket must never be treated as the durable worker. Quick-reply from notification · multi-agent
 (multiple host+key pairs) remain follow-ons.
 
-**Backlog (v2+, don't start until MVP validates):** cross-agent search · "last result" pin per agent
-· cost/usage glance · agent-defined status widgets (JSON → card) · broader OpenClaw support · formal
-adapter abstraction (build from real cases, not guessed).
+**Backlog (v2+, don't start until MVP validates):** **Summit Artifacts** — private, versioned,
+agent-built micro-tools that live with the agent that created them; begin with a constrained native
+artifact canvas and gate arbitrary web code behind a security/App Store feasibility spike ·
+cross-agent search · "last result" pin per agent · cost/usage glance · agent-defined status widgets
+(JSON → card) · broader OpenClaw support · formal adapter abstraction (build from real cases, not
+guessed).
 
-**Connection packaging direction (active pre-beta plan):** make native Hermes/OpenClaw channel
-plugins the recommended agent-side install while keeping the relay protocol and hosted relay. Ship
-Hermes first, then OpenClaw. Host two public repositories under the Summit company GitHub
-organisation because Hermes is a Python platform plugin and OpenClaw is a TypeScript channel
-package with a separate release/compatibility model. There are no existing users to migrate. Keep
-the Go connector frozen as an internal parity reference and optional generic/legacy fallback until
-the plugins pass real-host and real-device testing; do not advertise it as the future path.
+**Connection packaging direction (active beta work):** the native Hermes channel plugin is now an
+implemented alpha in the separate `../Summit-Hermes/` working copy: it has native session routing,
+draft streaming, safe activity, reconnect, and durable reply replay. Validate it on real hosts and
+real devices before making it the public default. Ship Hermes first, then OpenClaw. The OpenClaw
+TypeScript channel package remains a separate SDK-proof foundation. Keep the Go connector as the
+working compatibility fallback until the native plugins pass that proof; do not build a broad
+speculative plugin feature list before the core loop validates.
+
+**Agent profile direction:** Summit has an app-owned pushed Agent Profile surface, opened from the
+chat header. It shows paired identity and verified capability data now; a later native-plugin
+profile snapshot may add bounded skill/tool metadata (name and short summary only). The plugin
+never supplies layout, raw skill instructions, system prompts, tool arguments, host paths, or tool
+output. A compact chat link may open this same surface, but the profile is not a new dashboard or
+second transcript.
 
 ## 7. Explicit non-goals (ruled OUT — flag if an idea lands here)
 
@@ -132,7 +216,8 @@ manual, not magic).
    the community's OSS/free preference. Validate appetite before investing.
 3. **Community validation:** post in Hermes/OpenClaw Discord to confirm real demand before building.
 4. **Native approval proof:** Hermes and OpenClaw expose native messaging/plugin surfaces, but the
-   supported in-process path for resolving structured mobile approvals still requires a proof spike.
+   supported in-process path for resolving structured mobile approvals still requires a proof spike;
+   the shipped Hermes fallback sends only the exact slash commands the agent already offered.
 5. **Demo/launch plan:** short screen recording — lead with the *flow* (pair → fluid chat → one-tap
    approve), not just markdown.
 6. **Plugin release gate:** native plugins become the public onboarding path only after they match

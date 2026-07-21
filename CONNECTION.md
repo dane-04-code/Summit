@@ -1,6 +1,12 @@
 # Connection Architecture
 
-**Status:** Slices 3a–3c complete — relay deployed, install script live, pair screen shipped | Last updated 2026-06-29
+**Status:** Relay deployed and working reliably in active testing; native Hermes platform plugin
+alpha built; Go connector retained as compatibility fallback | Last reviewed 2026-07-21
+
+> **Current delivery note:** this document records the relay architecture. The native Hermes
+> platform plugin now supplies the preferred outbound leg from inside Hermes; the Go connector is
+> no longer the only or intended default Hermes integration. V1 work is chat/output polish and
+> real-device proof, not a new transport design. See `docs/PROJECT_STATUS.md` for the release view.
 
 ---
 
@@ -24,24 +30,24 @@ A self-hosted Telegram bot works from anywhere with zero networking config becau
 **connects _outbound_ to Telegram's cloud** (long-polling `getUpdates`, or a webhook); Telegram is
 the rendezvous in the middle, so nothing reaches *in* to the home network.
 
-**Important correction (per `FRAMEWORKS.md`):** *Hermes itself does not do this.* Hermes is an
-**inbound-only API server** — you enable it (`0.0.0.0:8642`, `hermes gateway`) and clients connect
-*to* it. There is no native outbound/webhook hook. The outbound messaging breadth (Telegram, Slack,
-etc.) is an **OpenClaw** feature, not Hermes.
+**Important distinction:** Hermes' HTTP API is an **inbound-only API server** — you enable it
+(`0.0.0.0:8642`, `hermes gateway`) and clients connect *to* it. That still makes direct mobile API
+access unsuitable. Hermes now also has Summit's native **platform plugin** alpha, however: it runs
+inside the gateway and can maintain the outbound relay connection while using Hermes' native
+session and delivery interfaces.
 
-So the outbound leg in a Hermes user's Telegram setup comes from a **bridge process**, not from
-Hermes: that bridge connects to Hermes's local API (`localhost:8642`) and dials out to Telegram's
-cloud.
+The native plugin is the preferred outbound leg. The separate bridge remains a compatible fallback
+for hosts that cannot use the plugin.
 
 ```
-  Today:   Telegram cloud ◄── [telegram bridge] ──► Hermes :8642 (localhost)
-  Ours:    our relay      ◄── [our connector]   ──► Hermes :8642 (localhost)
+  Preferred: our relay ◄── [Summit Hermes platform plugin] ◄── native Hermes API
+  Fallback:  our relay ◄── [Go connector] ──► Hermes :8642 (localhost)
 ```
 
-**This is the mechanism we mirror.** We ship our own **connector sidecar** — a small process the
-user runs next to Hermes that talks to `localhost:8642` and dials outbound to our relay. The sidecar
-isn't an optional fallback; because Hermes can't dial out itself, **the connector is mandatory for
-relay mode.** It's proven by the fact that Telegram bridges already work exactly this way.
+**The relay shape remains the same.** The native plugin is the preferred Hermes implementation of
+the outbound leg. The Go connector runs next to Hermes, talks to `localhost:8642`, and dials the
+same relay when the plugin is unavailable; it remains an explicit fallback, not a separate product
+path.
 
 ## 3. Decision: relay-first
 
@@ -49,13 +55,14 @@ relay mode.** It's proven by the fact that Telegram bridges already work exactly
 relay we operate; the direct-API-host model survives only as an optional advanced mode.
 
 ```
-  Default (relay):   phone ──► our relay ◄── Hermes connector   (outbound, like Telegram)
+  Default (relay):   phone ──► our relay ◄── Hermes plugin      (outbound, native)
+  Fallback (relay):  phone ──► our relay ◄── Go connector       (outbound, compatible)
   Advanced (direct): phone ──► reachable host (domain / tunnel / Tailscale) ──► Hermes
 ```
 
 ### Mode A — Relay (default)
-- **Setup:** user installs a relay connector on their Hermes box once (like pasting a Telegram bot
-  token), then enters a **6-digit pairing code** in the app. Done.
+- **Setup:** user enables the Summit Hermes plugin and enters its **6-digit pairing code** in the
+  app. The Go connector provides the same pairing flow as a compatibility fallback.
 - **Reach:** works anywhere, on cellular, immediately. Nothing on the user's end is exposed.
 - **Cost to us:** we build and run relay infra (it becomes a critical path).
 
@@ -215,7 +222,7 @@ silently — the config file was written but the binary was never installed.
 
 | # | Question | Why it matters |
 |---|----------|----------------|
-| 1 | ~~Can Hermes dial outbound, or do we ship a sidecar?~~ **Answered:** Hermes is inbound-only (`FRAMEWORKS.md`) → **sidecar connector is mandatory.** Remaining: where it runs (same box as Hermes assumed), and packaging (binary / Docker / `pip`). | Hermes can't dial out, so relay mode depends entirely on the connector. Needs to be trivial to install — this is the new "setup friction" surface. |
+| 1 | ~~Can Hermes provide an outbound relay leg?~~ **Answered:** the inbound HTTP API cannot, but the built native Hermes platform plugin can. The Go sidecar remains the compatibility fallback. Remaining: validate plugin install/upgrade and fallback guidance on real hosts. | Relay mode no longer depends entirely on the connector; native-plugin install quality is now the primary setup-friction surface. |
 | 2 | Hosted relay vs. self-host only for v1? | Hosted = best UX + monetization; self-host only = zero infra liability but worse onboarding. |
 | 3 | E2E encryption in v1, or TLS-to-relay + open-core trust? | Privacy-conscious audience; affects relay complexity. |
 | 4 | Do we ship **direct mode** in v1 at all, or relay-only first? | Direct is cheap to keep but splits the connect UI. |

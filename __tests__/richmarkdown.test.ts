@@ -7,6 +7,7 @@ import {
   MAX_MARKDOWN_CHARS,
   MAX_MARKDOWN_LINE_CHARS,
   MAX_MARKDOWN_LINES,
+  normalizeMarkdownSource,
 } from '../src/ui/chat/richMarkdown';
 
 type MarkdownBlock = Extract<AgentBlock, { kind: 'markdown' }>;
@@ -102,5 +103,22 @@ describe('boundMarkdownSource', () => {
     const bounded = boundMarkdownSource(`${'x\n'.repeat(MAX_MARKDOWN_LINES + 10)}${'y'.repeat(MAX_MARKDOWN_CHARS)}`);
     expect(bounded.length).toBeLessThanOrEqual(MAX_MARKDOWN_CHARS + 32);
     expect(bounded).toContain('[Output truncated for safety]');
+  });
+
+  it('closes a truncated code fence so its safety notice remains readable', () => {
+    const bounded = boundMarkdownSource(`\`\`\`text\n${'x'.repeat(MAX_MARKDOWN_LINE_CHARS + 1)}`);
+    expect(bounded).toContain('\n```\n\n[Output truncated for safety]');
+  });
+});
+
+describe('normalizeMarkdownSource', () => {
+  it('normalizes line endings and removes terminal control sequences', () => {
+    expect(normalizeMarkdownSource('\u001b[32mDone\u001b[0m\r\nNext\u0000')).toBe('Done\nNext');
+  });
+
+  it('leaves ordinary markdown content untouched', () => {
+    expect(normalizeMarkdownSource('Use `npm test` and **ship it**.')).toBe(
+      'Use `npm test` and **ship it**.',
+    );
   });
 });

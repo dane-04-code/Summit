@@ -109,6 +109,26 @@ describe('registerPush()', () => {
   });
 });
 
+describe('proactive delivery signals', () => {
+  it('notifies subscribers without exposing the reply content', async () => {
+    client = new RelayClient('ws://localhost:8787?code=111111');
+    markAuthenticated(client);
+    const listener = jest.fn();
+    const unsubscribe = client.subscribeNotifications(listener);
+
+    const connecting = client.registerPush(null, 'all');
+    await flush();
+    mockWs.openNow();
+    await connecting;
+    mockWs.receive({ t: 'notify', title: 'Scheduled work finished' });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    unsubscribe();
+    mockWs.receive({ t: 'notify', title: 'Scheduled work finished' });
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('resume()', () => {
   it('authenticates with the durable device token', async () => {
     client = new RelayClient('ws://localhost:8787?code=111111&token=durable-token');
@@ -196,6 +216,26 @@ describe('chat()', () => {
 
     await collecting;
     expect(events[events.length - 1]).toEqual({ type: 'done', eventId: 'event-1' });
+  });
+
+  it('carries authoritative final text when the native plugin revises a draft', async () => {
+    client = new RelayClient('ws://localhost:8787?code=111111');
+    markAuthenticated(client);
+    const events: object[] = [];
+    const collecting = (async () => {
+      for await (const ev of client.chat([{ role: 'user', content: 'hi' }], 'req-final')) events.push(ev);
+    })();
+
+    await flush();
+    mockWs.openNow();
+    await flush();
+    mockWs.receive({ t: 'chunk', reqId: 'req-final', delta: 'First draft.' });
+    mockWs.receive({ t: 'done', reqId: 'req-final', eventId: 'event-final', content: 'Final answer.' });
+
+    await collecting;
+    expect(events[events.length - 1]).toEqual({
+      type: 'done', eventId: 'event-final', content: 'Final answer.',
+    });
   });
 
   it('yields error event on error frame', async () => {

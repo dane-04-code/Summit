@@ -32,9 +32,11 @@ export const initialTurn: LiveTurn = {
 export function reduceTurn(turn: LiveTurn, event: StreamEvent): LiveTurn {
   switch (event.type) {
     case 'delta':
-      return { ...turn, text: turn.text + event.text, toolLabel: null };
-    case 'tool':
+      return { ...turn, text: turn.text + event.text };
+    case 'tool': {
+      if (event.label === turn.toolLabel) return turn;
       return { ...turn, toolLabel: event.label };
+    }
     case 'approval':
       return {
         ...turn,
@@ -47,7 +49,15 @@ export function reduceTurn(turn: LiveTurn, event: StreamEvent): LiveTurn {
     case 'detached':
       return { ...turn, toolLabel: null, status: 'idle', done: true };
     case 'done':
-      return { ...turn, toolLabel: null, status: 'idle', done: true };
+      // Native Hermes can revise a draft after a tool boundary. Its terminal
+      // content is authoritative, so never persist a superseded partial draft.
+      return {
+        ...turn,
+        ...(event.content !== undefined ? { text: event.content } : {}),
+        toolLabel: null,
+        status: 'idle',
+        done: true,
+      };
     case 'error':
       return { ...turn, toolLabel: null, status: 'error', error: event.message, done: true };
     default:
@@ -69,7 +79,12 @@ export function shouldFlush(lastFlushAt: number, now: number, done: boolean): bo
 /** Live reply text plus an ephemeral operational status when the agent is quiet. */
 export function turnToBlocks(turn: LiveTurn): AgentBlock[] {
   const blocks: AgentBlock[] = turn.text ? [{ kind: 'markdown', source: turn.text }] : [];
-  if (!turn.done && turn.toolLabel) blocks.push({ kind: 'activity', label: turn.toolLabel });
+  if (!turn.done && turn.toolLabel) {
+    blocks.push({
+      kind: 'activity',
+      label: turn.toolLabel,
+    });
+  }
   return blocks.length > 0 ? blocks : [{ kind: 'markdown', source: '' }];
 }
 

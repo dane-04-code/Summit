@@ -61,7 +61,7 @@ describe('ChatComposer', () => {
     expect(style.height).toBe(24);
     expect(style.padding).toBe(0);
     expect(style.includeFontPadding).toBe(false);
-    expect(input.props.textAlignVertical).toBe('center');
+    expect(input.props.textAlignVertical).toBe('top');
   });
 
   it('grows from a native content measurement even when it arrives before the text update', async () => {
@@ -83,7 +83,7 @@ describe('ChatComposer', () => {
     await waitFor(() => {
       const updatedInput = view.getByLabelText('Message input');
       const style = StyleSheet.flatten(updatedInput.props.style);
-      expect(style.height).toBe(50);
+      expect(style.height).toBe(48);
       expect(updatedInput.props.textAlignVertical).toBe('top');
     });
   });

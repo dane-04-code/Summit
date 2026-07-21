@@ -1,9 +1,19 @@
 import type { AgentAdapter, SettledReply } from '@/agents/adapters/types';
+import type { ChatSession } from '@/agents/types';
 import type { Repository } from '@/db';
 import type { Message } from './types';
 import { settleBlocks, settleErrorBlocks } from './streamReducer';
 
 export const recoveredMessageId = (eventId: string) => `relay-reply-${eventId}`;
+
+/** A private stable session id derived on the paired agent host, never a user prompt. */
+export const isScheduledWorkSession = (sessionId: string) => /^summit-scheduled-[a-f0-9]{24}$/.test(sessionId);
+
+export type RecoveredReply = {
+  sessionId: string;
+  createdAt: number;
+  scheduledWork: boolean;
+};
 
 export function messageForSettledReply(reply: SettledReply): Message {
   return {
@@ -22,14 +32,27 @@ export function messageForSettledReply(reply: SettledReply): Message {
 export async function recoverPendingReplies(
   repo: Repository,
   adapter: AgentAdapter,
-): Promise<string[]> {
+  agentId?: string,
+): Promise<RecoveredReply[]> {
   if (!adapter.syncPendingReplies || !adapter.acknowledgeReplies) return [];
   const replies = await adapter.syncPendingReplies();
-  const changedSessions = new Set<string>();
+  const recovered: RecoveredReply[] = [];
   const acknowledged: string[] = [];
 
   for (const reply of replies) {
-    const session = await repo.getSession(reply.sessionId);
+    let session = await repo.getSession(reply.sessionId);
+    if (!session && agentId && isScheduledWorkSession(reply.sessionId)) {
+      const createdAt = reply.createdAt;
+      session = {
+        id: reply.sessionId,
+        agentId,
+        title: 'Scheduled work',
+        remoteSessionKey: null,
+        createdAt,
+        updatedAt: createdAt,
+      } satisfies ChatSession;
+      await repo.upsertSession(session);
+    }
     if (!session) {
       // The user may have deleted the thread while the connector was working.
       // Do not recreate it; simply retire the orphaned result.
@@ -45,10 +68,14 @@ export async function recoverPendingReplies(
       createdAt,
     });
     await repo.upsertSession({ ...session, updatedAt: createdAt });
-    changedSessions.add(session.id);
+    recovered.push({
+      sessionId: session.id,
+      createdAt: reply.createdAt,
+      scheduledWork: isScheduledWorkSession(session.id),
+    });
     acknowledged.push(reply.id);
   }
 
   await adapter.acknowledgeReplies(acknowledged);
-  return [...changedSessions];
+  return recovered;
 }

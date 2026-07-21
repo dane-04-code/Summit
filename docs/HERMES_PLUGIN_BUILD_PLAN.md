@@ -1,7 +1,10 @@
 # Summit for Hermes — Complete Build Plan
 
-_Status: implementation started 2026-07-19. The standalone source now lives in the independent
-working copy `../Summit-Hermes/`, connected to `SummitAI-app/Summit-Hermes`._
+_Status: native Hermes plugin alpha built as of 2026-07-21. The standalone source lives in the
+independent working copy `../Summit-Hermes/`, connected to `SummitAI-app/Summit-Hermes`. Native
+sessions, draft streaming, safe activity, reconnect, and durable reply recovery are implemented.
+Current V1 work is real-device proof, proactive cron delivery, and focused chat/output presentation;
+rich attachments and native approval cards remain post-proof work._
 
 ## 1. What the Hermes plugin is
 

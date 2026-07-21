@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { Linking, StyleSheet } from 'react-native';
 import { fireEvent, render, waitFor, cleanup } from '@testing-library/react-native';
 
 import { RichMarkdown } from '@/ui/chat/richMarkdown';
@@ -67,6 +67,29 @@ describe('type ramp', () => {
     const el = await waitFor(() => view.getByText('Plain paragraph.'));
     expect(StyleSheet.flatten(el.props.style).fontSize).toBe(17);
   });
+
+  it('keeps inline code technical without rendering it as a chip', async () => {
+    const view = await render(<RichMarkdown source={'Use `summit-plugin-patches` for this.'} />);
+    const el = await waitFor(() => view.getByText('summit-plugin-patches'));
+    const style = StyleSheet.flatten(el.props.style);
+
+    expect(style.fontFamily).toBe('Menlo');
+    expect(style.backgroundColor).toBe('transparent');
+    expect(style.borderWidth).toBe(0);
+    expect(style.padding).toBe(0);
+  });
+});
+
+describe('ordinary agent links', () => {
+  it('makes a bare URL tappable without requiring markdown link syntax', async () => {
+    const url = 'https://example.com/runbook';
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    const view = await render(<RichMarkdown source={`Read ${url} before deploying.`} />);
+
+    await fireEvent.press(await waitFor(() => view.getByText(url)));
+    expect(openURL).toHaveBeenCalledWith(url);
+    openURL.mockRestore();
+  });
 });
 
 describe('empty streaming reply', () => {
@@ -85,6 +108,19 @@ describe('empty streaming reply', () => {
     );
     expect(view.getByText('Searching the web…')).toBeTruthy();
     expect(view.queryByText('Working')).toBeNull();
+  });
+
+  it('keeps a multi-step tool update as one quiet live status', async () => {
+    const view = await render(
+      <AgentMessage blocks={[{
+        kind: 'activity',
+        label: 'Running tests…',
+      }]} />,
+    );
+
+    expect(view.getByLabelText('Agent status: Running tests…')).toBeTruthy();
+    expect(view.queryByText('Working')).toBeNull();
+    expect(view.queryByText('Reading files…')).toBeNull();
   });
 });
 

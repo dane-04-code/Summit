@@ -32,17 +32,18 @@ their server. That's harder than Telegram, which is disqualifying.
 
 ### Two modes
 ```
-Default (relay):  phone ──► our relay ◄── connector sidecar ──► Hermes :8642
+Default (relay):  phone ──► our relay ◄── native Hermes plugin ──► Hermes gateway
+Fallback (relay): phone ──► our relay ◄── connector sidecar ──► Hermes :8642
 Advanced (direct): phone ──► reachable host (tunnel / Tailscale) ──► Hermes :8642
 ```
 
-**Relay is the default.** The connector sidecar lives next to Hermes, dials
-outbound to our relay (like a Telegram bridge), and surfaces a **6-digit
-pairing code**. The phone pairs with the code — no host URL, no API key on
-device, works on cellular.
+**Relay is the default.** The native Hermes platform plugin is built in alpha and dials outbound to
+our relay while using Hermes' native session/delivery surface. It surfaces a **6-digit pairing
+code**; the phone pairs with it — no host URL, no API key on device, works on cellular. The Go
+connector provides the same path as a compatibility fallback.
 
-**The relay is not built yet.** Phase 1 implemented direct mode. Don't
-conflate them or "fix" one toward the other unless that's the task.
+**The relay is built and working reliably in active testing.** Current V1 work is chat/output polish
+and real-device proof, not rebuilding the transport.
 
 ### What relay buys us
 - API key stays server-side (connector holds it). Phone has only a device token.

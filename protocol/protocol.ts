@@ -17,7 +17,8 @@ export type ChatFrame       = { t: 'chat'; reqId: string; messages: ChatMessage[
 export type ChunkFrame      = { t: 'chunk'; reqId: string; delta: string; sessionId?: string };
 /** Ephemeral operational status. Never persisted or included in notifications. */
 export type ActivityFrame   = { t: 'activity'; reqId: string; label: string; sessionId?: string };
-export type DoneFrame       = { t: 'done'; reqId: string; sessionId?: string; eventId?: string };
+/** `content` is optional authoritative final text for transports that can revise drafts. */
+export type DoneFrame       = { t: 'done'; reqId: string; sessionId?: string; eventId?: string; content?: string };
 export type ErrorFrame      = { t: 'error'; reqId?: string; message: string; sessionId?: string; eventId?: string };
 // Durable background delivery. The connector keeps settled replies in a
 // bounded local outbox until the app has persisted and acknowledged them. The

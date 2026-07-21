@@ -1,7 +1,8 @@
 # Summit — Product Brief
 
-*The single source of product truth for the nano product manager. Synthesizes `PRD.md`,
-`FRAMEWORKS.md`, and `docs/CONNECTION.md`. When those change, update this. Last synced: 2026-06-25.*
+> **Superseded copy — do not use for current product decisions.** The maintained product brief is
+> `.agents/skills/nano-product-manager/product-brief.md`; it reflects the built native Hermes plugin,
+> reliable relay, and current V1 release focus. This older copy is retained only as historical context.
 
 ---
 

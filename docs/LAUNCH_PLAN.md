@@ -1,73 +1,76 @@
-# Summit — Launch Plan
+# Summit V1 Launch Plan
 
-_The one list. Open this before you open anything else. When you're tempted to start a
-second track, look here instead._
+_Last reviewed: 2026-07-21_
 
-_Set 2026-07-04._
+## Position
 
-**Current factual snapshot:** [`PROJECT_STATUS.md`](PROJECT_STATUS.md). This plan remains the
-ordered execution track; update the snapshot when verification or release readiness changes.
+The connection foundation is built. Hermes has a native platform plugin in alpha, and the relay is reliable in active testing. V1 is now a product-finishing effort: a calm, trustworthy conversation surface plus a small amount of useful agent-operational context.
 
----
+The release bar is not “every plugin feature imagined.” It is: a person can pair their agent, have a clear conversation, understand useful work-in-progress, receive an important result, recover after interruption, and trust what the app does with their data.
 
-## What Summit is
+## Release sequence
 
-**Summit is the messaging platform for agents** — Slack, Discord, and Telegram are for
-talking to people; Summit is for talking to your AI agents. You make an account, connect
-your agent, and start messaging. Everything lives in a thread.
+### 1. Finish the chat surface
 
-The test for every decision from here: **does this make Summit a better messaging platform
-for agents?** If not, cut it.
+**Goal:** the conversation is easy to read and compose in on a phone.
 
-## The finish line
+- Answer-first visual hierarchy; activity never competes with the answer.
+- Readable markdown and code treatment without unnecessary visual boxes.
+- Stable single- and multi-line composer behaviour.
+- Compact, plain-language streaming/activity state.
+- Persisted transcripts that reopen in the correct session.
 
-A stranger downloads Summit from the App Store, creates an account, connects their agent in
-seconds, and has a genuinely good time using it. That's done. Everything below serves that
-one sentence.
+**Done when:** ordinary daily chat looks and behaves like a polished mobile messenger while retaining the agent-specific context people need.
 
-## How we work now
+### 2. Use the Hermes plugin where it helps the user
 
-One track. One thing in flight at a time. A stop isn't finished until **`npx tsc --noEmit`
-and `npm test` are both green**. No parallel Claudes, no second terminal. When you wonder
-"where am I" — it's the next unchecked box below.
+**Goal:** prove the built plugin delivers operational value rather than merely a connection.
 
----
+- Stream replies and safe activity labels from a live agent.
+- Recover one settled reply after backgrounding, restart, or reconnect without duplicates.
+- Deliver one real scheduled/cron outcome to its originating conversation.
+- Send an attention notification only when that result warrants it; push payloads remain content-free.
 
-## The straight path
+The existing text, activity, settled-reply, and replay paths are sufficient for this proof. If a real cron test needs clearer presentation, add the minimum typed summary event (for example `cron_run`). Do not create a general remote-card protocol.
 
-Worked top to bottom. **De-risk before we decorate** — prove the whole thing runs on a real
-phone before polishing pixels.
+**Done when:** the agent’s work feels present and dependable without making Summit feel like a log viewer.
 
-- [ ] **0 — Flatten.** One branch, this doc, one track. Parallel work stops here.
+### 3. Complete device and trust validation
 
-- [ ] **1 — Walk the cold path on a real iPhone.** Fresh install → create account → pair
-      with a real agent → chat → receive a push, exactly as a stranger would, on real
-      hardware. Everything is unit-green, but the full end-to-end has never been walked start
-      to finish. Fix whatever this surfaces. *This is where the real surprises live — that's
-      why it's first.*
+**Goal:** prove the release build, not just the development build.
 
-- [ ] **2 — Nail the first thirty seconds.** Account → paired → first message should feel
-      inevitable. No tutorial, no scaffolding — just a path so clear a stranger never has to
-      think about it.
+- Clean install, pairing, normal chat, and session restore.
+- Background, termination, reconnect, and settled-reply recovery.
+- Notification permission, delivery, preference modes, tap routing, and no-content payload verification.
+- Authentication, account deletion, agent removal, and local-data reset.
+- Accessibility pass for type scaling, contrast, tap targets, VoiceOver labels, and keyboard avoidance.
 
-- [ ] **3 — The smoothness pass.** Transitions, the moments of waiting, and every empty /
-      loading / error state a stranger will actually hit. One focused pass, not endless
-      fiddling.
+**Done when:** the test checklist is green on at least the intended iPhone/iOS versions and any failures have a bounded fix or an explicit launch decision.
 
-- [ ] **4 — Make it store-ready.** App icon, name, screenshots, description, Apple privacy
-      labels, and a production build that reliably produces a working binary.
+### 4. TestFlight beta
 
-- [ ] **5 — TestFlight → real hands.** Put it in front of a few people who actually run
-      agents. Watch them use it. Fix the top 3 things that trip them. This is the only real
-      proof the finish line is met.
+**Goal:** collect focused real-world evidence.
 
-- [ ] **6 — Submit & launch.**
+- Confirm the production build processes in App Store Connect and installs from TestFlight.
+- Start with a small tester group using their actual agents.
+- Ask about three things only: pairing reliability, clarity of chat/activity output, and whether notifications/results arrive at the right time.
+- Fix core trust and conversation failures; avoid expanding scope from isolated feature requests.
 
-## Cut for launch
+### 5. Publish V1
 
-Kept off the track on purpose, so the line stays straight:
+**Goal:** submit a truthful, complete app.
 
-- **OpenClaw native integration** — Hermes + the generic OpenAI-compatible connection already
-  cover the audience.
-- **Any new features.** Nothing that isn't a stop above.
-- Dashboards, metrics panels, tab bars, anything heavier than a messaging app.
+- Finalise App Store metadata, screenshots, support URL, privacy details, and review notes.
+- Confirm the shipped Info.plist includes every required privacy purpose string.
+- Submit the release once the V1 checklist and TestFlight evidence support it.
+
+## Post-launch queue
+
+- Native OpenClaw implementation after an independent SDK/API validation pass.
+- More typed harness summaries only where repeated use proves their value.
+- Rich attachments and native approval cards where framework support and real workflows justify them.
+- Broader analytics, dashboards, or workflow-management concepts only after the core cockpit proves repeat use.
+
+## Scope guardrail
+
+For V1, build only what improves one of these: reading the answer, understanding safe progress, or acting on an important outcome. Connection architecture is no longer the primary project; polish and proof are.

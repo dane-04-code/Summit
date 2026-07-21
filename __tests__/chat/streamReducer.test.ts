@@ -26,13 +26,35 @@ describe('reduceTurn', () => {
   it('clears operational activity when answer text resumes', () => {
     const active = reduceTurn(initialTurn, { type: 'tool', label: 'Reading files…' });
     const resumed = reduceTurn(active, { type: 'delta', text: 'Found it.' });
-    expect(resumed.toolLabel).toBeNull();
-    expect(turnToBlocks(resumed)).toEqual([{ kind: 'markdown', source: 'Found it.' }]);
+    expect(resumed.toolLabel).toBe('Reading files…');
+    expect(turnToBlocks(resumed)).toEqual([
+      { kind: 'markdown', source: 'Found it.' },
+      { kind: 'activity', label: 'Reading files…' },
+    ]);
+  });
+
+  it('keeps only the current safe tool label', () => {
+    let turn = reduceTurn(initialTurn, { type: 'tool', label: 'Reading files…' });
+    turn = reduceTurn(turn, { type: 'tool', label: 'Reading files…' });
+    turn = reduceTurn(turn, { type: 'tool', label: 'Running tests…' });
+
+    expect(turnToBlocks(turn)).toEqual([
+      {
+        kind: 'activity',
+        label: 'Running tests…',
+      },
+    ]);
   });
 
   it('marks the turn done on done', () => {
     const t = reduceTurn(initialTurn, { type: 'done' });
     expect(t).toMatchObject({ status: 'idle', done: true });
+  });
+
+  it('replaces a revised streamed draft with authoritative terminal text', () => {
+    const partial = reduceTurn(initialTurn, { type: 'delta', text: 'Earlier draft.' });
+    const settled = reduceTurn(partial, { type: 'done', content: 'Final answer.' });
+    expect(settled).toMatchObject({ text: 'Final answer.', status: 'idle', done: true });
   });
 
   it('captures the error message and finishes on error', () => {

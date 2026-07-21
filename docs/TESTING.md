@@ -1,4 +1,9 @@
-# Testing the multi-agent connection
+# Testing Summit's agent delivery paths
+
+> **Current V1 focus:** the Go connector loop below remains valuable compatibility coverage. The
+> preferred Hermes path is the native platform plugin, so real-device release validation must cover
+> that path as well: streamed text, safe activity, background/restart recovery, and one proactive
+> cron result.
 
 How to verify that chat, capabilities, and native features work across every
 channel a user can arrive through — without owning a real Hermes, an Ollama

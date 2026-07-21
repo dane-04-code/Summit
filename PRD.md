@@ -2,12 +2,19 @@
 ## Summit
 **Mobile command for personal AI agents** | Version 0.3 draft | June 2026
 
-> **v0.3 draft (2026-06-28):** Relay is mandatory for MVP. Direct host+key mode is useful for
+> **Historical planning record — superseded for delivery decisions.** The connection architecture
+> described below was completed beyond this draft: the relay is operating reliably and a native
+> Hermes platform plugin is built in alpha. Current V1 work is chat presentation, safe
+> harness-derived operational output, real-device recovery/push/cron proof, then TestFlight and
+> App Store publication. Read [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) and
+> [`docs/LAUNCH_PLAN.md`](docs/LAUNCH_PLAN.md) for the current plan.
+
+> **v0.3 historical draft (2026-06-28):** Relay is mandatory for MVP. Direct host+key mode is useful for
 > development, Tailscale, tunnels, and no-middleman users, but it does not satisfy the product
 > promise because it requires the user to solve reachability themselves. Summit ships as an MVP when
 > the default path is connector -> relay -> app pairing.
 >
-> **Current build reality:** The Expo/iOS app is running as a development build. Direct-mode
+> **Historical build reality:** The Expo/iOS app is running as a development build. Direct-mode
 > groundwork, auth/onboarding pieces, chat UI, rich markdown rendering, local storage, and the
 > Hermes adapter foundation exist. The product is not MVP-complete until relay pairing, connector
 > install, and app-to-agent messaging through the relay work end to end.
@@ -300,14 +307,18 @@ App
 
 ---
 
-## 12. Immediate Next Steps (in priority order)
+## 12. Current V1 next steps (supersedes the historical list above)
 
-1. **Build the connector sidecar** — `FRAMEWORKS.md` confirms Hermes is inbound-only, so relay mode *requires* a small sidecar that bridges `localhost:8642` ↔ our relay. Spike it first; it gates the connection model. Decide packaging (binary / Docker / `pip`) for trivial install. (See `docs/CONNECTION.md` §7.)
-2. ~~Verify Hermes Runs API~~ **Already confirmed** in `FRAMEWORKS.md` — `/v1/runs/{id}/approval`, `/stop`, `/events` (SSE), and the lifecycle are documented, with `run_approval` advertised in `/v1/capabilities`. (Supersedes the "🔴 unverified" status in §10/§11 — check the capability flag at runtime, but no doc verification needed.)
-3. **Relay spike** — minimal rendezvous: connector dials out (WSS), app pairs by code, one message round-trips. Proves the architecture before any UI is built on it. Replaces the standalone "SSE on RN" spike — the app reads WebSocket frames from the relay, not SSE.
-4. **Community validation post** — post in Hermes Discord / r/openclaw: *"When I'm away from desktop, is there anything that gives you agent status + quick chat on your phone, instead of raw Telegram?"*
-5. **Design pair + chat screens** — wireframes before coding UI (relay pairing screen, not host form).
-6. **Begin Phase 1 build** — pair screen → chat thread → streaming markdown render.
+1. **Finish the mobile chat surface** — answer-first hierarchy, readable markdown/code, stable
+   composer, and quiet plain-language activity while an agent works.
+2. **Prove the native Hermes operational loop** — live streaming, safe activity, background/restart
+   recovery, and one real scheduled/cron delivery into the correct conversation.
+3. **Validate push and trust on a real release build** — permissions, attention modes, tap routing,
+   content-free payloads, clean install, pairing, and local-data reset.
+4. **Run a small TestFlight group** — focus feedback on pairing reliability, output clarity, and
+   timing of useful results; fix core trust/conversation failures only.
+5. **Publish V1** — finalise store copy, screenshots, privacy details, and review notes once the
+   release checklist is supported by TestFlight evidence.
 
 ---
 
@@ -322,4 +333,4 @@ App
 
 ---
 
-*Last updated: 2026-06-25 (v0.2 — relay-first connection reframe) | Author: Dane*
+*Historical body last updated: 2026-06-25 | Current delivery note updated: 2026-07-21 | Author: Dane*

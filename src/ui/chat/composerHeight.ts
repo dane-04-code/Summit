@@ -5,6 +5,6 @@ export function composerHeightFor(contentHeight: number, hasText: boolean): numb
   if (!hasText) return COMPOSER_MIN_HEIGHT;
   return Math.min(
     COMPOSER_MAX_HEIGHT,
-    Math.max(COMPOSER_MIN_HEIGHT, contentHeight + 2),
+    Math.max(COMPOSER_MIN_HEIGHT, contentHeight),
   );
 }

@@ -393,10 +393,11 @@ status, and awkward approval flows.
 Summit pairs with an agent by code, then provides a mobile interface for chat, streamed output,
 readable markdown, status, and supported approve/stop actions.
 
-The default connection path uses a connector sidecar next to Hermes. It dials outbound to a relay,
-so the phone can reach the agent without exposing a home server. In relay mode, the Hermes API key
-stays on the server and the phone stores only a relay token. Direct mode exists for users who
-prefer their own tunnel, VPN, or reachable host.
+The default connection path uses Summit's native Hermes plugin. It dials outbound to a relay, so
+the phone can reach the agent without exposing a home server. The Go connector remains available
+as a compatibility fallback. In relay mode, the Hermes API key stays on the server and the phone
+stores only a relay token. Direct mode exists for users who prefer their own tunnel, VPN, or
+reachable host.
 
 I am especially interested in feedback from people running self-hosted agents or similar home-lab
 automation.

@@ -1,56 +1,43 @@
-# Welcome to your Expo app 👋
+# Summit
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Summit is a private mobile operator cockpit for an AI agent you already run. It gives the user one calm place to message their agent, see what it is doing, receive useful proactive updates, and resume the conversation after the phone or network disappears.
 
-## Get started
+## Current position
 
-1. Install dependencies
+V1 is in release hardening, not connection architecture discovery.
 
-   ```bash
-   npm install
-   ```
+- The native Hermes platform plugin is built and in alpha use. It supports native sessions, draft streaming, safe activity updates, reconnect, and durable settled-reply recovery.
+- The relay is working reliably in active testing; recent use has not shown a meaningful disconnect problem.
+- The iOS production build has been produced for TestFlight processing.
+- The active V1 work is chat presentation and the small set of safe, useful operational signals Summit can receive from agent harnesses.
 
-2. Start the app
+The product is not a developer console. A user should see the answer first, a brief indication of work in progress when useful, and an actionable notification when something needs attention. Raw model reasoning, tool arguments, terminal output, and a general-purpose remote UI protocol are explicitly out of scope.
 
-   ```bash
-   npx expo start
-   ```
+## V1 path to release
 
-In the output, you'll find options to open the app in a
+1. Finish the mobile chat experience: message hierarchy, markdown/code treatment, composer reliability, and sensible loading/activity states.
+2. Make the existing Hermes plugin output earn its place in daily use: streamed replies, safe activity labels, restart recovery, and one real proactive/cron delivery path.
+3. Add a typed harness event only when a real use case needs it (for example, a compact cron result). Do not build a speculative plugin feature catalogue.
+4. Run the real-device release checklist: pairing, background/restart recovery, push behaviour, permissions, and TestFlight install/update.
+5. Complete store metadata/screenshots, widen TestFlight testing, and submit V1.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Where to look
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+- [Current delivery status](docs/PROJECT_STATUS.md)
+- [V1 launch plan](docs/LAUNCH_PLAN.md)
+- [Agent, storage, and transport contract](AGENTS.md)
+- [Native plugin connection plan](docs/PLUGIN_CONNECTION_PLAN.md)
+- [Hermes plugin build record](docs/HERMES_PLUGIN_BUILD_PLAN.md)
+- [Product brief](.agents/skills/nano-product-manager/product-brief.md)
+- [Device test checklist](docs/TESTING.md)
 
-## Get a fresh project
-
-When you're ready, run:
+## Development
 
 ```bash
-npm run reset-project
+npm install
+npx expo start
+npm test -- --runInBand
+npx tsc --noEmit
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-### Other setup steps
-
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+The app lives here. The native Hermes platform plugin is maintained alongside it in the Summit-Hermes repository; its implementation is the source of truth for plugin-specific behaviour.

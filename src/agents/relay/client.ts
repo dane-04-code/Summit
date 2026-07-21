@@ -15,6 +15,7 @@ export class RelayClient {
   private ws: WebSocket | null = null;
   private opening: Promise<WebSocket> | null = null;
   private handlers: ((frame: AnyFrame) => void)[] = [];
+  private notificationHandlers: (() => void)[] = [];
   private stateHandlers: ((state: ConnectionState) => void)[] = [];
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private pairCode: string | null = null;
@@ -79,6 +80,9 @@ export class RelayClient {
         if (frame.t === 'peer_gone') {
           this.paired = false;
           this.setState('disconnected');
+        }
+        if (frame.t === 'notify') {
+          for (const handler of this.notificationHandlers) handler();
         }
         for (const h of this.handlers) h(frame);
       };
@@ -183,6 +187,14 @@ export class RelayClient {
     ws.send(JSON.stringify({ t: 'register_push', ...(token ? { token } : {}), mode }));
   }
 
+  /** Subscribe to a content-free host signal that a durable reply is ready. */
+  subscribeNotifications(listener: () => void): () => void {
+    this.notificationHandlers.push(listener);
+    return () => {
+      this.notificationHandlers = this.notificationHandlers.filter((handler) => handler !== listener);
+    };
+  }
+
   async *chat(messages: ChatMessage[], reqId: string, sessionId?: string, sessionKey?: string): AsyncIterable<StreamEvent> {
     await this.authenticate();
     const ws = await this.connect();
@@ -203,7 +215,11 @@ export class RelayClient {
         // it through resolveApproval() with the Gateway approval id as runId.
         queue.push({ type: 'approval', runId: frame.approvalId, title: 'Run a command', command: frame.command });
       } else if (frame.t === 'done' && frame.reqId === reqId) {
-        queue.push({ type: 'done', ...(frame.eventId ? { eventId: frame.eventId } : {}) });
+        queue.push({
+          type: 'done',
+          ...(frame.eventId ? { eventId: frame.eventId } : {}),
+          ...(typeof frame.content === 'string' ? { content: frame.content } : {}),
+        });
         done = true;
       } else if (frame.t === 'error' && (!frame.reqId || frame.reqId === reqId)) {
         queue.push({ type: 'error', message: frame.message, ...(frame.eventId ? { eventId: frame.eventId } : {}) });
