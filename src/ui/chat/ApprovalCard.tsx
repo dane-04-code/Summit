@@ -9,6 +9,7 @@ import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
 
 import { colors, radius, space, typography } from '../../theme';
 import { usePressAnim } from '../usePressAnim';
+import { CommandSnippet } from './CommandSnippet';
 
 interface ApprovalCardProps {
   title: string;
@@ -25,9 +26,7 @@ export function ApprovalCard({ title, command, onApprove, onStop }: ApprovalCard
     <View style={styles.card}>
       <Text style={styles.label}>Approval needed</Text>
       <Text style={styles.title}>{title}</Text>
-      <View style={styles.commandBox}>
-        <Text style={styles.command}>{command}</Text>
-      </View>
+      <CommandSnippet command={command} />
       <View style={styles.actions}>
         <Pressable
           onPress={onApprove}
@@ -79,16 +78,6 @@ const styles = StyleSheet.create({
     ...typography.body,
     fontWeight: '600',
     lineHeight: 23,
-    color: colors.ink,
-  },
-  commandBox: {
-    backgroundColor: colors.surface2,
-    borderRadius: radius.code,
-    paddingHorizontal: space.md + 1,
-    paddingVertical: space.md - 1,
-  },
-  command: {
-    ...typography.mono,
     color: colors.ink,
   },
   actions: {

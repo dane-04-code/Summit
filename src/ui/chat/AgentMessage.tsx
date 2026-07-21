@@ -13,6 +13,8 @@ import * as Haptics from 'expo-haptics';
 import { colors, radius, space, typography } from '../../theme';
 import { MdFileCard } from './MdFileCard';
 import { RichMarkdown } from './richMarkdown';
+import { ApprovalCommandGrid } from './ApprovalCommandGrid';
+import { parseApprovalPrompt, type ApprovalCommand } from './approvalPrompt';
 import {
   type AgentBlock,
   type RunState,
@@ -144,32 +146,33 @@ function ToolChip({ state, label }: { state: RunState; label: string }) {
   );
 }
 
-// ── Typing indicator (shown while a reply is streaming but still empty) ──────
+// ── Thought status (safe operational state, never hidden model reasoning) ────
 
-function ActivityIndicator({ label }: { label?: string }) {
-  const [dots] = useState(() => [0, 1, 2].map(() => new Animated.Value(0.3)));
+function ThoughtStatus({ label }: { label?: string }) {
+  const [pulse] = useState(() => new Animated.Value(0.4));
+  const visibleLabel = label?.trim() || 'Thinking…';
 
   useEffect(() => {
-    const loops = dots.map((dot, index) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(index * 160),
-          Animated.timing(dot, { toValue: 1, duration: 320, useNativeDriver: true }),
-          Animated.timing(dot, { toValue: 0.3, duration: 320, useNativeDriver: true }),
-          Animated.delay((2 - index) * 160),
-        ]),
-      ),
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 650, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.4, duration: 650, useNativeDriver: true }),
+      ]),
     );
-    loops.forEach((l) => l.start());
-    return () => loops.forEach((l) => l.stop());
-  }, [dots]);
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
 
   return (
-    <View style={styles.typing} accessibilityLabel="Agent is replying" accessibilityLiveRegion="polite">
-      {dots.map((dot, index) => (
-        <Animated.View key={index} style={[styles.typingDot, { opacity: dot }]} />
-      ))}
-      {label ? <Text style={styles.activityLabel}>{label}</Text> : null}
+    <View
+      style={styles.thoughtStatus}
+      accessibilityLabel={`Agent status: ${visibleLabel}`}
+      accessibilityLiveRegion="polite"
+    >
+      <Animated.View
+        style={[styles.thoughtPulse, { opacity: pulse, transform: [{ scale: pulse }] }]}
+      />
+      <Text style={styles.thoughtLabel}>{visibleLabel}</Text>
     </View>
   );
 }
@@ -179,9 +182,13 @@ function ActivityIndicator({ label }: { label?: string }) {
 export function AgentMessage({
   blocks,
   onOpenFile,
+  onApprovalCommand,
+  resolvedApprovalCommand,
 }: {
   blocks: AgentBlock[];
   onOpenFile?: (file: MarkdownFile) => void;
+  onApprovalCommand?: (command: ApprovalCommand) => void;
+  resolvedApprovalCommand?: ApprovalCommand;
 }) {
   return (
     <View style={styles.message}>
@@ -196,7 +203,7 @@ export function AgentMessage({
           case 'text':
             return <Paragraph key={i} spans={block.spans} tone={block.tone} />;
           case 'activity':
-            return <ActivityIndicator key={i} label={block.label} />;
+            return <ThoughtStatus key={i} label={block.label} />;
           case 'table':
             return <StatusTable key={i} rows={block.rows} />;
           case 'code':
@@ -207,12 +214,29 @@ export function AgentMessage({
             return (
               <MdFileCard key={i} file={block.file} onOpen={() => onOpenFile?.(block.file)} />
             );
-          case 'markdown':
-            return block.source.trim() === '' ? (
-              <ActivityIndicator key={i} />
-            ) : (
-              <RichMarkdown key={i} source={block.source} onOpenMdFile={onOpenFile} />
-            );
+          case 'markdown': {
+            if (block.source.trim() === '') return <ThoughtStatus key={i} />;
+            const selectApproval = onApprovalCommand;
+            if (selectApproval) {
+              const approval = parseApprovalPrompt(block.source);
+              if (approval) {
+                return (
+                  <View key={i}>
+                    {approval.body ? (
+                      <RichMarkdown source={approval.body} onOpenMdFile={onOpenFile} />
+                    ) : null}
+                    <ApprovalCommandGrid
+                      options={approval.options}
+                      onSelect={selectApproval}
+                      resolvedCommand={resolvedApprovalCommand}
+                      command={approval.command}
+                    />
+                  </View>
+                );
+              }
+            }
+            return <RichMarkdown key={i} source={block.source} onOpenMdFile={onOpenFile} />;
+          }
         }
       })}
     </View>
@@ -336,23 +360,29 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
 
-  // Typing indicator
-  typing: {
+  // Thought / operational status
+  thoughtStatus: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.xs + 2,
-    height: typography.body.lineHeight,
+    alignSelf: 'flex-start',
+    gap: space.sm,
+    minHeight: 30,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs + 2,
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
   },
-  typingDot: {
-    width: 7,
-    height: 7,
+  thoughtPulse: {
+    width: 8,
+    height: 8,
     borderRadius: 4,
-    backgroundColor: colors.muted,
+    backgroundColor: colors.accent,
   },
-  activityLabel: {
+  thoughtLabel: {
     ...typography.caption,
-    color: colors.muted,
-    marginLeft: space.xs,
+    color: colors.ink2,
   },
 
   // Chip

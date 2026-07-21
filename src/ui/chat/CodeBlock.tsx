@@ -75,8 +75,11 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
           ))}
         </View>
         <ScrollView
+          style={styles.codeViewport}
           horizontal
-          showsHorizontalScrollIndicator={false}
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator
+          testID="code-block-scroll"
           contentContainerStyle={styles.codeScroll}
         >
           <View>
@@ -160,6 +163,10 @@ const styles = StyleSheet.create({
   },
   codeScroll: {
     paddingRight: space.md,
+  },
+  codeViewport: {
+    flex: 1,
+    minWidth: 0,
   },
   codeLine: {
     fontFamily: MONO,

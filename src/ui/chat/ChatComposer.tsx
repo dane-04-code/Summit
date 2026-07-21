@@ -219,14 +219,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
                 ? undefined
                 : (event) => {
                     setHeight(
-                      composerHeightFor(
-                        event.nativeEvent.contentSize.height,
-                        valueRef.current.length > 0,
-                      ),
+                      // Native may report the new content size before
+                      // onChangeText updates valueRef. Preserve the measured
+                      // height; displayedHeight still collapses an empty value.
+                      composerHeightFor(event.nativeEvent.contentSize.height, true),
                     );
                   }
             }
-            textAlignVertical="top"
+            textAlignVertical={
+              displayedHeight > COMPOSER_MIN_HEIGHT ? 'top' : 'center'
+            }
             accessibilityLabel="Message input"
           />
 

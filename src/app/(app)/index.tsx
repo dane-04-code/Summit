@@ -35,6 +35,7 @@ import { matchCommands, type SlashCommand } from '@/ui/chat/slashCommands';
 import { CopiedToast } from '@/ui/chat/CopiedToast';
 import { useAuth } from '@/context/AuthContext';
 import { messageToText } from '@/ui/chat/types';
+import { approvalResolutions, type ApprovalCommand } from '@/ui/chat/approvalPrompt';
 import { renameSession } from '@/ui/chat/sessionActions';
 import { buildApprovalMessage, resolveApproval } from '@/ui/chat/approval';
 import type { ApprovalDecision } from '@/ui/chat/approval';
@@ -103,12 +104,16 @@ function MessageRow({
   message,
   onApprove,
   onStop,
+  onApprovalCommand,
+  resolvedApprovalCommand,
   onOpenFile,
   onCopy,
 }: {
   message: Message;
   onApprove: (id: string) => void;
   onStop: (id: string) => void;
+  onApprovalCommand: (command: ApprovalCommand) => void;
+  resolvedApprovalCommand?: ApprovalCommand;
   onOpenFile: (file: MarkdownFile) => void;
   onCopy: (message: Message) => void;
 }) {
@@ -137,7 +142,12 @@ function MessageRow({
 
   return (
     <Pressable onLongPress={() => onCopy(message)} style={styles.block}>
-      <AgentMessage blocks={message.blocks} onOpenFile={onOpenFile} />
+      <AgentMessage
+        blocks={message.blocks}
+        onOpenFile={onOpenFile}
+        onApprovalCommand={onApprovalCommand}
+        resolvedApprovalCommand={resolvedApprovalCommand}
+      />
     </Pressable>
   );
 }
@@ -164,6 +174,7 @@ export default function AgentScreen() {
   const [copiedAt, setCopiedAt] = useState(0);
   const [adapterConnectionState, setConnectionState] = useState<ConnectionState>('unknown');
   const connectionState: ConnectionState = activeAgent ? adapterConnectionState : 'unknown';
+  const resolvedApprovalCommands = useMemo(() => approvalResolutions(messages), [messages]);
 
   const flashListRef = useRef<FlashListRef<Message>>(null);
   const composerRef = useRef<ChatComposerHandle>(null);
@@ -466,11 +477,11 @@ export default function AgentScreen() {
     });
   }, [activeAgent, adapterFor]);
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
+  const submitText = useCallback(async (rawText: string, clearComposer: boolean) => {
+    const text = rawText.trim();
     if (!text || streaming || !activeAgent) return;
     stopRef.current = false;
-    updateInput('');
+    if (clearComposer) updateInput('');
 
     const session = await ensureSession();
     const now = Date.now();
@@ -599,7 +610,18 @@ export default function AgentScreen() {
     setActiveSessionId(updated.id);
     await acknowledgeSettledReply();
     await loadSessionSummaries();
-  }, [input, streaming, activeAgent, adapterFor, repo, ensureSession, loadSessionSummaries, updateInput]);
+  }, [streaming, activeAgent, adapterFor, repo, ensureSession, loadSessionSummaries, updateInput]);
+
+  const handleSend = useCallback(() => {
+    void submitText(input, true);
+  }, [input, submitText]);
+
+  const handleApprovalCommand = useCallback(
+    (command: ApprovalCommand) => {
+      void submitText(command, false);
+    },
+    [submitText],
+  );
 
   return (
     <>
@@ -634,6 +656,8 @@ export default function AgentScreen() {
                 message={item}
                 onApprove={handleApprove}
                 onStop={handleStop}
+                onApprovalCommand={handleApprovalCommand}
+                resolvedApprovalCommand={resolvedApprovalCommands.get(item.id)}
                 onOpenFile={handleOpenFile}
                 onCopy={handleCopyMessage}
               />

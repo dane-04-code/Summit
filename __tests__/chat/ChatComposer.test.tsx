@@ -56,9 +56,35 @@ describe('ChatComposer', () => {
       />,
     );
 
-    const style = StyleSheet.flatten(screen.getByLabelText('Message input').props.style);
+    const input = screen.getByLabelText('Message input');
+    const style = StyleSheet.flatten(input.props.style);
     expect(style.height).toBe(24);
     expect(style.padding).toBe(0);
     expect(style.includeFontPadding).toBe(false);
+    expect(input.props.textAlignVertical).toBe('center');
+  });
+
+  it('grows from a native content measurement even when it arrives before the text update', async () => {
+    const props = {
+      onChangeText: jest.fn(),
+      onSend: jest.fn(),
+      onStop: jest.fn(),
+      streaming: false,
+      bottomInset: 0,
+    };
+    const view = await render(<ChatComposer {...props} value="" />);
+    const input = view.getByLabelText('Message input');
+
+    await fireEvent(input, 'contentSizeChange', {
+      nativeEvent: { contentSize: { width: 200, height: 48 } },
+    });
+    await view.rerender(<ChatComposer {...props} value={'First line\nSecond line'} />);
+
+    await waitFor(() => {
+      const updatedInput = view.getByLabelText('Message input');
+      const style = StyleSheet.flatten(updatedInput.props.style);
+      expect(style.height).toBe(50);
+      expect(updatedInput.props.textAlignVertical).toBe('top');
+    });
   });
 });
