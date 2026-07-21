@@ -75,10 +75,15 @@ export function makeInitialState(): ChannelState {
   };
 }
 
-export function handleConnectorOpen(state: ChannelState, code: string): HandleResult {
-  // Occupied only when a connector is actively connected right now.
-  // A code left over from a previous (now-closed) connection is not occupied.
-  if (state.connectorConnected) {
+export function handleConnectorOpen(
+  state: ChannelState,
+  code: string,
+  liveConnector = state.connectorConnected,
+): HandleResult {
+  // The Durable Object supplies liveConnector from getWebSockets(). The
+  // persisted flag is only a presence snapshot and may survive a deployment,
+  // while Cloudflare deliberately disconnects every WebSocket on code update.
+  if (liveConnector) {
     return { state, effects: [], occupied: true };
   }
   // Store the code; wait for hello before replying with it

@@ -49,6 +49,12 @@ export class PairingChannel {
     const code = url.searchParams.get('code')!;
     const token = url.searchParams.get('token');
 
+    // Cloudflare disconnects all Durable Object WebSockets on deploy, but our
+    // storage survives. Reconcile the cached presence flags before making an
+    // admission decision so a valid connector cannot be locked out by a stale
+    // `connectorConnected: true` snapshot after an update or runtime restart.
+    await this.reconcilePresence();
+
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
 
@@ -56,7 +62,7 @@ export class PairingChannel {
       if (this.state.connectorToken && !credentialMatches(this.state.connectorToken, token)) {
         return new Response('Connector authentication required', { status: 401 });
       }
-      const result = handleConnectorOpen(this.state, code);
+      const result = handleConnectorOpen(this.state, code, this.hasOpenSocket('connector'));
       if (result.occupied) return new Response('Already occupied', { status: 409 });
       this.state = result.state;
       await this.doState.storage.put('state', this.state);
@@ -109,16 +115,62 @@ export class PairingChannel {
     await this.dispatch(result.effects);
   }
 
-  async webSocketClose(ws: WebSocket): Promise<void> {
+  async webSocketClose(ws: WebSocket, code = 1000, reason = ''): Promise<void> {
+    // This Worker predates Cloudflare's automatic close-response compatibility
+    // flag, so explicitly complete the close handshake.
+    try {
+      ws.close(code, reason);
+    } catch {
+      // The runtime may already have completed the close.
+    }
+    await this.handleSocketEnd(ws);
+  }
+
+  async webSocketError(ws: WebSocket): Promise<void> {
+    try {
+      ws.close(1011, 'WebSocket transport error');
+    } catch {
+      // Cleanup below is still required when the transport is already gone.
+    }
+    await this.handleSocketEnd(ws);
+  }
+
+  private async handleSocketEnd(ws: WebSocket): Promise<void> {
     const tags = this.doState.getTags(ws);
     const role = tags[0] as 'connector' | 'app';
     if (role === 'app' && tags[1] !== 'authenticated') return;
+
+    // A late close/error from an older socket must not mark a replacement
+    // offline. It is also safe for webSocketError and webSocketClose to both
+    // arrive: once the presence flag is false, cleanup is a no-op.
+    const presenceKey = role === 'connector' ? 'connectorConnected' : 'appConnected';
+    const liveTag = role === 'connector' ? 'connector' : 'authenticated';
+    if (this.hasOpenSocket(liveTag, ws) || !this.state[presenceKey]) return;
+
     const result = role === 'connector'
       ? handleConnectorClose(this.state)
       : handleAppClose(this.state);
     this.state = result.state;
     await this.doState.storage.put('state', this.state);
     await this.dispatch(result.effects);
+  }
+
+  private hasOpenSocket(tag: string, excluding?: WebSocket): boolean {
+    return this.doState.getWebSockets(tag).some(
+      (socket) => socket !== excluding && socket.readyState === WebSocket.OPEN,
+    );
+  }
+
+  private async reconcilePresence(): Promise<void> {
+    const connectorConnected = this.hasOpenSocket('connector');
+    const appConnected = this.hasOpenSocket('authenticated');
+    if (
+      connectorConnected === this.state.connectorConnected
+      && appConnected === this.state.appConnected
+    ) return;
+
+    this.state = { ...this.state, connectorConnected, appConnected };
+    await this.doState.storage.put('state', this.state);
   }
 
   private async dispatch(effects: SideEffect[]): Promise<void> {

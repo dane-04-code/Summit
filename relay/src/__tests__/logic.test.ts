@@ -35,6 +35,20 @@ describe('handleConnectorOpen', () => {
     const result = handleConnectorOpen(state, '481920');
     expect(result.occupied).toBe(true);
   });
+
+  it('accepts a reconnect when persisted presence is stale but no socket is live', () => {
+    const stale = { ...makeInitialState(), connectorConnected: true };
+    const result = handleConnectorOpen(stale, '481920', false);
+
+    expect(result.occupied).toBeUndefined();
+    expect(result.state).toMatchObject({ code: '481920', connectorConnected: true });
+  });
+
+  it('rejects a duplicate when a socket is live even if persisted presence is stale false', () => {
+    const result = handleConnectorOpen(makeInitialState(), '481920', true);
+
+    expect(result.occupied).toBe(true);
+  });
 });
 
 describe('handleConnectorMessage — hello', () => {
