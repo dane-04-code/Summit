@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Image, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Check, LockKeyhole, Terminal } from 'lucide-react-native';
+import { LockKeyhole } from 'lucide-react-native';
 import { SIGNUP_ENABLED } from '@/config';
 import { colors, space, radius, typography, screenPadding } from '@/theme';
 
@@ -44,48 +44,6 @@ export default function WelcomeScreen() {
             Pair your self-hosted agent once. Chat, follow progress, and approve actions wherever
             you are.
           </Text>
-        </View>
-
-        <View style={styles.cockpit}>
-          <View style={styles.cockpitHeader}>
-            <View style={styles.agentIdentity}>
-              <View style={styles.agentMark}>
-                <Image source={SUMMIT_MARK} style={styles.agentMarkImage} resizeMode="contain" />
-              </View>
-              <View>
-                <Text style={styles.agentName}>Hermes</Text>
-                <View style={styles.statusRow}>
-                  <View style={styles.statusDot} />
-                  <Text style={styles.statusText}>Connected</Text>
-                </View>
-              </View>
-            </View>
-            <Text style={styles.time}>now</Text>
-          </View>
-
-          <View style={styles.rule} />
-
-          <View style={styles.message}>
-            <View style={styles.terminalIcon}>
-              <Terminal size={15} color={colors.ink2} strokeWidth={1.8} />
-            </View>
-            <View style={styles.messageCopy}>
-              <Text style={styles.messageLabel}>RUN COMPLETE</Text>
-              <Text style={styles.messageTitle}>Production checks passed</Text>
-              <Text style={styles.messageBody}>12 tests passed · build ready to deploy</Text>
-            </View>
-          </View>
-
-          <View style={styles.approval}>
-            <View style={styles.approvalCopy}>
-              <Text style={styles.approvalLabel}>ACTION REQUEST</Text>
-              <Text style={styles.approvalText}>Deploy the new release?</Text>
-            </View>
-            <View style={styles.approveButton}>
-              <Check size={15} color={colors.bg} strokeWidth={2.4} />
-              <Text style={styles.approveText}>Approve</Text>
-            </View>
-          </View>
         </View>
 
         <View style={styles.footer}>
@@ -156,84 +114,6 @@ const styles = StyleSheet.create({
     marginTop: space.lg,
   },
 
-  cockpit: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: radius.bubble,
-    padding: space.lg,
-  },
-  cockpitHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-  },
-  agentIdentity: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  agentMark: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.control,
-    backgroundColor: colors.surface2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  agentMarkImage: { width: 18, height: 17 },
-  agentName: { ...typography.small, color: colors.ink, fontWeight: '600' },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
-  statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.success },
-  statusText: { ...typography.caption, color: colors.muted },
-  time: { ...typography.caption, color: colors.faint, marginTop: 2 },
-  rule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.line, marginVertical: space.lg },
-  message: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
-  terminalIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: radius.control,
-    backgroundColor: colors.surface2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  messageCopy: { flex: 1 },
-  messageLabel: {
-    ...typography.caption,
-    color: colors.faint,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 1.2,
-  },
-  messageTitle: { ...typography.small, color: colors.ink, fontWeight: '500', marginTop: 5 },
-  messageBody: { ...typography.caption, color: colors.muted, marginTop: 3 },
-  approval: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: space.md,
-    backgroundColor: colors.raised,
-    borderRadius: radius.input,
-    marginTop: space.lg,
-    padding: space.md,
-    paddingLeft: space.lg,
-  },
-  approvalCopy: { flex: 1 },
-  approvalLabel: {
-    ...typography.caption,
-    color: colors.faint,
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 1.1,
-  },
-  approvalText: { ...typography.caption, color: colors.ink2, marginTop: 3 },
-  approveButton: {
-    height: 36,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.ink,
-    borderRadius: radius.control,
-    paddingHorizontal: space.md,
-  },
-  approveText: { ...typography.caption, color: colors.bg, fontWeight: '600' },
-
   footer: { flex: 1, justifyContent: 'flex-end', paddingTop: space.xxl },
   privacyRow: {
     flexDirection: 'row',
@@ -245,7 +125,7 @@ const styles = StyleSheet.create({
   privacyText: { ...typography.caption, color: colors.faint },
   primaryButton: {
     minHeight: 54,
-    borderRadius: radius.input,
+    borderRadius: 12,
     backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',

@@ -44,7 +44,7 @@ describe('ChatComposer', () => {
     expect(mockSpeech.start.mock.calls.at(-1)?.[0]).not.toHaveProperty('recordingOptions');
   });
 
-  it('does not squeeze a line of text between extra vertical padding', async () => {
+  it('keeps the resting prompt centred in a one-line field', async () => {
     await render(
       <ChatComposer
         value=""
@@ -58,10 +58,10 @@ describe('ChatComposer', () => {
 
     const input = screen.getByLabelText('Message input');
     const style = StyleSheet.flatten(input.props.style);
-    expect(style.height).toBe(24);
+    expect(style.height).toBe(38);
     expect(style.padding).toBe(0);
     expect(style.includeFontPadding).toBe(false);
-    expect(input.props.textAlignVertical).toBe('top');
+    expect(input.props.textAlignVertical).toBe('center');
   });
 
   it('grows from a native content measurement even when it arrives before the text update', async () => {
@@ -85,6 +85,32 @@ describe('ChatComposer', () => {
       const style = StyleSheet.flatten(updatedInput.props.style);
       expect(style.height).toBe(48);
       expect(updatedInput.props.textAlignVertical).toBe('top');
+    });
+  });
+
+  it('resets its measurement after a draft is cleared, so the next draft does not jump', async () => {
+    const props = {
+      onChangeText: jest.fn(),
+      onSend: jest.fn(),
+      onStop: jest.fn(),
+      streaming: false,
+      bottomInset: 0,
+    };
+    const view = await render(<ChatComposer {...props} value={'A tall draft'} />);
+    const input = view.getByLabelText('Message input');
+
+    await fireEvent(input, 'contentSizeChange', {
+      nativeEvent: { contentSize: { width: 200, height: 96 } },
+    });
+    await fireEvent.changeText(input, '');
+    await view.rerender(<ChatComposer {...props} value="" />);
+    await fireEvent.changeText(view.getByLabelText('Message input'), 'New draft');
+    await view.rerender(<ChatComposer {...props} value="New draft" />);
+
+    await waitFor(() => {
+      const nextInput = view.getByLabelText('Message input');
+      expect(StyleSheet.flatten(nextInput.props.style).height).toBe(38);
+      expect(nextInput.props.textAlignVertical).toBe('center');
     });
   });
 });

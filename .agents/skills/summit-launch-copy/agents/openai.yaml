@@ -1,0 +1,4 @@
+interface:
+  display_name: "Summit Launch Copy"
+  short_description: "Write factual launch copy for technical self-hosters."
+  default_prompt: "Create a truthful Summit beta recruitment post from verified capabilities."

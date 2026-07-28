@@ -1,0 +1,4 @@
+interface:
+  display_name: "Summit Release Evidence"
+  short_description: "Verify release claims against tested product evidence."
+  default_prompt: "Audit Summit release readiness and identify evidence gaps."

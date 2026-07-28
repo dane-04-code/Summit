@@ -1,0 +1,4 @@
+interface:
+  display_name: "Summit Launch Command"
+  short_description: "Coordinate Summit beta and public-launch work."
+  default_prompt: "Coordinate Summit launch readiness and produce the next 48-hour plan."

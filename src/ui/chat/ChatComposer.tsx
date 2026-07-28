@@ -139,6 +139,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
 
   const handleTextChange = useCallback(
     (text: string) => {
+      // Reset at the edit boundary. The first character after a cleared draft
+      // must start at one line, never at the previous draft's measured height.
+      if (!text || !valueRef.current) setHeight(COMPOSER_MIN_HEIGHT);
       valueRef.current = text;
       onChangeText(text);
       if (Platform.OS !== 'web') return;
@@ -183,7 +186,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   }, [listening]);
 
   const canSend = value.trim().length > 0 && !streaming;
-  const displayedHeight = value ? height : COMPOSER_MIN_HEIGHT;
+  const displayedHeight = height;
   const borderColor = focusAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [colors.line, colors.lineFocus],
@@ -221,16 +224,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
                     // Apply the native intrinsic measurement exactly. Adding
                     // padding here makes the measured height feed back into the
                     // explicit height, causing the composer to resize repeatedly.
+                    const contentHeight = event.nativeEvent.contentSize.height;
                     const nextHeight = composerHeightFor(
-                      event.nativeEvent.contentSize.height,
-                      true,
+                      contentHeight,
+                      valueRef.current.length > 0 || contentHeight > COMPOSER_MIN_HEIGHT,
                     );
                     setHeight((currentHeight) =>
                       currentHeight === nextHeight ? currentHeight : nextHeight,
                     );
                   }
             }
-            textAlignVertical="top"
+            // Keep the resting prompt centred beside the controls. Once the
+            // message wraps and genuinely grows, switch to top alignment so
+            // the first line stays anchored as the field expands downward.
+            textAlignVertical={
+              displayedHeight === COMPOSER_MIN_HEIGHT ? 'center' : 'top'
+            }
             accessibilityLabel="Message input"
           />
 
@@ -317,6 +326,7 @@ const styles = StyleSheet.create({
     minHeight: COMPOSER_MIN_HEIGHT,
     maxHeight: COMPOSER_MAX_HEIGHT,
     color: colors.ink,
+    textAlign: 'left',
     padding: 0,
     includeFontPadding: false,
   },

@@ -12,13 +12,13 @@ import WelcomeScreen from '@/app/(auth)/welcome';
 
 beforeEach(() => mockPush.mockClear());
 
-it('renders the static operator-cockpit welcome screen', async () => {
+it('renders supported Summit onboarding without a fictional agent cockpit', async () => {
   await render(<WelcomeScreen />);
 
   expect(screen.getByText('Summit')).toBeTruthy();
   expect(screen.getByText('Stay close to the work.')).toBeTruthy();
-  expect(screen.getByText('Production checks passed')).toBeTruthy();
-  expect(screen.getByText('Deploy the new release?')).toBeTruthy();
+  expect(screen.queryByText('Production checks passed')).toBeNull();
+  expect(screen.queryByText('Deploy the new release?')).toBeNull();
   expect(screen.getByText('Your agent key stays on your server')).toBeTruthy();
   expect(screen.queryByText(/OpenClaw support/)).toBeNull();
 });

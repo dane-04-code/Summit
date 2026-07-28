@@ -7,13 +7,11 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, useRouter } from 'expo-router';
-import * as AppleAuthentication from 'expo-apple-authentication';
-import { SUPABASE_CONFIGURED, supabase } from '@/lib/supabase';
+import { useAuth0 } from 'react-native-auth0';
 import { SIGNUP_ENABLED } from '@/config';
 import { BrandMark } from '@/ui/BrandMark';
 import { EyeIcon, AppleLogo } from '@/ui/authIcons';
@@ -30,20 +28,8 @@ export default function SignUpScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
-  const [appleAvailable, setAppleAvailable] = useState(false);
   const router = useRouter();
-
-  useEffect(() => {
-    let active = true;
-    if (Platform.OS === 'ios') {
-      AppleAuthentication.isAvailableAsync().then((v) => {
-        if (active) setAppleAvailable(v);
-      });
-    }
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { authorize } = useAuth0();
 
   // Self-serve signup is dev-only; in production the route is inert.
   if (!SIGNUP_ENABLED) {
@@ -52,50 +38,20 @@ export default function SignUpScreen() {
 
   async function handleSignUp() {
     setError(null);
-    if (!SUPABASE_CONFIGURED) {
-      setError('Sign up is not configured for this build yet.');
-      return;
-    }
     setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: { data: { name: name.trim() } },
-    });
-    setLoading(false);
-    if (error) setError(error.message);
-    else setConfirmed(true);
+    try { await authorize({ scope: 'openid profile email offline_access' }); }
+    catch (e: any) { if (e?.code !== 'a0.session.user_cancelled') setError(e?.message ?? 'Sign up failed.'); }
+    finally { setLoading(false); }
   }
 
   async function handleApple() {
     setError(null);
-    if (!SUPABASE_CONFIGURED) {
-      setError('Sign in is not configured for this build yet.');
-      return;
-    }
     try {
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-      });
-      if (!credential.identityToken) {
-        setError('Apple did not return an identity token.');
-        return;
-      }
       setLoading(true);
-      const { error } = await supabase.auth.signInWithIdToken({
-        provider: 'apple',
-        token: credential.identityToken,
-      });
-      setLoading(false);
-      if (error) setError(error.message);
+      await authorize({ connection: 'apple', scope: 'openid profile email offline_access' });
     } catch (e: any) {
-      // User dismissed the native Apple sheet — nothing to surface.
-      if (e?.code === 'ERR_REQUEST_CANCELED') return;
-      setError(e?.message ?? 'Apple sign-in failed.');
-    }
+      if (e?.code !== 'a0.session.user_cancelled') setError(e?.message ?? 'Apple sign-in failed.');
+    } finally { setLoading(false); }
   }
 
   if (confirmed) {
@@ -120,16 +76,12 @@ export default function SignUpScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
+      <ScrollView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
           <View style={styles.container}>
             {/* brand */}
             <View style={styles.brandArea}>
@@ -175,7 +127,7 @@ export default function SignUpScreen() {
                 />
               </View>
 
-              <View>
+              <View style={styles.hiddenAuth0Field}>
                 <Text style={styles.label}>Password</Text>
                 <View style={styles.passwordWrap}>
                   <TextInput
@@ -222,12 +174,11 @@ export default function SignUpScreen() {
                 {loading ? (
                   <ActivityIndicator color={colors.bg} />
                 ) : (
-                  <Text style={styles.primaryBtnText}>Create account</Text>
+                  <Text style={styles.primaryBtnText}>Continue with email</Text>
                 )}
               </Pressable>
 
-              {appleAvailable && (
-                <>
+              <>
                   <View style={styles.divider}>
                     <View style={styles.dividerLine} />
                     <Text style={styles.dividerText}>or</Text>
@@ -242,8 +193,13 @@ export default function SignUpScreen() {
                     <AppleLogo />
                     <Text style={styles.appleBtnText}>Continue with Apple</Text>
                   </Pressable>
-                </>
-              )}
+                <Pressable style={[styles.appleBtn, loading && styles.btnDisabled]} onPress={() => authorize({ connection: 'google-oauth2', scope: 'openid profile email offline_access' })} disabled={loading}>
+                  <Text style={styles.appleBtnText}>Continue with Google</Text>
+                </Pressable>
+                <Pressable style={[styles.appleBtn, loading && styles.btnDisabled]} onPress={() => authorize({ connection: 'github', scope: 'openid profile email offline_access' })} disabled={loading}>
+                  <Text style={styles.appleBtnText}>Continue with GitHub</Text>
+                </Pressable>
+              </>
             </View>
 
             {/* footer */}
@@ -264,8 +220,7 @@ export default function SignUpScreen() {
               </Text>
             </View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -295,11 +250,13 @@ const styles = StyleSheet.create({
   input: {
     ...typography.body,
     color: colors.ink,
-    height: 50,
+    height: 54,
     borderWidth: 1,
     borderColor: colors.line,
     borderRadius: radius.input,
     paddingHorizontal: space.lg,
+    paddingVertical: 0,
+    textAlignVertical: 'center',
     backgroundColor: colors.surface,
   },
   inputFocused: { borderColor: colors.lineFocus },
@@ -315,12 +272,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   error: { ...typography.caption, color: colors.error, marginLeft: 2 },
+  hiddenAuth0Field: { display: 'none' },
 
   // actions
   actions: { marginTop: space.lg, gap: space.lg },
   primaryBtn: {
     height: 52,
-    borderRadius: radius.input,
+    borderRadius: 12,
     backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',

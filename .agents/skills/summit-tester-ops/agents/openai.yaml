@@ -1,0 +1,4 @@
+interface:
+  display_name: "Summit Tester Operations"
+  short_description: "Recruit, onboard, and learn from Summit beta testers."
+  default_prompt: "Plan Summit’s next beta cohort and feedback loop."

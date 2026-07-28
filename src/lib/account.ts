@@ -3,11 +3,17 @@
  * fall back to the email's local part, then a neutral placeholder.
  */
 
-import type { User } from '@supabase/supabase-js';
+type AccountUser = {
+  email?: string | null;
+  name?: string | null;
+  nickname?: string | null;
+  sub?: string;
+  user_metadata?: { full_name?: string; name?: string };
+  app_metadata?: { provider?: string };
+};
 
-export function accountName(user: User | null): string {
-  const meta = user?.user_metadata as { full_name?: string; name?: string } | undefined;
-  return meta?.full_name ?? meta?.name ?? user?.email?.split('@')[0] ?? 'You';
+export function accountName(user: AccountUser | null): string {
+  return user?.name ?? user?.nickname ?? user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? user?.email?.split('@')[0] ?? 'You';
 }
 
 export function accountInitial(name: string): string {
@@ -16,9 +22,11 @@ export function accountInitial(name: string): string {
 
 export type AuthProviderKind = 'apple' | 'google' | 'email' | 'unknown';
 
-export function authProvider(user: User | null): AuthProviderKind {
-  const p = user?.app_metadata?.provider;
-  if (p === 'apple' || p === 'google' || p === 'email') return p;
+export function authProvider(user: AccountUser | null): AuthProviderKind {
+  const provider = user?.sub?.split('|')[0] ?? user?.app_metadata?.provider;
+  if (provider === 'apple' || provider === 'google' || provider === 'google-oauth2' || provider === 'email') {
+    return provider === 'google-oauth2' ? 'google' : provider;
+  }
   return 'unknown';
 }
 

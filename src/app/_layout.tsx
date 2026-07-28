@@ -1,5 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
+import { Auth0Provider } from 'react-native-auth0';
+import { AUTH0_CLIENT_ID, AUTH0_DOMAIN } from '@/lib/auth0';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { AgentProvider } from '@/agents/AgentProvider';
 import { AnalyticsProvider } from '@/lib/analytics';
@@ -58,15 +60,17 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <AnalyticsProvider>
-        <AuthProvider>
-          <AgentProvider>
-            <RouteGuard />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(app)" />
-            </Stack>
-          </AgentProvider>
-        </AuthProvider>
+        <Auth0Provider domain={AUTH0_DOMAIN || 'configure.auth0.com'} clientId={AUTH0_CLIENT_ID || 'configure'}>
+          <AuthProvider>
+            <AgentProvider>
+              <RouteGuard />
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(auth)" />
+                <Stack.Screen name="(app)" />
+              </Stack>
+            </AgentProvider>
+          </AuthProvider>
+        </Auth0Provider>
       </AnalyticsProvider>
     </ErrorBoundary>
   );

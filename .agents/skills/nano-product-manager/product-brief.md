@@ -10,8 +10,9 @@
 **Summit** — a React Native (iOS-first, Expo) mobile app that gives people running
 self-hosted AI agents (Hermes today, OpenClaw later) a **first-class mobile client** for their
 agent: reach it from anywhere, message it fluidly, see its status, and act on blocking decisions
-with one tap. It is *not* a replacement for Telegram/Discord as everyday messengers — it fixes the
-specific things those break when you're working with an agent on your phone.
+with one tap. Its ambition is to replace Telegram or Discord for the **agent-control job**: the
+place a technical self-hoster goes to talk to, monitor, and intervene in their agent from a phone.
+It is not a replacement for Telegram/Discord as everyday human messengers.
 
 **Codename:** Summit · **Stage:** Hermes native-plugin alpha and iOS app are ready for a real-device
 beta proof; not yet store-ready · **Author:** Dane
@@ -22,6 +23,11 @@ beta proof; not yet store-ready · **Author:** Dane
 agent. Markdown rendering, push, and approve/stop are *parts* of that experience — the most
 *visible* part is proper markdown (raw Telegram mangles tables/code), but **markdown is not the
 point; the whole thing feeling first-class is the point.**
+
+**Category ambition:** become the Telegram/Discord replacement for a self-hosted Hermes agent —
+not through group-chat breadth, but by making the agent-to-phone loop materially more dependable,
+readable, private in its credential handling, and actionable than a generic chat bot. “Telegram
+killer” is an internal north star, not a literal public claim or an excuse to build a messenger.
 
 - **Cockpit, not chatroom.** Something is running on a server; you're away from your desk; it might
   stop and ask "can I run this command?" The feeling is calm authority with your hand near the kill
@@ -199,6 +205,11 @@ profile snapshot may add bounded skill/tool metadata (name and short summary onl
 never supplies layout, raw skill instructions, system prompts, tool arguments, host paths, or tool
 output. A compact chat link may open this same surface, but the profile is not a new dashboard or
 second transcript.
+
+**Team-role direction:** Hermes remains one paired Summit agent. If a user has assembled a “team,”
+the native plugin may provide a bounded list of verified roles/skills for an app-owned Team card;
+tapping a role opens its own role-detail sheet. Roles are not presented as independently paired
+servers, and the plugin supplies only a name, short purpose, and safe declared capabilities.
 
 ## 7. Explicit non-goals (ruled OUT — flag if an idea lands here)
 

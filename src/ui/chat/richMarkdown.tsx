@@ -321,7 +321,7 @@ export function RichMarkdown({
     blockquote: (node, children) => (
       <View key={node.key} style={s.quote}>
         <Text style={s.quoteMark} selectable={false}>
-          "
+          {'“'}
         </Text>
         <View>{children}</View>
       </View>
@@ -416,10 +416,15 @@ const mdStyles = StyleSheet.create({
     // react-native-markdown-display's default inline-code treatment is a
     // padded, bordered chip. In a technical reply that turns a simple skill
     // name or filename into a distracting series of dark rectangles. Keep the
-    // monospace signal, but let it sit naturally in the sentence instead.
+    // monospace signal, but make a reference feel deliberate with a quiet
+    // underline rather than a background container.
     fontSize: 14,
     lineHeight: 20,
-    color: colors.ink2,
+    fontWeight: '700',
+    color: colors.ink,
+    textDecorationLine: 'underline',
+    textDecorationColor: colors.lineFocus,
+    textDecorationStyle: 'solid',
     borderWidth: 0,
     borderColor: 'transparent',
     backgroundColor: 'transparent',

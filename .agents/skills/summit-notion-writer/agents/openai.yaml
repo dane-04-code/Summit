@@ -1,0 +1,4 @@
+interface:
+  display_name: "Summit Notion Writer"
+  short_description: "Organize Summit in Dane’s Notion space"
+  default_prompt: "Use $summit-notion-writer to organize Summit’s current business information in Notion."

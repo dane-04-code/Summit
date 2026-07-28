@@ -5,6 +5,7 @@ import { fireEvent, render, waitFor, cleanup } from '@testing-library/react-nati
 import { RichMarkdown } from '@/ui/chat/richMarkdown';
 import { AgentMessage } from '@/ui/chat/AgentMessage';
 import { ApprovalCard } from '@/ui/chat/ApprovalCard';
+import { colors } from '@/theme';
 import { ALL_FIXTURES, WIDE_CODE, WIDE_TABLE, MIXED_DOC } from './fixtures/markdown';
 
 afterEach(cleanup);
@@ -68,7 +69,7 @@ describe('type ramp', () => {
     expect(StyleSheet.flatten(el.props.style).fontSize).toBe(17);
   });
 
-  it('keeps inline code technical without rendering it as a chip', async () => {
+  it('keeps inline code as an underlined technical reference, not a chip', async () => {
     const view = await render(<RichMarkdown source={'Use `summit-plugin-patches` for this.'} />);
     const el = await waitFor(() => view.getByText('summit-plugin-patches'));
     const style = StyleSheet.flatten(el.props.style);
@@ -77,6 +78,9 @@ describe('type ramp', () => {
     expect(style.backgroundColor).toBe('transparent');
     expect(style.borderWidth).toBe(0);
     expect(style.padding).toBe(0);
+    expect(style.fontWeight).toBe('700');
+    expect(style.color).toBe(colors.ink);
+    expect(style.textDecorationLine).toBe('underline');
   });
 });
 

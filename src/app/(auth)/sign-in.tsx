@@ -11,8 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as AppleAuthentication from 'expo-apple-authentication';
-import { SUPABASE_CONFIGURED, supabase } from '@/lib/supabase';
+import { useAuth0 } from 'react-native-auth0';
 import { SIGNUP_ENABLED } from '@/config';
 import { BrandMark } from '@/ui/BrandMark';
 import { EyeIcon, AppleLogo } from '@/ui/authIcons';
@@ -27,65 +26,34 @@ export default function SignInScreen() {
   const [focused, setFocused] = useState<FocusField>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [appleAvailable, setAppleAvailable] = useState(false);
   const router = useRouter();
-
-  useEffect(() => {
-    let active = true;
-    if (Platform.OS === 'ios') {
-      AppleAuthentication.isAvailableAsync().then((v) => {
-        if (active) setAppleAvailable(v);
-      });
-    }
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { authorize } = useAuth0();
 
   async function handleEmailSignIn() {
     setError(null);
-    if (!SUPABASE_CONFIGURED) {
-      setError('Sign in is not configured for this build yet.');
-      return;
-    }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    setLoading(false);
-    if (error) setError(error.message);
+    try {
+      await authorize({ scope: 'openid profile email offline_access' });
+    } catch (e: any) {
+      if (e?.code !== 'a0.session.user_cancelled') setError(e?.message ?? 'Sign in failed.');
+    } finally { setLoading(false); }
   }
 
   async function handleApple() {
     setError(null);
-    if (!SUPABASE_CONFIGURED) {
-      setError('Sign in is not configured for this build yet.');
-      return;
-    }
     try {
-      const credential = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-      });
-      if (!credential.identityToken) {
-        setError('Apple did not return an identity token.');
-        return;
-      }
       setLoading(true);
-      const { error } = await supabase.auth.signInWithIdToken({
-        provider: 'apple',
-        token: credential.identityToken,
-      });
-      setLoading(false);
-      if (error) setError(error.message);
+      await authorize({ connection: 'apple', scope: 'openid profile email offline_access' });
     } catch (e: any) {
-      // User dismissed the native Apple sheet — nothing to surface.
-      if (e?.code === 'ERR_REQUEST_CANCELED') return;
-      setError(e?.message ?? 'Apple sign-in failed.');
-    }
+      if (e?.code !== 'a0.session.user_cancelled') setError(e?.message ?? 'Apple sign-in failed.');
+    } finally { setLoading(false); }
+  }
+
+  async function handleProvider(connection: string) {
+    setError(null); setLoading(true);
+    try { await authorize({ connection, scope: 'openid profile email offline_access' }); }
+    catch (e: any) { if (e?.code !== 'a0.session.user_cancelled') setError(e?.message ?? 'Sign in failed.'); }
+    finally { setLoading(false); }
   }
 
   return (
@@ -96,7 +64,6 @@ export default function SignInScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.container}>
@@ -128,7 +95,7 @@ export default function SignInScreen() {
               />
             </View>
 
-            <View>
+            <View style={styles.hiddenAuth0Field}>
               <Text style={styles.label}>Password</Text>
               <View style={styles.passwordWrap}>
                 <TextInput
@@ -175,12 +142,11 @@ export default function SignInScreen() {
               {loading ? (
                 <ActivityIndicator color={colors.bg} />
               ) : (
-                <Text style={styles.primaryBtnText}>Sign in</Text>
+                <Text style={styles.primaryBtnText}>Continue with email</Text>
               )}
             </Pressable>
 
-            {appleAvailable && (
-              <>
+            <>
                 <View style={styles.divider}>
                   <View style={styles.dividerLine} />
                   <Text style={styles.dividerText}>or</Text>
@@ -195,8 +161,13 @@ export default function SignInScreen() {
                   <AppleLogo />
                   <Text style={styles.appleBtnText}>Continue with Apple</Text>
                 </Pressable>
-              </>
-            )}
+                <Pressable style={[styles.appleBtn, loading && styles.btnDisabled]} onPress={() => handleProvider('google-oauth2')} disabled={loading}>
+                  <Text style={styles.appleBtnText}>Continue with Google</Text>
+                </Pressable>
+                <Pressable style={[styles.appleBtn, loading && styles.btnDisabled]} onPress={() => handleProvider('github')} disabled={loading}>
+                  <Text style={styles.appleBtnText}>Continue with GitHub</Text>
+                </Pressable>
+            </>
           </View>
 
           {/* footer */}
@@ -238,11 +209,13 @@ const styles = StyleSheet.create({
   input: {
     ...typography.body,
     color: colors.ink,
-    height: 50,
+    height: 54,
     borderWidth: 1,
     borderColor: colors.line,
     borderRadius: radius.input,
     paddingHorizontal: space.lg,
+    paddingVertical: 0,
+    textAlignVertical: 'center',
     backgroundColor: colors.surface,
   },
   inputFocused: { borderColor: colors.lineFocus },
@@ -258,12 +231,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   error: { ...typography.caption, color: colors.error, marginLeft: 2 },
+  hiddenAuth0Field: { display: 'none' },
 
   // actions
   actions: { marginTop: space.lg, gap: space.lg },
   primaryBtn: {
     height: 52,
-    borderRadius: radius.input,
+    borderRadius: 12,
     backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',
