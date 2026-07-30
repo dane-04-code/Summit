@@ -1,0 +1,4 @@
+interface:
+  display_name: "Summit Organic Content"
+  short_description: "Draft and schedule Summit's X content via Buffer."
+  default_prompt: "Draft or schedule Summit's next X post via Buffer, checking claims against the evidence ledger first."

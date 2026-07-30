@@ -1,0 +1,4 @@
+interface:
+  display_name: "Summit Growth Analytics"
+  short_description: "Track Summit's marketing funnel and channel attribution in PostHog."
+  default_prompt: "Report Summit's channel-attribution funnel: signups, TestFlight joins, and paired agents per channel."

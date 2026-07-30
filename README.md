@@ -28,7 +28,6 @@ The product is not a developer console. A user should see the answer first, a br
 - [Agent, storage, and transport contract](AGENTS.md)
 - [Native plugin connection plan](docs/PLUGIN_CONNECTION_PLAN.md)
 - [Hermes plugin build record](docs/HERMES_PLUGIN_BUILD_PLAN.md)
-- [Product brief](.agents/skills/nano-product-manager/product-brief.md)
 - [Device test checklist](docs/TESTING.md)
 
 ## Development

@@ -1,0 +1,20 @@
+{
+  "enabledPlugins": {
+    "marketing-skills@marketingskills": false,
+    "c-level-skills@claude-code-skills": false,
+    "frontend-design@claude-plugins-official": false,
+    "superpowers@claude-plugins-official": false
+  },
+  "skillOverrides": {
+    "browse": "off",
+    "cso": "off",
+    "office-hours": "off",
+    "_gstack-command": "off",
+    "sage-ai-integration": "off",
+    "sage-design-system": "off",
+    "sage-revenuecat": "off",
+    "sage-supabase": "off",
+    "ovela-brand-voice": "off",
+    "ovela-buffer-upload": "off"
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Summit Growth Command"
+  short_description: "Decide beta-to-public graduation and public channel order."
+  default_prompt: "Decide whether Summit is ready to graduate to public launch, and in what order to open channels."

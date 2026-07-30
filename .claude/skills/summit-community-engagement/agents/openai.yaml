@@ -1,0 +1,4 @@
+interface:
+  display_name: "Summit Community Engagement"
+  short_description: "Draft Summit's Reddit, Discord, and DM outreach for human review."
+  default_prompt: "Draft a Reddit, Discord, or DM outreach message for Summit for me to review before sending."

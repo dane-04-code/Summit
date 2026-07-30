@@ -1,0 +1,4 @@
+interface:
+  display_name: "Summit Distribution"
+  short_description: "Plan and execute Summit's public distribution channels."
+  default_prompt: "Plan or execute Summit's public distribution across community, store, and amplification channels."
