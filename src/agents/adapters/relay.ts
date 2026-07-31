@@ -1,6 +1,14 @@
-import type { AgentAdapter, AgentStatus, ConnectionState, SendOptions, SettledReply, StreamEvent } from './types';
+import type {
+  AgentAdapter,
+  AgentStatus,
+  ConnectionState,
+  ModelCatalogue,
+  SendOptions,
+  SettledReply,
+  StreamEvent,
+} from './types';
 import type { AgentCapabilities, AgentFramework, Agent } from '../types';
-import type { ChatMessage } from '../relay/types';
+import type { ChatMessage, ConnectorCapability, ModelScope } from '../relay/types';
 import type { CronJob, CronRun } from '@/ui/cron/types';
 import { RelayClient } from '../relay/client';
 import { readJobRunResponse, readJobsResponse } from './jobs';
@@ -39,6 +47,9 @@ export class RelayAdapter implements AgentAdapter {
   private requestCounter = 0;
   private connectionState: ConnectionState = 'unknown';
   private listeners: ((state: ConnectionState) => void)[] = [];
+  // Renegotiated on every connect, so upgrading the connector lights up its
+  // new features without the paired agent record having to be rewritten.
+  private connectorCapabilities: ConnectorCapability[] = [];
 
   constructor(
     private readonly agent: Agent,
@@ -58,7 +69,8 @@ export class RelayAdapter implements AgentAdapter {
     const wsUrl = `${RELAY_WS_URL}?code=${encodeURIComponent(code)}&token=${encodeURIComponent(token)}`;
     const client = new RelayClient(wsUrl);
     client.subscribeConnectionState((state) => this.setConnectionState(state));
-    await client.resume(token);
+    const info = await client.resume(token);
+    this.connectorCapabilities = info.capabilities ?? [];
     this.client = client;
     this.pairingCode = code;
     this.registerPushToken(client);
@@ -158,6 +170,18 @@ export class RelayAdapter implements AgentAdapter {
       return;
     }
     await this.api('POST', `/v1/runs/${enc(runId)}/stop`);
+  }
+
+  supportsModelPicker(): boolean {
+    return this.connectorCapabilities.includes('model_picker');
+  }
+
+  async listModels(sessionId: string, scope: ModelScope): Promise<ModelCatalogue> {
+    return (await this.ensureConnected()).listModels(sessionId, scope);
+  }
+
+  async selectModel(sessionId: string, provider: string, model: string): Promise<string> {
+    return (await this.ensureConnected()).selectModel(sessionId, provider, model);
   }
 
   async listJobs(): Promise<CronJob[]> {

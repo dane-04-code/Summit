@@ -31,6 +31,8 @@ import { ApprovalCard } from '@/ui/chat/ApprovalCard';
 import { Sidebar } from '@/ui/chat/Sidebar';
 import { MdReader } from '@/ui/chat/MdReader';
 import { SlashCommandMenu } from '@/ui/chat/SlashCommandMenu';
+import { ModelPickerSheet, shortModelName } from '@/ui/chat/ModelPickerSheet';
+import { useModelPicker } from '@/ui/chat/useModelPicker';
 import { matchCommands, type SlashCommand } from '@/ui/chat/slashCommands';
 import { CopiedToast } from '@/ui/chat/CopiedToast';
 import { EventDisclosure } from '@/ui/chat/EventDisclosure';
@@ -537,6 +539,34 @@ export default function AgentScreen() {
     return session;
   }, [activeAgent, repo]);
 
+  // The picker talks to the host about the session the next message will use,
+  // so a session-scoped switch lands on the thread the user is looking at
+  // rather than on one that gets minted afterwards.
+  const modelPicker = useModelPicker(
+    activeAgent ? adapterFor(activeAgent) : null,
+    useCallback(async () => (await ensureSession()).id, [ensureSession]),
+    connectionState,
+  );
+
+  const composerModel = useMemo(
+    () =>
+      modelPicker.available
+        ? {
+            label: modelPicker.currentModel
+              ? shortModelName(modelPicker.currentModel)
+              : 'Model',
+            providerSlug: modelPicker.currentProvider ?? '',
+            onPress: modelPicker.openPicker,
+          }
+        : null,
+    [
+      modelPicker.available,
+      modelPicker.currentModel,
+      modelPicker.currentProvider,
+      modelPicker.openPicker,
+    ],
+  );
+
   const handleStopStream = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     stopRef.current = true;
@@ -775,6 +805,20 @@ export default function AgentScreen() {
 
           <SlashCommandMenu commands={slashMatches} onSelect={handleSlashSelect} />
 
+          {/* The host's own words about a switch it just made. Kept because a
+              successful switch can still carry a warning (a cleared context
+              pin, a smaller window) the chip alone would hide. */}
+          {modelPicker.notice ? (
+            <Pressable
+              onPress={modelPicker.dismissNotice}
+              style={styles.modelNotice}
+              accessibilityRole="button"
+              accessibilityLabel={`${modelPicker.notice}. Dismiss.`}
+            >
+              <Text style={styles.modelNoticeText}>{modelPicker.notice}</Text>
+            </Pressable>
+          ) : null}
+
           <ChatComposer
             ref={composerRef}
             value={input}
@@ -783,8 +827,11 @@ export default function AgentScreen() {
             onStop={handleStopStream}
             streaming={streaming}
             bottomInset={insets.bottom}
+            model={composerModel}
           />
         </KeyboardAvoidingView>
+
+        <ModelPickerSheet picker={modelPicker} />
 
         <CopiedToast shownAt={copiedAt} />
       </SafeAreaView>
@@ -821,6 +868,20 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  modelNotice: {
+    marginHorizontal: space.lg,
+    marginBottom: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.input,
+    backgroundColor: colors.surface,
+  },
+  modelNoticeText: {
+    ...typography.caption,
+    color: colors.ink2,
   },
   flex: {
     flex: 1,

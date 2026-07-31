@@ -5,7 +5,17 @@
  */
 
 import type { AgentCapabilities, AgentFramework } from '../types';
+import type { ModelProvider, ModelScope } from '../relay/types';
 import type { CronJob, CronRun } from '@/ui/cron/types';
+
+export type { ModelProvider, ModelScope };
+
+/** What the agent is running now, and what it will let you switch to. */
+export type ModelCatalogue = {
+  currentModel: string;
+  currentProvider: string;
+  providers: ModelProvider[];
+};
 
 export type AgentStatus = 'idle' | 'running' | 'error';
 
@@ -86,6 +96,18 @@ export interface AgentAdapter {
   acknowledgeReplies?(ids: string[]): Promise<void>;
   /** A content-free signal that a host-owned asynchronous reply is ready to sync. */
   subscribeProactiveDelivery?(listener: () => void): Promise<() => void>;
+
+  /**
+   * Model switching, gated on what the connected host advertised at pair time
+   * rather than on framework — an older plugin has no picker to surface, and
+   * the UI must stay dark until it does. False means `listModels`/`selectModel`
+   * must not be called.
+   */
+  supportsModelPicker?(): boolean;
+  /** The host's own picker payload. `scope` fixes where a later pick sticks. */
+  listModels?(sessionId: string, scope: ModelScope): Promise<ModelCatalogue>;
+  /** Switch to one entry from the last catalogue; resolves with the host's note. */
+  selectModel?(sessionId: string, provider: string, model: string): Promise<string>;
 
   // Runs API — Hermes only in v1 (gate on capabilities.hasRunApproval).
   approveRun(runId: string, approved: boolean): Promise<void>;

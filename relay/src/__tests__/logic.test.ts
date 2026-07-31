@@ -65,6 +65,66 @@ describe('handleConnectorMessage — hello', () => {
     expect(effects[0]).toMatchObject({ to: 'connector', frame: { t: 'code', code: '111111' } });
     expect(state.connectorToken).toBe('c'.repeat(43));
   });
+
+  it('carries connector capabilities through to the paired app', () => {
+    const base = { ...makeInitialState(), code: '111111' };
+    const { state } = handleConnectorMessage(base, {
+      t: 'hello',
+      framework: 'hermes',
+      agentName: 'My Agent',
+      agentVersion: '2.1',
+      capabilities: ['model_picker'],
+    });
+    const paired = handleAppMessage(
+      { ...state, sessionToken: 's'.repeat(43) },
+      { t: 'resume', token: 's'.repeat(43) },
+    );
+    expect(paired.effects[0]).toMatchObject({
+      to: 'app',
+      frame: { t: 'paired', capabilities: ['model_picker'] },
+    });
+  });
+});
+
+describe('handleConnectorMessage — model picker', () => {
+  it('forwards a model catalogue to the app with no notification', () => {
+    const base = { ...makeInitialState(), code: '111111', pushToken: 'tok', appConnected: false };
+    const models = {
+      t: 'models' as const,
+      reqId: 'r1',
+      currentModel: 'claude-sonnet-5',
+      currentProvider: 'anthropic',
+      providers: [],
+    };
+    const { effects } = handleConnectorMessage(base, models);
+    // A picker payload is UI state, never something to wake the phone for.
+    expect(effects).toEqual([{ to: 'app', frame: models }]);
+  });
+});
+
+describe('handleAppMessage — model picker', () => {
+  it('forwards an authenticated model request to the connector', () => {
+    const request = {
+      t: 'models_req' as const,
+      reqId: 'r1',
+      sessionId: 's1',
+      scope: 'session' as const,
+    };
+    const { effects } = handleAppMessage(makeInitialState(), request, {}, true);
+    expect(effects).toEqual([{ to: 'connector', frame: request }]);
+  });
+
+  it('refuses a model request from an unauthenticated socket', () => {
+    const request = {
+      t: 'model_select' as const,
+      reqId: 'r1',
+      sessionId: 's1',
+      provider: 'anthropic',
+      model: 'claude-opus-5',
+    };
+    const { effects } = handleAppMessage(makeInitialState(), request, {}, false);
+    expect(effects).toMatchObject([{ to: 'app', frame: { t: 'error' } }]);
+  });
 });
 
 describe('handleConnectorMessage — passthrough', () => {

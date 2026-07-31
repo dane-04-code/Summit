@@ -1,13 +1,16 @@
 /** Canonical relay protocol frame types. Relay imports from here directly. */
 
-export type HelloFrame      = { t: 'hello'; framework: string; agentName: string; agentVersion: string };
+/** Optional connector feature flags, negotiated at hello and echoed on pair.
+ *  Absent means an older connector — the app must keep the feature's UI dark. */
+export type ConnectorCapability = 'model_picker';
+export type HelloFrame      = { t: 'hello'; framework: string; agentName: string; agentVersion: string; capabilities?: ConnectorCapability[] };
 export type CodeFrame       = { t: 'code'; code: string; connectorToken: string };
 export type PairFrame       = { t: 'pair'; code: string };
 // Reconnect with the durable session token issued at pair time — the code is
 // single-use and short-lived, so the token (not the code) is the credential
 // the app keeps.
 export type ResumeFrame     = { t: 'resume'; token: string };
-export type PairedFrame     = { t: 'paired'; framework: string; agentName: string; agentVersion: string; sessionToken: string };
+export type PairedFrame     = { t: 'paired'; framework: string; agentName: string; agentVersion: string; sessionToken: string; capabilities?: ConnectorCapability[] };
 export type PairErrorFrame  = { t: 'pair_error'; reason: 'not_found' | 'expired' | 'already_paired' | 'locked' };
 export type PeerGoneFrame   = { t: 'peer_gone' };
 export type PingFrame       = { t: 'ping' };
@@ -55,10 +58,28 @@ export type NotifyFrame       = { t: 'notify'; title?: string; body?: string };
 // allow-once). Hermes approvals stay on the api_req REST proxy.
 export type ApprovalReqFrame     = { t: 'approval_req'; approvalId: string; command: string };
 export type ApprovalResolveFrame = { t: 'approval_resolve'; approvalId: string; decision: 'approve' | 'deny' };
+// Native model picker. The connector never enumerates or validates models
+// itself — it asks Hermes for its own `/model` picker payload and hands back
+// whatever Hermes offers, which is only the providers the host has credentials
+// for. Selection goes back through Hermes' own switch callback.
+/** One provider row exactly as Hermes' picker supplies it. */
+export type ModelProvider = {
+  slug: string;
+  name: string;
+  isCurrent: boolean;
+  models: string[];
+};
+/** Where a pick sticks: this thread only, or persisted as the host default. */
+export type ModelScope = 'session' | 'default';
+export type ModelsReqFrame    = { t: 'models_req'; reqId: string; sessionId: string; scope: ModelScope };
+export type ModelsFrame       = { t: 'models'; reqId: string; sessionId?: string; currentModel: string; currentProvider: string; providers: ModelProvider[] };
+export type ModelSelectFrame  = { t: 'model_select'; reqId: string; sessionId: string; provider: string; model: string };
+export type ModelResultFrame  = { t: 'model_result'; reqId: string; sessionId?: string; model: string; provider: string; message: string };
 
 export type AnyFrame =
   | HelloFrame | CodeFrame | PairFrame | ResumeFrame | PairedFrame | PairErrorFrame
   | PeerGoneFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | ActivityFrame | DoneFrame | ErrorFrame
   | SyncReqFrame | SyncReplyFrame | SyncDoneFrame | AckRepliesFrame
   | ApiReqFrame | ApiResFrame | RegisterPushFrame | NotifyFrame
-  | ApprovalReqFrame | ApprovalResolveFrame;
+  | ApprovalReqFrame | ApprovalResolveFrame
+  | ModelsReqFrame | ModelsFrame | ModelSelectFrame | ModelResultFrame;

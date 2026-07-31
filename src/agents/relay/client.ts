@@ -1,4 +1,13 @@
-import type { AnyFrame, ChatMessage, NotificationMode, PairErrorFrame, SettledReply } from './types';
+import type {
+  AnyFrame,
+  ChatMessage,
+  ConnectorCapability,
+  ModelProvider,
+  ModelScope,
+  NotificationMode,
+  PairErrorFrame,
+  SettledReply,
+} from './types';
 import type { ConnectionState, StreamEvent } from '../adapters/types';
 import { RelayError, type RelayErrorCode } from './errors';
 
@@ -9,7 +18,20 @@ const PAIR_ERROR_CODE: Record<PairErrorFrame['reason'], RelayErrorCode> = {
   locked: 'code_locked',
 };
 
-export type RelayAgentInfo = { framework: string; agentName: string; agentVersion: string; sessionToken: string };
+export type RelayAgentInfo = {
+  framework: string;
+  agentName: string;
+  agentVersion: string;
+  sessionToken: string;
+  capabilities?: ConnectorCapability[];
+};
+
+/** Hermes' own picker payload: current selection plus what it can switch to. */
+export type ModelCatalogue = {
+  currentModel: string;
+  currentProvider: string;
+  providers: ModelProvider[];
+};
 
 export class RelayClient {
   private ws: WebSocket | null = null;
@@ -119,6 +141,7 @@ export class RelayClient {
             agentName: frame.agentName,
             agentVersion: frame.agentVersion,
             sessionToken: frame.sessionToken,
+            ...(frame.capabilities ? { capabilities: frame.capabilities } : {}),
           });
         } else if (frame.t === 'pair_error') {
           this.handlers = this.handlers.filter((h) => h !== handler);
@@ -153,6 +176,7 @@ export class RelayClient {
             agentName: frame.agentName,
             agentVersion: frame.agentVersion,
             sessionToken: frame.sessionToken,
+            ...(frame.capabilities ? { capabilities: frame.capabilities } : {}),
           });
         } else if (frame.t === 'pair_error' || frame.t === 'peer_gone' || frame.t === 'socket_closed') {
           this.handlers = this.handlers.filter((h) => h !== handler);
@@ -357,6 +381,83 @@ export class RelayClient {
         }),
       );
     });
+  }
+
+  /**
+   * One request/response round-trip keyed by `reqId`. The connector answers
+   * with exactly one frame `read` recognizes, or an `error` carrying the same
+   * id; a dropped peer or socket rejects rather than hanging the caller.
+   */
+  private async roundTrip<T>(
+    send: (reqId: string) => AnyFrame,
+    read: (frame: AnyFrame, reqId: string) => T | undefined,
+    timeoutMs = 20000,
+  ): Promise<T> {
+    await this.authenticate();
+    const ws = await this.connect();
+    const reqId = `rt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return new Promise<T>((resolve, reject) => {
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.handlers = this.handlers.filter((h) => h !== handler);
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error('The agent did not respond in time.'));
+      }, timeoutMs);
+      const handler = (frame: AnyFrame) => {
+        const value = read(frame, reqId);
+        if (value !== undefined) {
+          cleanup();
+          resolve(value);
+        } else if (frame.t === 'error' && frame.reqId === reqId) {
+          cleanup();
+          reject(new Error(frame.message));
+        } else if (frame.t === 'peer_gone') {
+          cleanup();
+          this.setState('disconnected');
+          reject(new Error('Agent disconnected.'));
+        } else if (frame.t === 'socket_closed') {
+          cleanup();
+          this.setState('disconnected');
+          reject(new Error('Relay connection closed.'));
+        }
+      };
+      this.handlers.push(handler);
+      ws.send(JSON.stringify(send(reqId)));
+    });
+  }
+
+  /**
+   * Ask the agent for its own model picker. `scope` decides where a later
+   * selection sticks, because the host bakes that in when it opens the picker —
+   * changing scope means asking again.
+   */
+  async listModels(sessionId: string, scope: ModelScope): Promise<ModelCatalogue> {
+    return this.roundTrip<ModelCatalogue>(
+      (reqId) => ({ t: 'models_req', reqId, sessionId, scope }),
+      (frame, reqId) =>
+        frame.t === 'models' && frame.reqId === reqId
+          ? {
+              currentModel: frame.currentModel,
+              currentProvider: frame.currentProvider,
+              providers: frame.providers,
+            }
+          : undefined,
+      // Cold provider catalogues make the host fetch live model lists.
+      30000,
+    );
+  }
+
+  /** Switch to one entry from the last picker. Resolves with the host's note. */
+  async selectModel(sessionId: string, provider: string, model: string): Promise<string> {
+    return this.roundTrip<string>(
+      (reqId) => ({ t: 'model_select', reqId, sessionId, provider, model }),
+      (frame, reqId) =>
+        frame.t === 'model_result' && frame.reqId === reqId ? frame.message : undefined,
+      30000,
+    );
   }
 
   disconnect(): void {

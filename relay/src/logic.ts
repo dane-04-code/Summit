@@ -1,12 +1,20 @@
 import type {
   AnyFrame,
+  ConnectorCapability,
   NotificationMode,
   PairedFrame,
   PairErrorFrame,
   PeerGoneFrame,
 } from '../../protocol/protocol';
 
-export type ConnectorInfo = { framework: string; agentName: string; agentVersion: string };
+/** Spread verbatim into `paired`, so an added connector flag reaches the app
+ *  without the relay having to understand what the flag means. */
+export type ConnectorInfo = {
+  framework: string;
+  agentName: string;
+  agentVersion: string;
+  capabilities?: ConnectorCapability[];
+};
 
 export type ChannelState = {
   code: string | null;
@@ -124,7 +132,12 @@ export function handleConnectorMessage(state: ChannelState, frame: AnyFrame, now
       state: {
         ...state,
         connectorToken,
-        connectorInfo: { framework: frame.framework, agentName: frame.agentName, agentVersion: frame.agentVersion },
+        connectorInfo: {
+          framework: frame.framework,
+          agentName: frame.agentName,
+          agentVersion: frame.agentVersion,
+          ...(frame.capabilities ? { capabilities: frame.capabilities } : {}),
+        },
         // The code is only advertised now, so start its short life here.
         codeExpiresAt: now + CODE_TTL_MS,
       },
@@ -232,7 +245,7 @@ export function handleAppMessage(
       effects: [],
     };
   }
-  // chat — forward to connector
+  // chat / sync / api / approval / model frames — forward to connector
   return { state, effects: [{ to: 'connector', frame }] };
 }
 

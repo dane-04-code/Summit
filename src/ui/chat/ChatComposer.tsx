@@ -16,7 +16,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { ArrowUp, Mic, Square } from 'lucide-react-native';
+import { ArrowUp, ChevronDown, Mic, Square } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import {
   ExpoSpeechRecognitionModule,
@@ -30,6 +30,20 @@ import {
   COMPOSER_MIN_HEIGHT,
   composerHeightFor,
 } from '@/ui/chat/composerHeight';
+import { ProviderMark } from '@/ui/chat/providerMarks';
+
+/**
+ * The model control, when the connected agent has one. Absent for agents that
+ * never advertised a picker, which is why the whole row is optional rather
+ * than a disabled button.
+ */
+export type ComposerModel = {
+  /** What to call the current model; a neutral word until the host says. */
+  label: string;
+  /** Hermes provider slug, for the mark. Empty until a catalogue has loaded. */
+  providerSlug: string;
+  onPress: () => void;
+};
 
 export function mergeDictation(prefix: string, transcript: string): string {
   const before = prefix.trimEnd();
@@ -76,6 +90,7 @@ type ChatComposerProps = {
   onStop: () => void;
   streaming: boolean;
   bottomInset: number;
+  model?: ComposerModel | null;
 };
 
 export type ChatComposerHandle = {
@@ -89,6 +104,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   onStop,
   streaming,
   bottomInset,
+  model,
 }: ChatComposerProps, ref) {
   const [height, setHeight] = useState(COMPOSER_MIN_HEIGHT);
   const [listening, setListening] = useState(false);
@@ -295,6 +311,29 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
             </Animated.View>
           </Pressable>
         </View>
+
+        {model ? (
+          <View style={styles.modelRow}>
+            <Pressable
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                model.onPress();
+              }}
+              hitSlop={6}
+              style={({ pressed }) => [styles.modelChip, pressed && styles.modelChipPressed]}
+              accessibilityRole="button"
+              accessibilityLabel={`Model: ${model.label}. Change model.`}
+            >
+              {model.providerSlug ? (
+                <ProviderMark slug={model.providerSlug} size={15} />
+              ) : null}
+              <Text style={styles.modelChipText} numberOfLines={1}>
+                {model.label}
+              </Text>
+              <ChevronDown size={13} color={colors.muted} strokeWidth={2} />
+            </Pressable>
+          </View>
+        ) : null}
       </Animated.View>
     </View>
   );
@@ -355,6 +394,30 @@ const styles = StyleSheet.create({
   },
   controlDisabled: {
     opacity: 0.36,
+  },
+  modelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 3,
+    paddingBottom: 1,
+  },
+  modelChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    maxWidth: '80%',
+    paddingLeft: 5,
+    paddingRight: 6,
+    paddingVertical: 4,
+    borderRadius: radius.control,
+  },
+  modelChipPressed: {
+    backgroundColor: colors.surface2,
+  },
+  modelChipText: {
+    ...typography.caption,
+    flexShrink: 1,
+    color: colors.muted,
   },
   dictationStatus: {
     flexDirection: 'row',
