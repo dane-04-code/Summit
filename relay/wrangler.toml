@@ -7,6 +7,19 @@ compatibility_flags = ["nodejs_compat"]
 name = "PAIRING_CHANNEL"
 class_name = "PairingChannel"
 
+# Per-IP throttle on pairing-code connections. The pairing code is 6 digits and
+# the per-code lockout lives in per-code Durable Object state, so it can't see a
+# brute-force sweep spread one guess each across many codes. This edge limiter
+# caps app connection attempts per client IP so the code space stays unsweepable
+# inside the 10-minute code TTL.
+[[ratelimits]]
+name = "PAIR_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 20
+  period = 60
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["PairingChannel"]

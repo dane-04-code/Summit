@@ -35,7 +35,7 @@ jobs:
           GOOS=darwin GOARCH=arm64 go build -o connector-darwin-arm64 .
 
       - name: Publish to GitHub Releases
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: connector-latest
           name: Connector (latest build)

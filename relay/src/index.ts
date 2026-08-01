@@ -3,8 +3,16 @@ import { INSTALL_SCRIPT } from './install-script';
 
 export { PairingChannel };
 
+/** Minimal shape of the Cloudflare Rate Limiting binding we depend on. */
+interface RateLimiter {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
 export interface Env {
   PAIRING_CHANNEL: DurableObjectNamespace;
+  /** Per-IP throttle on pairing-code connections (see wrangler.toml). Optional so
+   *  local dev / tests without the binding still run — absent means fail-open. */
+  PAIR_LIMITER?: RateLimiter;
   /** Override the Expo Push API endpoint. Unset in prod (defaults to exp.host);
    *  set via .dev.vars to point local tester loops at a sink. */
   PUSH_URL?: string;
@@ -29,7 +37,15 @@ export default {
     const claim = url.searchParams.get('claim');
 
     if (code) {
-      // App connecting: route by existing code
+      // App connecting: route by existing code. Throttle by client IP first —
+      // a 6-digit code is only unguessable if an attacker can't sweep the space,
+      // and the per-code lockout can't see cross-code volume. Fail-open when the
+      // binding is absent (local dev / tests).
+      if (env.PAIR_LIMITER) {
+        const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+        const { success } = await env.PAIR_LIMITER.limit({ key: ip });
+        if (!success) return new Response('Too many pairing attempts', { status: 429 });
+      }
       const id = env.PAIRING_CHANNEL.idFromName(code);
       const url2 = new URL(request.url);
       url2.searchParams.set('role', 'app');
