@@ -16,6 +16,10 @@ import type { Message } from '@/ui/chat/types';
  */
 export type AgentFramework = 'hermes' | 'openclaw' | 'openai';
 export type AgentTransport = 'direct' | 'relay';
+/** Which agent-side process is on the other end of a relay pairing: the Go
+ *  connector (fallback/compat) or a native framework plugin. Only meaningful
+ *  for `transport: 'relay'`; absent on relay agents means an older connector. */
+export type ConnectionVia = 'connector' | 'plugin';
 
 /** Snapshot of what a server supports, captured on connect. */
 export type AgentCapabilities = {
@@ -38,6 +42,16 @@ export type Agent = {
   /** direct: `host:port` base URL; relay: null (the relay is implicit). */
   baseUrl: string | null;
   capabilities: AgentCapabilities | null;
+  /** Optional so existing fixtures/tests need no update; absent = 'connector'. */
+  connectionVia?: ConnectionVia | null;
+  /**
+   * User-chosen identity mark. Both halves are independent and both are
+   * optional — an agent with neither shows the neutral default. Values are
+   * validated at render time (`resolveAvatarId` / `resolveAccent`), so an
+   * unknown string from an older or newer build degrades instead of throwing.
+   */
+  avatarId?: string | null;
+  accentColor?: string | null;
   createdAt: number;
   lastUsedAt: number;
 };
@@ -49,6 +63,9 @@ export type NewAgentInput = {
   transport: AgentTransport;
   baseUrl: string | null;
   capabilities?: AgentCapabilities | null;
+  connectionVia?: ConnectionVia | null;
+  avatarId?: string | null;
+  accentColor?: string | null;
 };
 
 export type ChatSession = {

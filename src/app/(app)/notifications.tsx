@@ -112,9 +112,9 @@ export default function Notifications() {
                     key={option.mode}
                     icon={
                       option.mode === 'off' ? (
-                        <BellOff size={17} color={colors.ink} strokeWidth={1.5} />
+                        <BellOff size={19} color={colors.ink2} strokeWidth={1.75} />
                       ) : (
-                        <Bell size={17} color={colors.ink} strokeWidth={1.5} />
+                        <Bell size={19} color={colors.ink2} strokeWidth={1.75} />
                       )
                     }
                     label={option.label}
@@ -142,7 +142,7 @@ export default function Notifications() {
             <>
               <Card>
                 <Row
-                  icon={<CircleAlert size={17} color={colors.muted} strokeWidth={1.5} />}
+                  icon={<CircleAlert size={19} color={colors.muted} strokeWidth={1.75} />}
                   label="Unavailable for direct connections"
                   sublabel="Direct agents cannot reach your phone after Summit is closed."
                 />
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.faint,
     marginTop: space.sm,
-    paddingHorizontal: 4,
+    paddingHorizontal: 14,
     lineHeight: 17,
   },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },

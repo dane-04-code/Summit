@@ -7,11 +7,12 @@ compatibility_flags = ["nodejs_compat"]
 name = "PAIRING_CHANNEL"
 class_name = "PairingChannel"
 
-# Per-IP throttle on pairing-code connections. The pairing code is 6 digits and
-# the per-code lockout lives in per-code Durable Object state, so it can't see a
-# brute-force sweep spread one guess each across many codes. This edge limiter
-# caps app connection attempts per client IP so the code space stays unsweepable
-# inside the 10-minute code TTL.
+# Per-IP throttle on connections that name an existing pairing channel (both the
+# app's `code` and the connector's `claim`). The per-code lockout lives in
+# per-code Durable Object state, so it can't see a brute-force sweep spread one
+# guess each across many codes; this edge limiter is what caps that volume.
+# It is the second line of defence — the first is the code's 40 bits of entropy
+# (see protocol/pairingCode.ts), which is what actually makes a sweep hopeless.
 [[ratelimits]]
 name = "PAIR_LIMITER"
 namespace_id = "1001"

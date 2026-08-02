@@ -9,6 +9,7 @@ import React, {
 import {
   Alert,
   Animated,
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -16,14 +17,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { ArrowUp, ChevronDown, Mic, Square } from 'lucide-react-native';
+import { ArrowUp, ChevronDown, Mic, Plus, Square } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
 
-import { colors, radius, space, typography } from '@/theme';
+import { colors, space, typography } from '@/theme';
 import { usePressAnim } from '@/ui/usePressAnim';
 import {
   COMPOSER_MAX_HEIGHT,
@@ -31,6 +32,20 @@ import {
   composerHeightFor,
 } from '@/ui/chat/composerHeight';
 import { ProviderMark } from '@/ui/chat/providerMarks';
+
+/**
+ * The composer is a two-row tray: the draft owns the full width on top, and a
+ * control row sits beneath it. Every control is a recessed well — one tonal
+ * step below the page, inside a shell one step above it — except send, which is
+ * the shell's single high-contrast element and only lights up once there is
+ * something to send.
+ */
+
+/** Well diameter. 36pt of paint, 44pt of touch target via hitSlop. */
+const CONTROL_SIZE = 36;
+/** Touch padding that lifts a 36pt control to the 44pt HIG minimum without
+ *  overlapping its 8pt-away neighbour. */
+const CONTROL_HIT_SLOP = { top: 6, bottom: 6, left: 4, right: 4 } as const;
 
 /**
  * The model control, when the connected agent has one. Absent for agents that
@@ -83,6 +98,54 @@ function ListeningBars() {
   );
 }
 
+/**
+ * The bottom inset the tray should carry. The home-indicator inset only applies
+ * while the keyboard is down — once it is up, `KeyboardAvoidingView` has already
+ * lifted the tray past the safe area, and paying the inset a second time leaves
+ * the composer floating a thumb's width above the keys.
+ */
+function useTrayBottomInset(bottomInset: number): number {
+  const [keyboardUp, setKeyboardUp] = useState(false);
+
+  useEffect(() => {
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardUp(true),
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardUp(false),
+    );
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+
+  return keyboardUp ? space.md : Math.max(bottomInset, space.md);
+}
+
+/**
+ * A 0→1 value that follows a boolean, starting settled on its initial state so
+ * a fresh mount renders the end state instead of animating into it.
+ */
+function useSettledTransition(on: boolean, duration: number, native: boolean) {
+  const [anim] = useState(() => new Animated.Value(on ? 1 : 0));
+  const settledOn = useRef(on);
+
+  useEffect(() => {
+    if (settledOn.current === on) return;
+    settledOn.current = on;
+    Animated.timing(anim, {
+      toValue: on ? 1 : 0,
+      duration,
+      useNativeDriver: native,
+    }).start();
+  }, [on, anim, duration, native]);
+
+  return anim;
+}
+
 type ChatComposerProps = {
   value: string;
   onChangeText: (text: string) => void;
@@ -91,6 +154,9 @@ type ChatComposerProps = {
   streaming: boolean;
   bottomInset: number;
   model?: ComposerModel | null;
+  /** Opens (or closes) the command menu the parent renders above the tray. */
+  onCommands?: () => void;
+  commandsOpen?: boolean;
 };
 
 export type ChatComposerHandle = {
@@ -105,6 +171,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   streaming,
   bottomInset,
   model,
+  onCommands,
+  commandsOpen = false,
 }: ChatComposerProps, ref) {
   const [height, setHeight] = useState(COMPOSER_MIN_HEIGHT);
   const [listening, setListening] = useState(false);
@@ -114,7 +182,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   const dictationPrefixRef = useRef('');
   const sendAnim = usePressAnim({ scale: 0.9 });
   const micAnim = usePressAnim({ scale: 0.9 });
+  const commandsPressAnim = usePressAnim({ scale: 0.9 });
   const [focusAnim] = useState(() => new Animated.Value(0));
+  const trayBottomInset = useTrayBottomInset(bottomInset);
+
+  const canSend = value.trim().length > 0 && !streaming;
+  // Send is the one lit surface in the tray, and it earns that only when there
+  // is a draft to send or a run to stop.
+  const armed = canSend || streaming;
+
+  // Both of these start settled at whatever the first render already shows —
+  // a composer that mounts mid-stream is armed, not animating into armed.
+  const armAnim = useSettledTransition(armed, 140, false);
+  const commandsAnim = useSettledTransition(commandsOpen, 160, true);
 
   useImperativeHandle(ref, () => ({ focus: () => inputRef.current?.focus() }), []);
 
@@ -201,15 +281,29 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
     });
   }, [listening]);
 
-  const canSend = value.trim().length > 0 && !streaming;
   const displayedHeight = height;
   const borderColor = focusAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [colors.line, colors.lineFocus],
   });
+  // Send is the only control that sits *above* the shell rather than recessed
+  // into it, so the tray keeps an anchor at rest — then it goes fully lit the
+  // moment there is a draft.
+  const sendFill = armAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [colors.surface2, colors.ink],
+  });
+  const restingGlyphOpacity = armAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
+  const commandsSpin = commandsAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '45deg'],
+  });
 
   return (
-    <View style={[styles.inputBar, { paddingBottom: Math.max(bottomInset, space.md) }]}>
+    <View style={[styles.inputBar, { paddingBottom: trayBottomInset }]}>
       <Animated.View style={[styles.shell, { borderColor }]}>
         {listening || dictationNote ? (
           <View style={styles.dictationStatus} accessibilityLiveRegion="polite">
@@ -220,120 +314,153 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
           </View>
         ) : null}
 
-        <View style={styles.row}>
-          <TextInput
-            ref={inputRef}
-            style={[styles.textField, { height: displayedHeight }]}
-            value={value}
-            onChangeText={handleTextChange}
-            placeholder="Message your agent"
-            placeholderTextColor={colors.muted}
-            onFocus={() => animateFocus(1)}
-            onBlur={() => animateFocus(0)}
-            autoCorrect
-            multiline
-            scrollEnabled={displayedHeight >= COMPOSER_MAX_HEIGHT}
-            onContentSizeChange={
-              Platform.OS === 'web'
-                ? undefined
-                : (event) => {
-                    // Apply the native intrinsic measurement exactly. Adding
-                    // padding here makes the measured height feed back into the
-                    // explicit height, causing the composer to resize repeatedly.
-                    const contentHeight = event.nativeEvent.contentSize.height;
-                    const nextHeight = composerHeightFor(
-                      contentHeight,
-                      valueRef.current.length > 0 || contentHeight > COMPOSER_MIN_HEIGHT,
-                    );
-                    setHeight((currentHeight) =>
-                      currentHeight === nextHeight ? currentHeight : nextHeight,
-                    );
-                  }
-            }
-            // Keep the resting prompt centred beside the controls. Once the
-            // message wraps and genuinely grows, switch to top alignment so
-            // the first line stays anchored as the field expands downward.
-            textAlignVertical={
-              displayedHeight === COMPOSER_MIN_HEIGHT ? 'center' : 'top'
-            }
-            accessibilityLabel="Message input"
-          />
+        <TextInput
+          ref={inputRef}
+          style={[styles.textField, { height: displayedHeight }]}
+          value={value}
+          onChangeText={handleTextChange}
+          placeholder="Message your agent"
+          placeholderTextColor={colors.muted}
+          onFocus={() => animateFocus(1)}
+          onBlur={() => animateFocus(0)}
+          autoCorrect
+          multiline
+          scrollEnabled={displayedHeight >= COMPOSER_MAX_HEIGHT}
+          onContentSizeChange={
+            Platform.OS === 'web'
+              ? undefined
+              : (event) => {
+                  // Apply the native intrinsic measurement exactly. Adding
+                  // padding here makes the measured height feed back into the
+                  // explicit height, causing the composer to resize repeatedly.
+                  const contentHeight = event.nativeEvent.contentSize.height;
+                  const nextHeight = composerHeightFor(
+                    contentHeight,
+                    valueRef.current.length > 0 || contentHeight > COMPOSER_MIN_HEIGHT,
+                  );
+                  setHeight((currentHeight) =>
+                    currentHeight === nextHeight ? currentHeight : nextHeight,
+                  );
+                }
+          }
+          // The field owns its own row now, so the first line stays anchored to
+          // the top and the box grows downward into the tray.
+          textAlignVertical="top"
+          accessibilityLabel="Message input"
+        />
 
-          <Pressable
-            style={styles.control}
-            onPress={toggleDictation}
-            onPressIn={micAnim.onPressIn}
-            onPressOut={micAnim.onPressOut}
-            disabled={streaming}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel={listening ? 'Stop dictation' : 'Dictate message'}
-            accessibilityState={{ disabled: streaming, selected: listening }}
-          >
-            <Animated.View
-              style={[
-                styles.iconButton,
-                micAnim.animStyle,
-                listening && styles.micButtonActive,
-                streaming && styles.controlDisabled,
-              ]}
-            >
-              {listening ? <ListeningBars /> : <Mic size={19} color={colors.ink2} strokeWidth={2} />}
-            </Animated.View>
-          </Pressable>
+        <View style={styles.controls}>
+          <View style={styles.controlsLeft}>
+            {onCommands ? (
+              <Pressable
+                onPress={onCommands}
+                onPressIn={commandsPressAnim.onPressIn}
+                onPressOut={commandsPressAnim.onPressOut}
+                hitSlop={CONTROL_HIT_SLOP}
+                accessibilityRole="button"
+                accessibilityLabel="Commands"
+                accessibilityState={{ expanded: commandsOpen }}
+              >
+                <Animated.View
+                  style={[
+                    styles.well,
+                    commandsPressAnim.animStyle,
+                    commandsOpen && styles.wellActive,
+                  ]}
+                >
+                  <Animated.View style={{ transform: [{ rotate: commandsSpin }] }}>
+                    <Plus size={20} color={colors.ink2} strokeWidth={2} />
+                  </Animated.View>
+                </Animated.View>
+              </Pressable>
+            ) : null}
 
-          <Pressable
-            style={styles.control}
-            onPress={streaming ? onStop : onSend}
-            onPressIn={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              sendAnim.onPressIn();
-            }}
-            onPressOut={sendAnim.onPressOut}
-            disabled={!streaming && !canSend}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel={streaming ? 'Stop reply' : 'Send message'}
-            accessibilityState={{ disabled: !streaming && !canSend }}
-          >
-            <Animated.View
-              style={[
-                styles.sendButton,
-                sendAnim.animStyle,
-                !streaming && !canSend && styles.controlDisabled,
-              ]}
-            >
-              {streaming ? (
-                <Square size={13} color={colors.onAccentBtn} fill={colors.onAccentBtn} strokeWidth={2} />
-              ) : (
-                <ArrowUp size={19} color={colors.onAccentBtn} strokeWidth={2.5} />
-              )}
-            </Animated.View>
-          </Pressable>
-        </View>
+            {model ? (
+              <Pressable
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  model.onPress();
+                }}
+                hitSlop={CONTROL_HIT_SLOP}
+                style={({ pressed }) => [
+                  styles.modelPill,
+                  !model.providerSlug && styles.modelPillNoMark,
+                  pressed && styles.wellActive,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`Model: ${model.label}. Change model.`}
+              >
+                {model.providerSlug ? (
+                  <ProviderMark slug={model.providerSlug} size={16} />
+                ) : null}
+                <Text style={styles.modelPillText} numberOfLines={1}>
+                  {model.label}
+                </Text>
+                <ChevronDown size={14} color={colors.muted} strokeWidth={2} />
+              </Pressable>
+            ) : null}
+          </View>
 
-        {model ? (
-          <View style={styles.modelRow}>
+          <View style={styles.controlsRight}>
             <Pressable
-              onPress={() => {
-                Haptics.selectionAsync().catch(() => {});
-                model.onPress();
-              }}
-              hitSlop={6}
-              style={({ pressed }) => [styles.modelChip, pressed && styles.modelChipPressed]}
+              onPress={toggleDictation}
+              onPressIn={micAnim.onPressIn}
+              onPressOut={micAnim.onPressOut}
+              disabled={streaming}
+              hitSlop={CONTROL_HIT_SLOP}
               accessibilityRole="button"
-              accessibilityLabel={`Model: ${model.label}. Change model.`}
+              accessibilityLabel={listening ? 'Stop dictation' : 'Dictate message'}
+              accessibilityState={{ disabled: streaming, selected: listening }}
             >
-              {model.providerSlug ? (
-                <ProviderMark slug={model.providerSlug} size={15} />
-              ) : null}
-              <Text style={styles.modelChipText} numberOfLines={1}>
-                {model.label}
-              </Text>
-              <ChevronDown size={13} color={colors.muted} strokeWidth={2} />
+              <Animated.View
+                style={[
+                  styles.well,
+                  micAnim.animStyle,
+                  listening && styles.wellActive,
+                  streaming && styles.controlDisabled,
+                ]}
+              >
+                {listening ? <ListeningBars /> : <Mic size={19} color={colors.ink2} strokeWidth={2} />}
+              </Animated.View>
+            </Pressable>
+
+            <Pressable
+              onPress={streaming ? onStop : onSend}
+              onPressIn={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                sendAnim.onPressIn();
+              }}
+              onPressOut={sendAnim.onPressOut}
+              disabled={!armed}
+              hitSlop={CONTROL_HIT_SLOP}
+              accessibilityRole="button"
+              accessibilityLabel={streaming ? 'Stop reply' : 'Send message'}
+              accessibilityState={{ disabled: !armed }}
+            >
+              {/* Press scale runs on the native driver and the fill on the JS
+                  one, so they need separate nodes. */}
+              <Animated.View style={[styles.sendPress, sendAnim.animStyle]}>
+                <Animated.View style={[styles.sendButton, { backgroundColor: sendFill }]}>
+                  <Animated.View style={[styles.glyphLayer, { opacity: restingGlyphOpacity }]}>
+                    <ArrowUp size={19} color={colors.ink2} strokeWidth={2.5} />
+                  </Animated.View>
+                  <Animated.View style={[styles.glyphLayer, { opacity: armAnim }]}>
+                    {streaming ? (
+                      <Square
+                        size={13}
+                        color={colors.onAccentBtn}
+                        fill={colors.onAccentBtn}
+                        strokeWidth={2}
+                      />
+                    ) : (
+                      <ArrowUp size={19} color={colors.onAccentBtn} strokeWidth={2.5} />
+                    )}
+                  </Animated.View>
+                </Animated.View>
+              </Animated.View>
             </Pressable>
           </View>
-        ) : null}
+        </View>
       </Animated.View>
     </View>
   );
@@ -341,91 +468,117 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
 
 const styles = StyleSheet.create({
   inputBar: {
-    paddingHorizontal: space.lg,
+    paddingHorizontal: space.md,
     paddingTop: space.sm,
     backgroundColor: colors.bg,
   },
   shell: {
     borderWidth: 1,
-    borderRadius: 20,
-    paddingLeft: space.md + 2,
-    paddingRight: 5,
-    paddingVertical: 5,
+    // 24 outer − 6 padding = 18, exactly the radius of the wells inside, so the
+    // tray's corners stay concentric with its controls.
+    borderRadius: 24,
+    paddingTop: space.lg,
+    paddingHorizontal: 6,
+    paddingBottom: 6,
     backgroundColor: colors.surface,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
   },
   textField: {
     ...typography.body,
-    flex: 1,
-    minWidth: 0,
     minHeight: COMPOSER_MIN_HEIGHT,
     maxHeight: COMPOSER_MAX_HEIGHT,
     color: colors.ink,
     textAlign: 'left',
+    // Vertical padding has to stay at zero: it feeds back into the measured
+    // content height and makes the field resize against itself.
     padding: 0,
+    paddingLeft: space.sm,
+    paddingRight: space.sm,
     includeFontPadding: false,
   },
-  control: {
-    alignSelf: 'flex-end',
+  controls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: space.md,
   },
-  iconButton: {
-    width: 38,
-    height: 38,
-    borderRadius: radius.control + 9,
+  controlsLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
+  controlsRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
+
+  // Recessed control: one tonal step below the page, inside a shell one step
+  // above it. Depth without a shadow.
+  well: {
+    width: CONTROL_SIZE,
+    height: CONTROL_SIZE,
+    borderRadius: CONTROL_SIZE / 2,
+    backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  micButtonActive: {
-    backgroundColor: colors.surface2,
-    borderWidth: 1,
-    borderColor: colors.accentLine,
-  },
-  sendButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: colors.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
+  // A well lifts toward the shell when pressed or live. It stops short of the
+  // send button's tone so the two never read as the same state.
+  wellActive: {
+    backgroundColor: colors.hover,
   },
   controlDisabled: {
     opacity: 0.36,
   },
-  modelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 3,
-    paddingBottom: 1,
-  },
-  modelChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    maxWidth: '80%',
-    paddingLeft: 5,
-    paddingRight: 6,
-    paddingVertical: 4,
-    borderRadius: radius.control,
-  },
-  modelChipPressed: {
-    backgroundColor: colors.surface2,
-  },
-  modelChipText: {
-    ...typography.caption,
+
+  modelPill: {
     flexShrink: 1,
-    color: colors.muted,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: CONTROL_SIZE,
+    paddingLeft: space.sm,
+    paddingRight: 10,
+    borderRadius: CONTROL_SIZE / 2,
+    backgroundColor: colors.bg,
   },
+  modelPillNoMark: {
+    paddingLeft: space.md,
+  },
+  modelPillText: {
+    ...typography.small,
+    flexShrink: 1,
+    color: colors.ink2,
+  },
+
+  sendPress: {
+    width: CONTROL_SIZE,
+    height: CONTROL_SIZE,
+  },
+  sendButton: {
+    width: CONTROL_SIZE,
+    height: CONTROL_SIZE,
+    borderRadius: CONTROL_SIZE / 2,
+  },
+  // Both glyphs occupy the same circle and cross-fade, so the arrow lands as
+  // the button lights rather than snapping colour mid-fill.
+  glyphLayer: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
   dictationStatus: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: space.sm,
-    minHeight: 25,
-    paddingTop: 3,
-    paddingBottom: 2,
+    paddingHorizontal: space.sm,
+    paddingBottom: space.sm,
   },
   dictationText: {
     ...typography.caption,

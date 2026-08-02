@@ -1,9 +1,19 @@
 import { decodeRelayCredential, encodeRelayCredential } from '@/agents/relay/credential';
 
 describe('relay credentials', () => {
-  it('round-trips a six-digit locator and strong private token', () => {
+  it('round-trips a channel locator and strong private token', () => {
+    const credential = { code: 'K7M29XQP', token: 't'.repeat(43) };
+    expect(decodeRelayCredential(encodeRelayCredential(credential))).toEqual(credential);
+  });
+
+  it('still resolves a six-digit locator so installs paired before the format change keep working', () => {
     const credential = { code: '481920', token: 't'.repeat(43) };
     expect(decodeRelayCredential(encodeRelayCredential(credential))).toEqual(credential);
+  });
+
+  it('rejects a locator that could not name a channel', () => {
+    expect(() => decodeRelayCredential(JSON.stringify({ code: 'K7M2', token: 't'.repeat(43) })))
+      .toThrow(/paired again/i);
   });
 
   it('rejects the legacy spent pairing code', () => {

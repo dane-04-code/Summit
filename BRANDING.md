@@ -43,20 +43,31 @@ Your agent stays reachable, readable, and under control.
 
 ### Primary Audience
 
-Technical self-hosters running personal or business agents on Hermes today, OpenClaw later.
+Hermes/OpenClaw users are the base audience — by definition more into AI than the average user, and
+capable of the self-hosted setup Hermes/OpenClaw requires. Within that base, **Summit's primary brand
+target is the earlier-stage segment**: people who already have a personal-assistant-style agent
+running and are messaging it today through a raw Telegram bot bridge. They're tired of Telegram as
+the interface, not looking for a deeper self-hosting project.
 
 They are comfortable with:
 
-- Self-hosted servers
-- API keys
-- Tunnels, relays, and sidecars
-- Logs and diagnostics
-- Privacy tradeoffs
-- Tools that respect technical competence
+- Having set up Hermes/OpenClaw and running a personal agent day to day
+- Messaging that agent through Telegram as their current workaround
+- Basic technical concepts (pairing, connecting an app) explained plainly
+
+They are not necessarily comfortable with, and copy shouldn't assume:
+
+- Tunnels, relays, and sidecars as background knowledge
+- Reading logs/diagnostics as a normal troubleshooting step
+- Self-hosting jargon on first read
+
+**Secondary within the base:** the deeper self-hosting/infra crowd (tunnels, relays, diagnostics-fluent)
+still exists and still matters — they're often the ones who set up the agent in the first place — but
+they are not who v1 brand voice and copy should be written for by default.
 
 ### Not For
 
-- Mainstream consumers with no self-hosted agent
+- Non-Hermes/OpenClaw users with no agent to connect to
 - Social chat users looking for group messaging
 - Enterprise/team buyers in v1
 - Users who want file upload promises Hermes cannot support

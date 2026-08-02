@@ -35,7 +35,10 @@ function RouteGuard() {
       // No message content or credentials ever become router parameters.
       router.replace({
         pathname: '/(app)',
-        params: sessionId ? { sessionId } : {},
+        // `n` marks this tap. The chat screen honours a session id once per
+        // tap, so a later agent switch doesn't get dragged back here — and a
+        // second push for the same thread still routes.
+        params: sessionId ? { sessionId, n: String(Date.now()) } : {},
       } as never);
     },
     [router],

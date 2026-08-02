@@ -20,6 +20,10 @@ const APP_FRAME_TYPES = new Set([
   'ping', 'pair', 'resume', 'register_push', 'chat', 'sync_req', 'ack_replies', 'api_req', 'approval_resolve',
   'models_req', 'model_select',
 ]);
+/** Relay-authored connector frames. Undeliverable ones are dropped rather than
+ *  reported to the app: the app never asked for them, so surfacing "agent is
+ *  offline" for one would raise a spurious error on an otherwise fine pair. */
+const RELAY_ORIGINATED = new Set(['pair_ok', 'code', 'peer_gone']);
 const CONNECTOR_FRAME_TYPES = new Set([
   'hello', 'ping', 'notify', 'chunk', 'activity', 'done', 'error', 'sync_reply', 'sync_done', 'api_res', 'approval_req',
   'models', 'model_result',
@@ -185,7 +189,7 @@ export class PairingChannel {
       const target = sockets.find((s) => this.doState.getTags(s)[0] === effect.to);
       if (target) {
         target.send(JSON.stringify(effect.frame));
-      } else if (effect.to === 'connector') {
+      } else if (effect.to === 'connector' && !RELAY_ORIGINATED.has(effect.frame.t)) {
         // Connector is not connected — tell the app rather than silently dropping.
         const app = sockets.find((s) => this.doState.getTags(s)[0] === 'app');
         const reqId = (effect.frame as Record<string, unknown>).reqId as string | undefined;

@@ -1,13 +1,23 @@
 /** App-side relay protocol types. Mirror of /protocol/protocol.ts — keep in sync. */
 
 /** Connector feature flags, negotiated at hello and echoed on pair. Absent
- *  means an older connector — the app keeps that feature's UI dark. */
-export type ConnectorCapability = 'model_picker';
-export type HelloFrame      = { t: 'hello'; framework: string; agentName: string; agentVersion: string; capabilities?: ConnectorCapability[] };
-export type CodeFrame       = { t: 'code'; code: string; connectorToken: string };
+ *  means an older connector — the app keeps that feature's UI dark.
+ *  `code_rotation`: the connector fetches a fresh pairing code when the current
+ *  one's window closes, so the relay can keep that window short. */
+export type ConnectorCapability = 'model_picker' | 'code_rotation';
+/** Which agent-side process sent this hello: the Go connector (fallback/compat) or
+ *  a native framework plugin. Absent means an older connector — treat as 'connector'. */
+export type ConnectionVia   = 'connector' | 'plugin';
+export type HelloFrame      = { t: 'hello'; framework: string; agentName: string; agentVersion: string; capabilities?: ConnectorCapability[]; via?: ConnectionVia };
+/** `expiresAt` (epoch ms) is when the code stops being pairable; `paired` marks
+ *  a channel already claimed. Both are connector-facing — the app never sees a
+ *  code frame — and are mirrored here only to keep AnyFrame exhaustive. */
+export type CodeFrame       = { t: 'code'; code: string; connectorToken: string; expiresAt?: number; paired?: boolean };
+/** Relay → connector once a phone has claimed the channel. */
+export type PairOkFrame     = { t: 'pair_ok' };
 export type PairFrame       = { t: 'pair'; code: string };
 export type ResumeFrame     = { t: 'resume'; token: string };
-export type PairedFrame     = { t: 'paired'; framework: string; agentName: string; agentVersion: string; sessionToken: string; capabilities?: ConnectorCapability[] };
+export type PairedFrame     = { t: 'paired'; framework: string; agentName: string; agentVersion: string; sessionToken: string; capabilities?: ConnectorCapability[]; via?: ConnectionVia };
 export type PairErrorFrame  = { t: 'pair_error'; reason: 'not_found' | 'expired' | 'already_paired' | 'locked' };
 export type PeerGoneFrame   = { t: 'peer_gone' };
 /** Client-local sentinel; never sent over the relay protocol. */
@@ -68,7 +78,7 @@ export type ModelSelectFrame  = { t: 'model_select'; reqId: string; sessionId: s
 export type ModelResultFrame  = { t: 'model_result'; reqId: string; sessionId?: string; model: string; provider: string; message: string };
 
 export type AnyFrame =
-  | HelloFrame | CodeFrame | PairFrame | ResumeFrame | PairedFrame | PairErrorFrame
+  | HelloFrame | CodeFrame | PairOkFrame | PairFrame | ResumeFrame | PairedFrame | PairErrorFrame
   | PeerGoneFrame | SocketClosedFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | ActivityFrame | DoneFrame | ErrorFrame
   | SyncReqFrame | SyncReplyFrame | SyncDoneFrame | AckRepliesFrame
   | ApiReqFrame | ApiResFrame | RegisterPushFrame | NotifyFrame

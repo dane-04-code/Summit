@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS agents (
   transport    TEXT NOT NULL,
   base_url     TEXT,
   capabilities TEXT,
+  connection_via TEXT,
+  avatar_id    TEXT,
+  accent_color TEXT,
   created_at   INTEGER NOT NULL,
   last_used_at INTEGER NOT NULL
 );
@@ -44,5 +47,20 @@ CREATE TABLE IF NOT EXISTS app_meta (
   value TEXT NOT NULL
 );
 `;
+
+/**
+ * Columns added to `agents` after the first release. `CREATE TABLE IF NOT
+ * EXISTS` is a no-op on a database that already has the table, so a device
+ * that paired before these shipped would keep the old column set and fail on
+ * the first read or write that names one. `init()` adds whatever is missing.
+ *
+ * Every entry must be nullable with no default so it can be added to a table
+ * that already has rows. Append only — never renumber or remove.
+ */
+export const AGENT_COLUMN_MIGRATIONS: { name: string; ddl: string }[] = [
+  { name: 'connection_via', ddl: 'ALTER TABLE agents ADD COLUMN connection_via TEXT' },
+  { name: 'avatar_id', ddl: 'ALTER TABLE agents ADD COLUMN avatar_id TEXT' },
+  { name: 'accent_color', ddl: 'ALTER TABLE agents ADD COLUMN accent_color TEXT' },
+];
 
 export const DATABASE_NAME = 'agent-messenger.db';

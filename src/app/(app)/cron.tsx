@@ -1,5 +1,5 @@
 /**
- * Cron Drops — the scheduled-job viewer.
+ * Cron Jobs — the scheduled-job viewer.
  *
  * Loads the active agent's real Hermes Jobs API data through the adapter. No
  * seed data belongs on this screen: if jobs are unavailable, empty, or failing,
@@ -168,7 +168,7 @@ export default function CronScreen() {
         ) : (
           <View style={styles.flex}>
             <ScreenHeader
-              title="Cron Drops"
+              title="Cron Jobs"
               onBack={handleLeave}
               subtitle={
                 <View style={styles.subtitleRow}>

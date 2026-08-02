@@ -1,6 +1,7 @@
 import type {
   AnyFrame,
   ChatMessage,
+  ConnectionVia,
   ConnectorCapability,
   ModelProvider,
   ModelScope,
@@ -24,6 +25,8 @@ export type RelayAgentInfo = {
   agentVersion: string;
   sessionToken: string;
   capabilities?: ConnectorCapability[];
+  /** Absent means an older connector — treat as 'connector'. */
+  via?: ConnectionVia;
 };
 
 /** Hermes' own picker payload: current selection plus what it can switch to. */
@@ -142,6 +145,7 @@ export class RelayClient {
             agentVersion: frame.agentVersion,
             sessionToken: frame.sessionToken,
             ...(frame.capabilities ? { capabilities: frame.capabilities } : {}),
+            ...(frame.via ? { via: frame.via } : {}),
           });
         } else if (frame.t === 'pair_error') {
           this.handlers = this.handlers.filter((h) => h !== handler);
@@ -177,6 +181,7 @@ export class RelayClient {
             agentVersion: frame.agentVersion,
             sessionToken: frame.sessionToken,
             ...(frame.capabilities ? { capabilities: frame.capabilities } : {}),
+            ...(frame.via ? { via: frame.via } : {}),
           });
         } else if (frame.t === 'pair_error' || frame.t === 'peer_gone' || frame.t === 'socket_closed') {
           this.handlers = this.handlers.filter((h) => h !== handler);

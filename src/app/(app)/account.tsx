@@ -89,12 +89,12 @@ export default function Account() {
           <SectionLabel>Account</SectionLabel>
           <Card>
             <Row
-              icon={<Mail size={17} color={colors.ink} strokeWidth={1.5} />}
+              icon={<Mail size={19} color={colors.ink2} strokeWidth={1.75} />}
               label="Email"
               value={email || undefined}
             />
             <Row
-              icon={<LogOut size={17} color={colors.ink} strokeWidth={1.5} />}
+              icon={<LogOut size={19} color={colors.ink2} strokeWidth={1.75} />}
               label="Sign out"
               onPress={confirmSignOut}
               right={<View />}
@@ -106,7 +106,7 @@ export default function Account() {
           <SectionLabel>Danger zone</SectionLabel>
           <Card>
             <Row
-              icon={<Trash2 size={17} color={colors.error} strokeWidth={1.5} />}
+              icon={<Trash2 size={19} color={colors.error} strokeWidth={1.75} />}
               label="Delete account"
               danger
               onPress={busy ? undefined : confirmDelete}
@@ -143,12 +143,12 @@ const styles = StyleSheet.create({
   sub: { ...typography.small, color: colors.muted },
 
   group: { gap: 0 },
-  error: { ...typography.caption, color: colors.error, marginTop: space.sm, paddingHorizontal: 4 },
+  error: { ...typography.caption, color: colors.error, marginTop: space.sm, paddingHorizontal: 14 },
   hint: {
     ...typography.caption,
     color: colors.faint,
     marginTop: space.sm,
-    paddingHorizontal: 4,
+    paddingHorizontal: 14,
     lineHeight: 17,
   },
 });

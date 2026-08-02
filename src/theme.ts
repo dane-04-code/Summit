@@ -45,6 +45,71 @@ export const colors = {
   highlightBg: '#2C3A55', // ==highlight== mark background (accent-tinted)
 } as const;
 
+/**
+ * Agent identity accents — a fixed, named palette a user may assign to one
+ * paired agent. This is the *only* sanctioned multi-color surface in the app
+ * and it is scoped to the agent identity mark (profile hero + sidebar switcher
+ * row); see the "agent identity mark" exception in `DESIGN_SYSTEM.md`.
+ *
+ * These are deliberately not `colors.*` — a component must never reach for one
+ * as a general-purpose color. `colors.accent` stays the app's one true accent
+ * and is not a pickable value here, so an agent mark can never impersonate a
+ * link or a focus ring. `error`/`success` hues are likewise excluded: they
+ * already carry meaning.
+ *
+ * Every value is tuned to clear 4.5:1 against `colors.bg` (#0F1012) and
+ * `colors.drawer` (#161719) so a glyph drawn in it stays legible at 28px.
+ */
+export const agentAccentPalette = {
+  coral:  '#FF8A65',
+  amber:  '#E0A37E',
+  gold:   '#D8CC63', // pushed off `amber` — they were the closest pair in the set
+  lime:   '#9CCB6E',
+  teal:   '#6FC8D6',
+  azure:  '#7FB2FF', // a lifted cousin of `colors.accent`, never `accent` itself
+  violet: '#C9A6F0',
+  pink:   '#E890C4',
+  slate:  '#9AA2B8',
+  rose:   '#E67E8A',
+} as const;
+
+export type AgentAccent = keyof typeof agentAccentPalette;
+
+export const agentAccentNames = Object.keys(agentAccentPalette) as AgentAccent[];
+
+/**
+ * Narrow an untrusted stored string to a palette key (unknown → null).
+ *
+ * Own-property check, not `in`: `'__proto__' in agentAccentPalette` is true via
+ * the prototype chain, which would let a junk stored value resolve to a "key"
+ * whose lookup yields an object rather than a color.
+ */
+export function resolveAccent(name: string | null | undefined): AgentAccent | null {
+  return name && Object.prototype.hasOwnProperty.call(agentAccentPalette, name)
+    ? (name as AgentAccent)
+    : null;
+}
+
+/**
+ * Opacity steps for the identity mark, so the tile reads as a tonal layer that
+ * happens to be tinted rather than as a block of color. Kept here (not inline)
+ * because the tile fill and its hairline must stay in lockstep across the two
+ * surfaces that draw them.
+ */
+export const accentAlpha = {
+  /** Tile fill — barely above `surface`, a wash not a fill. */
+  fill: '1F',
+  /** Tile hairline — reads as an edge, not a highlight. */
+  line: '4D',
+  /** Unselected swatch ring in the picker. */
+  ghost: '33',
+} as const;
+
+/** Append an 8-bit hex alpha to a 6-digit hex color (RN accepts #RRGGBBAA). */
+export function withAlpha(hex: string, alpha: string): string {
+  return `${hex}${alpha}`;
+}
+
 // ---------------------------------------------------------------------------
 // Spacing scale: 4 · 8 · 12 · 16 · 24 · 32
 // ---------------------------------------------------------------------------

@@ -81,7 +81,7 @@ relay  (default):  phone ──► our relay ◄── native Hermes plugin ─�
 - **`direct`** — host URL + API key. Works only where the host is reachable (LAN / Tailscale /
   tunnel / domain). See `ONBOARDING.md`. The API key is the on-device secret. Accessed via
   `src/app/(app)/connect.tsx`.
-- **`relay`** — a 6-digit pairing code binds the device to an agent-side relay channel. For Hermes,
+- **`relay`** — an 8-character pairing code binds the device to an agent-side relay channel. For Hermes,
   the preferred alpha path is the native platform plugin in `../Summit-Hermes/`; the Go connector
   remains the fallback and currently bridges OpenClaw. It is a short-lived, single-use handshake:
   successful pairing mints a 256-bit device token, which is the on-device secret. The Hermes API
@@ -220,7 +220,7 @@ not just flattened text.
 4. Land in chat.
 
 ### Relay mode (slice 3a — `docs/CONNECTION.md`, `src/app/(app)/pair.tsx`)
-1. Pair screen: enter the 6-digit code printed by the native plugin or fallback connector. Treat it
+1. Pair screen: enter the 8-character code printed by the native plugin or fallback connector. Treat it
    as a password: never share it.
 2. `RelayClient.pair()` sends a `pair` frame; relay binds device ↔ agent-side relay channel, returns agent
    name/version and mints a durable 256-bit device token.
@@ -304,7 +304,7 @@ relay/                  Cloudflare Worker + PairingChannel Durable Object
   src/__tests__/        9 logic tests (vitest, node env — not @cloudflare/vitest-pool-workers)
 
 connector/              Go binary (gorilla/websocket)
-  main.go               Dials relay, sends hello, prints 6-digit code, bridges chat frames
+  main.go               Dials relay, sends hello, prints the pairing code, bridges chat frames
   hermes.go             streamChat() — POSTs to Hermes /v1/chat/completions, emits chunks
   outbox.go             bounded owner-only settled reply queue; survives phone/connector restarts
 

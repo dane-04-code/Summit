@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-01T22:02:03.659Z",
+  "title": "Design System: Summit",
+  "extensions": {
+    "colorMeta": {
+      "accent": {
+        "role": "primary",
+        "displayName": "Signal Blue",
+        "canonical": "#5B9DFF",
+        "tonalRamp": ["#16263d", "#284570", "#3e6bad", "#5490eb", "#75adff", "#9dc4ff", "#c4dcff", "#ebf3ff"]
+      },
+      "ink": {
+        "role": "primary",
+        "displayName": "Paper White",
+        "canonical": "#F4F4F5",
+        "tonalRamp": ["#3b3b3b", "#6b6b6c", "#a6a6a7", "#e0e0e1", "#f6f6f7", "#f8f8f9", "#fbfbfb", "#fefefe"]
+      },
+      "bg": {
+        "role": "neutral",
+        "displayName": "Near-Black",
+        "canonical": "#0F1012",
+        "tonalRamp": ["#040404", "#070708", "#0a0b0c", "#0e0f11", "#353638", "#6f7071", "#a9a9aa", "#e2e2e3"]
+      },
+      "error": {
+        "role": "semantic",
+        "displayName": "Error Red",
+        "canonical": "#FF6B6B",
+        "tonalRamp": ["#3d1a1a", "#702f2f", "#ad4949", "#eb6262", "#ff8383", "#ffa6a6", "#ffcaca", "#ffeded"]
+      },
+      "success": {
+        "role": "semantic",
+        "displayName": "Success Green",
+        "canonical": "#7BD88F",
+        "tonalRamp": ["#1e3422", "#365f3f", "#549361", "#71c784", "#90dea1", "#b0e8bc", "#cff1d7", "#effaf2"]
+      }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Title", "purpose": "Screen titles." },
+      "h": { "displayName": "Heading", "purpose": "Markdown headings inside rendered agent output." },
+      "body": { "displayName": "Body", "purpose": "Messages and default UI text." },
+      "small": { "displayName": "Small", "purpose": "Secondary text." },
+      "mono": { "displayName": "Mono", "purpose": "Code blocks only, system monospace." },
+      "caption": { "displayName": "Caption", "purpose": "Status labels and captions." }
+    },
+    "shadows": [],
+    "motion": [],
+    "breakpoints": []
+  },
+  "components": [],
+  "narrative": {
+    "northStar": "The Quiet Cockpit",
+    "overview": "Summit is dark, instrument-panel calm — near-black surfaces, one restrained signal color, and nothing decorative. The interface behaves like a cockpit readout, not a storefront: it exists to let you read status and act on it fast, then get out of the way. Every screen defaults to greyscale; color is spent only on the single thing that matters most (a link, a focus ring, the one primary action), never as texture.\n\nThe system carries almost no visual flourish on purpose — no gradients, no heavy shadows, no custom theming, no animation beyond standard list/keyboard motion. Whitespace (rendered as dark space, not white space) is the primary design material: when a screen feels crowded, the fix is more room, never a rule or a box. This is confirmed anti-reference: it explicitly rejects glassmorphism, card-stack dashboards, and any chrome that competes with the conversation or output for attention.",
+    "keyCharacteristics": [
+      "Dark-by-default, near-black base (#0F1012), never stark white",
+      "One accent color (#5B9DFF) used sparingly — links, focus, and the single most important action per screen",
+      "Flat, tonal-layer depth (bg → surface → surface2) instead of shadows",
+      "System font everywhere; monospace confined strictly to code blocks",
+      "Full-bleed, chrome-light layout: no name labels, timestamps, or avatars in chat"
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "accent appears only on links, focus, and the single primary interactive affordance on a screen. It is never used for decoration, and the primary button uses inverted ink/bg, not accent, precisely so the accent stays rare enough to mean something.", "section": "colors" },
+      { "name": "The Dark-Space Rule", "body": "Whitespace is rendered as dark space, not white space. When a screen feels crowded or unclear, add space — never a line, box, or shadow.", "section": "colors" },
+      { "name": "The Code-Only-Mono Rule", "body": "Monospace is scoped strictly to code blocks. Everywhere else in the app — including numbers, IDs, and technical text — uses the system body font.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Surfaces are flat at rest and stay flat under interaction. A pressed or active state shifts tone (e.g. surface → surface2, or hover), never adds a shadow.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do spend the accent color (#5B9DFF) only on links, focus states, and the one most important interactive element per screen.",
+      "Do signal elevation with a tonal step (bg → surface → surface2 → raised), never a shadow.",
+      "Do keep monospace strictly inside code blocks; body text always uses the system font.",
+      "Do add space rather than a line, box, or shadow when a layout feels crowded or unclear.",
+      "Do write copy that is active and specific (\"Couldn't reach <host>\", \"Save changes\") — never vague placeholder language."
+    ],
+    "donts": [
+      "Don't use gradients, heavy shadows, glassmorphism, or custom theming anywhere in the app.",
+      "Don't add animation beyond standard list/keyboard motion — the app has almost none on purpose.",
+      "Don't add name labels, timestamps, or avatars to chat message rows.",
+      "Don't use the primary accent color for the primary button fill — the primary button is inverted ink/bg; the accent stays reserved for links and focus.",
+      "Don't introduce a second accent color or a multi-color palette; the system is greyscale plus exactly one signal color (with narrowly-scoped semantic error/success colors and code-syntax colors as the only exceptions)."
+    ]
+  }
+}

@@ -7,7 +7,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 
-import { colors, radius, space, typography } from '../../theme';
+import { colors, space, typography } from '../../theme';
 import type { SlashCommand } from './slashCommands';
 
 export function SlashCommandMenu({
@@ -39,12 +39,14 @@ export function SlashCommandMenu({
 }
 
 const styles = StyleSheet.create({
+  // Sits directly on top of the composer tray, so it shares the tray's gutter
+  // and corner softness rather than reading as a separate floating panel.
   menu: {
-    marginHorizontal: space.lg,
+    marginHorizontal: space.md,
     marginBottom: space.sm,
     borderWidth: 1,
     borderColor: colors.line,
-    borderRadius: radius.input,
+    borderRadius: 20,
     backgroundColor: colors.surface,
     overflow: 'hidden',
   },

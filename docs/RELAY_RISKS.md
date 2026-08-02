@@ -4,6 +4,41 @@ Known failure modes in the relay stack (connector + DO + app client). Ordered by
 
 ---
 
+## P0 — Pairing code was too small to survive a distributed sweep
+
+**Files:** `protocol/pairingCode.ts`, `relay/src/index.ts`, `relay/src/logic.ts`
+
+**Risk:** The code was 6 digits — ~900,000 channels. The lockout that guards it
+(`MAX_FAILED_PAIRS`) lives in *per-code* Durable Object state, so it only ever sees one channel
+being hammered; an attacker spending a few guesses each across many codes never trips it. That
+left roughly 5 free attempts × 900k channels, bounded only by the edge IP limiter, which rotating
+IPs defeat. Winning the race against a live unpaired code yields the session token — i.e. full
+control of an agent with shell access on the user's machine.
+
+**Fix:**
+- **40-bit codes.** Crockford base32 (no I/L/O/U), 8 characters ≈ 1.1e12 combinations. Minted
+  without modulo bias — the old `random % 900000` was slightly skewed, which costs real keyspace.
+- **Shorter window.** Code TTL 10 min → 3 min, and the deadline is now *sticky*: it is set at the
+  first hello and never pushed forward, so a connector in a restart loop can no longer hold one
+  code open indefinitely.
+- **Rotation.** Connectors advertising the `code_rotation` capability fetch a fresh code when the
+  window closes, so a short TTL never strands the user on a dead code. Connectors without it keep
+  the 10-minute window rather than being stranded — the entropy, not the window, is what carries
+  the security here.
+- **Format gate before allocation.** `idFromName` on unvalidated input allocated a Durable Object
+  per distinct string; locators are now regex-checked (400) before any DO is touched.
+- **`claim` is throttled too.** The IP limiter previously covered only the app's `code` path, while
+  `claim` reached the same channels unthrottled.
+- **Constant-time credential compare.** `===` on tokens short-circuits at the first differing
+  character, which is a prefix oracle.
+
+**Migration:** none required. Legacy 6-digit codes remain valid *channel locators*, so installs
+paired under the old scheme keep resuming; they are simply never minted again.
+
+**Status:** Fixed ✅
+
+---
+
 ## P0 — Privileged app frames were accepted before authentication
 
 **Risk:** Anyone who reached a pairing channel could attempt chat, API, approval, or push-token

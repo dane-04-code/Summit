@@ -12,7 +12,9 @@ import * as SQLite from 'expo-sqlite';
 import type { Agent, AgentCapabilities, ChatSession, StoredMessage } from '@/agents/types';
 import type { Message } from '@/ui/chat/types';
 import type { Repository } from './repository';
-import { DATABASE_NAME, SCHEMA } from './schema';
+import { AGENT_COLUMN_MIGRATIONS, DATABASE_NAME, SCHEMA } from './schema';
+
+type ColumnInfoRow = { name: string };
 
 type AgentRow = {
   id: string;
@@ -21,6 +23,9 @@ type AgentRow = {
   transport: string;
   base_url: string | null;
   capabilities: string | null;
+  connection_via: string | null;
+  avatar_id: string | null;
+  accent_color: string | null;
   created_at: number;
   last_used_at: number;
 };
@@ -53,6 +58,9 @@ function toAgent(row: AgentRow): Agent {
     capabilities: row.capabilities
       ? (JSON.parse(row.capabilities) as AgentCapabilities)
       : null,
+    connectionVia: (row.connection_via as Agent['connectionVia']) ?? null,
+    avatarId: row.avatar_id ?? null,
+    accentColor: row.accent_color ?? null,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
   };
@@ -81,6 +89,23 @@ export class SqliteRepository implements Repository {
     if (this.db) return;
     this.db = await SQLite.openDatabaseAsync(DATABASE_NAME);
     await this.db.execAsync(SCHEMA);
+    await this.migrateAgentColumns();
+  }
+
+  /**
+   * Add any `agents` columns introduced after this device first paired. Driven
+   * off `PRAGMA table_info` rather than a version counter so it stays correct
+   * whichever release the install came from, and is safe to run every launch.
+   */
+  private async migrateAgentColumns(): Promise<void> {
+    const db = this.require();
+    const existing = new Set(
+      (await db.getAllAsync<ColumnInfoRow>('PRAGMA table_info(agents)')).map((c) => c.name),
+    );
+    for (const column of AGENT_COLUMN_MIGRATIONS) {
+      if (existing.has(column.name)) continue;
+      await db.execAsync(column.ddl);
+    }
   }
 
   async listAgents(): Promise<Agent[]> {
@@ -100,14 +125,17 @@ export class SqliteRepository implements Repository {
 
   async upsertAgent(agent: Agent): Promise<void> {
     await this.require().runAsync(
-      `INSERT INTO agents (id, name, framework, transport, base_url, capabilities, created_at, last_used_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO agents (id, name, framework, transport, base_url, capabilities, connection_via, avatar_id, accent_color, created_at, last_used_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name,
          framework = excluded.framework,
          transport = excluded.transport,
          base_url = excluded.base_url,
          capabilities = excluded.capabilities,
+         connection_via = excluded.connection_via,
+         avatar_id = excluded.avatar_id,
+         accent_color = excluded.accent_color,
          last_used_at = excluded.last_used_at`,
       agent.id,
       agent.name,
@@ -115,6 +143,9 @@ export class SqliteRepository implements Repository {
       agent.transport,
       agent.baseUrl,
       agent.capabilities ? JSON.stringify(agent.capabilities) : null,
+      agent.connectionVia ?? null,
+      agent.avatarId ?? null,
+      agent.accentColor ?? null,
       agent.createdAt,
       agent.lastUsedAt,
     );

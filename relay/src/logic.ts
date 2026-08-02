@@ -1,5 +1,6 @@
 import type {
   AnyFrame,
+  ConnectionVia,
   ConnectorCapability,
   NotificationMode,
   PairedFrame,
@@ -14,6 +15,7 @@ export type ConnectorInfo = {
   agentName: string;
   agentVersion: string;
   capabilities?: ConnectorCapability[];
+  via?: ConnectionVia;
 };
 
 export type ChannelState = {
@@ -26,7 +28,9 @@ export type ChannelState = {
   notificationMode: NotificationMode;
   /** Whether an app socket is currently attached — pushes only fire when it isn't. */
   appConnected: boolean;
-  /** When the 6-digit code stops being usable for pairing (short-lived handshake). */
+  /** When the code stops being usable for pairing (short-lived handshake).
+   *  Set once, at the first hello, and never pushed forward — a connector stuck
+   *  in a restart loop must not be able to hold one code open indefinitely. */
   codeExpiresAt: number | null;
   /** Durable credential minted at pair time; the app reconnects with this, not the code. */
   sessionToken: string | null;
@@ -41,7 +45,13 @@ export type ChannelState = {
 };
 
 /** Pairing hardening knobs. */
-const CODE_TTL_MS = 10 * 60_000;
+/** How long a code stays pairable. Short, because the connector re-fetches a
+ *  fresh one when it lapses — the user always has a live code in front of them. */
+const CODE_TTL_MS = 3 * 60_000;
+/** Connectors that predate `code_rotation` can't fetch a replacement, so a short
+ *  window would just strand them on a dead code. They keep the original TTL;
+ *  the 40-bit code, not the window, is what carries the security here. */
+const LEGACY_CODE_TTL_MS = 10 * 60_000;
 const MAX_FAILED_PAIRS = 5;
 const LOCK_MS = 15 * 60_000;
 
@@ -63,7 +73,14 @@ export type SideEffect =
 export type HandleResult = { state: ChannelState; effects: SideEffect[]; occupied?: boolean };
 
 export function credentialMatches(expected: string | null | undefined, presented: string | null): boolean {
-  return typeof expected === 'string' && expected.length >= 43 && presented === expected;
+  if (typeof expected !== 'string' || expected.length < 43) return false;
+  if (typeof presented !== 'string' || presented.length !== expected.length) return false;
+  // Constant-time over the compared bytes: `===` on strings short-circuits at
+  // the first differing character, which leaks a prefix oracle. Length is
+  // compared openly above — it isn't secret, and every token we mint is 43.
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ presented.charCodeAt(i);
+  return diff === 0;
 }
 
 export function makeInitialState(): ChannelState {
@@ -128,6 +145,18 @@ function pushFor(
 export function handleConnectorMessage(state: ChannelState, frame: AnyFrame, now: number = Date.now()): HandleResult {
   if (frame.t === 'hello') {
     const connectorToken = state.connectorToken ?? defaultMintToken();
+    const rotates = frame.capabilities?.includes('code_rotation') ?? false;
+    // The code is only advertised now, so its life starts here — but only once.
+    // Re-running this on every hello would let a connector that keeps
+    // reconnecting push the deadline forward forever, which is exactly the
+    // window an attacker sweeping the code space wants held open.
+    const codeExpiresAt = state.codeExpiresAt
+      ?? now + (rotates ? CODE_TTL_MS : LEGACY_CODE_TTL_MS);
+    const codeFrame: AnyFrame = state.paired
+      // Already claimed: the code is spent. Say so rather than handing back a
+      // string the connector would print as if it were still usable.
+      ? { t: 'code', code: state.code!, connectorToken, paired: true }
+      : { t: 'code', code: state.code!, connectorToken, expiresAt: codeExpiresAt };
     return {
       state: {
         ...state,
@@ -137,11 +166,11 @@ export function handleConnectorMessage(state: ChannelState, frame: AnyFrame, now
           agentName: frame.agentName,
           agentVersion: frame.agentVersion,
           ...(frame.capabilities ? { capabilities: frame.capabilities } : {}),
+          ...(frame.via ? { via: frame.via } : {}),
         },
-        // The code is only advertised now, so start its short life here.
-        codeExpiresAt: now + CODE_TTL_MS,
+        codeExpiresAt,
       },
-      effects: [{ to: 'connector', frame: { t: 'code', code: state.code!, connectorToken } }],
+      effects: [{ to: 'connector', frame: codeFrame }],
     };
   }
   if (frame.t === 'ping') {
@@ -206,9 +235,13 @@ export function handleAppMessage(
     if (state.lockedUntil !== null && now < state.lockedUntil) {
       return { state, effects: [{ to: 'app', frame: { t: 'pair_error', reason: 'locked' } }] };
     }
+    // The URL param already routed this socket to the right channel, so the
+    // frame's own code should agree. A mismatch means a malformed or probing
+    // client; treat it exactly like a miss, and never say which part was wrong.
+    const claimsThisChannel = state.code === null || frame.code === state.code;
     // No connector on this code: a miss. Count it, and lock the channel once the
     // misses pile up so a single code can't be hammered.
-    if (!state.connectorInfo) {
+    if (!state.connectorInfo || !claimsThisChannel) {
       const failedPairs = state.failedPairs + 1;
       const lockedUntil = failedPairs >= MAX_FAILED_PAIRS ? now + LOCK_MS : state.lockedUntil;
       return {
@@ -225,7 +258,9 @@ export function handleAppMessage(
     const reply: PairedFrame = { t: 'paired', ...state.connectorInfo, sessionToken };
     return {
       state: { ...state, paired: true, sessionToken, failedPairs: 0 },
-      effects: [{ to: 'app', frame: reply }],
+      // Tell the connector too, so it stops its rotation timer and stops
+      // printing a code that is now spent.
+      effects: [{ to: 'app', frame: reply }, { to: 'connector', frame: { t: 'pair_ok' } }],
     };
   }
 

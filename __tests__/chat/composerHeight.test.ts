@@ -5,8 +5,8 @@ import {
 } from '@/ui/chat/composerHeight';
 
 describe('composerHeightFor', () => {
-  it('uses a control-height one-line field before text wraps', () => {
-    expect(COMPOSER_MIN_HEIGHT).toBe(38);
+  it('rests at one line of body text before the draft wraps', () => {
+    expect(COMPOSER_MIN_HEIGHT).toBe(28);
   });
 
   it('returns to its compact height when the message is cleared', () => {

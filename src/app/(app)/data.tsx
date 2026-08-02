@@ -78,7 +78,7 @@ export default function Data() {
           <SectionLabel>Danger zone</SectionLabel>
           <Card>
             <Row
-              icon={<Trash2 size={17} color={colors.error} strokeWidth={1.5} />}
+              icon={<Trash2 size={19} color={colors.error} strokeWidth={1.75} />}
               label="Delete chat history"
               danger
               onPress={clearing || count === 0 ? undefined : confirmClear}
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.faint,
     marginTop: space.sm,
-    paddingHorizontal: 4,
+    paddingHorizontal: 14,
     lineHeight: 17,
   },
 });

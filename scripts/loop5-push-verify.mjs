@@ -78,9 +78,32 @@ function openApp() {
       const f = JSON.parse(e.data);
       if (f.t === 'paired') {
         clearTimeout(timer);
-        resolve(ws);
+        resolve({ ws, sessionToken: f.sessionToken });
       } else if (f.t === 'pair_error') {
         reject(new Error(`pair_error: ${f.reason}`));
+      }
+    });
+    ws.addEventListener('error', () => reject(new Error('relay unreachable')));
+  });
+}
+
+// Mirrors pair.tsx: the first-pairing socket is tagged unauthenticated (only
+// `resume` with the sessionToken earns the `authenticated` tag), so the app
+// closes it and opens a second connection before sending authenticated
+// frames like register_push. Registering on the original socket is silently
+// dropped by the relay's auth gate.
+function resumeAuthenticated(sessionToken) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(`${RELAY_URL}?code=${code}&token=${sessionToken}`);
+    const timer = setTimeout(() => reject(new Error('resume timed out')), 8000);
+    ws.addEventListener('open', () => ws.send(JSON.stringify({ t: 'resume', token: sessionToken })));
+    ws.addEventListener('message', (e) => {
+      const f = JSON.parse(e.data);
+      if (f.t === 'paired') {
+        clearTimeout(timer);
+        resolve(ws);
+      } else if (f.t === 'pair_error' || f.t === 'peer_gone') {
+        reject(new Error(`resume failed: ${f.reason ?? f.t}`));
       }
     });
     ws.addEventListener('error', () => reject(new Error('relay unreachable')));
@@ -92,8 +115,11 @@ async function main() {
   console.log(`✓ push sink listening on http://127.0.0.1:${SINK_PORT}`);
 
   // ── Path 1: agent-initiated nudge while the app is away ──────────────────
-  const ws = await openApp();
+  const { ws: pairingWs, sessionToken } = await openApp();
   console.log('✓ paired');
+  pairingWs.close();
+  const ws = await resumeAuthenticated(sessionToken);
+  console.log('✓ resumed on an authenticated connection');
   ws.send(JSON.stringify({ t: 'register_push', token: TOKEN, mode: 'all' }));
   console.log(`✓ registered token ${TOKEN}`);
   await sleep(300); // let the DO persist the token

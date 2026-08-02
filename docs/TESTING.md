@@ -62,7 +62,7 @@ npm run loop5          # mock Hermes + wrangler dev + connector, prints the code
 
 `scripts/loop5.mjs` starts the mock agent, `wrangler dev` (relay on
 `ws://localhost:8787`), and the connector, waits for the relay, and prints the
-6-digit pairing code. Pair the app with it. Ctrl+C tears everything down.
+pairing code. Pair the app with it. Ctrl+C tears everything down.
 
 Prefer the pieces by hand? Run them in three terminals:
 

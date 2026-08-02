@@ -44,7 +44,7 @@ describe('ChatComposer', () => {
     expect(mockSpeech.start.mock.calls.at(-1)?.[0]).not.toHaveProperty('recordingOptions');
   });
 
-  it('keeps the resting prompt centred in a one-line field', async () => {
+  it('rests at one line, anchored to the top of its own row', async () => {
     await render(
       <ChatComposer
         value=""
@@ -58,10 +58,10 @@ describe('ChatComposer', () => {
 
     const input = screen.getByLabelText('Message input');
     const style = StyleSheet.flatten(input.props.style);
-    expect(style.height).toBe(38);
+    expect(style.height).toBe(28);
     expect(style.padding).toBe(0);
     expect(style.includeFontPadding).toBe(false);
-    expect(input.props.textAlignVertical).toBe('center');
+    expect(input.props.textAlignVertical).toBe('top');
   });
 
   it('grows from a native content measurement even when it arrives before the text update', async () => {
@@ -84,7 +84,6 @@ describe('ChatComposer', () => {
       const updatedInput = view.getByLabelText('Message input');
       const style = StyleSheet.flatten(updatedInput.props.style);
       expect(style.height).toBe(48);
-      expect(updatedInput.props.textAlignVertical).toBe('top');
     });
   });
 
@@ -109,8 +108,85 @@ describe('ChatComposer', () => {
 
     await waitFor(() => {
       const nextInput = view.getByLabelText('Message input');
-      expect(StyleSheet.flatten(nextInput.props.style).height).toBe(38);
-      expect(nextInput.props.textAlignVertical).toBe('center');
+      expect(StyleSheet.flatten(nextInput.props.style).height).toBe(28);
     });
+  });
+
+  it('leaves send unlit until there is a draft to send', async () => {
+    const props = {
+      onChangeText: jest.fn(),
+      onSend: jest.fn(),
+      onStop: jest.fn(),
+      streaming: false,
+      bottomInset: 0,
+    };
+    const view = await render(<ChatComposer {...props} value="   " />);
+
+    const idle = view.getByLabelText('Send message');
+    expect(idle.props.accessibilityState.disabled).toBe(true);
+    await fireEvent.press(idle);
+    expect(props.onSend).not.toHaveBeenCalled();
+
+    await view.rerender(<ChatComposer {...props} value="Deploy the branch" />);
+    const armed = view.getByLabelText('Send message');
+    expect(armed.props.accessibilityState.disabled).toBe(false);
+    await fireEvent.press(armed);
+    expect(props.onSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays armed as a stop control while a reply streams', async () => {
+    const onStop = jest.fn();
+    const view = await render(
+      <ChatComposer
+        value=""
+        onChangeText={jest.fn()}
+        onSend={jest.fn()}
+        onStop={onStop}
+        streaming
+        bottomInset={0}
+      />,
+    );
+
+    const stop = view.getByLabelText('Stop reply');
+    expect(stop.props.accessibilityState.disabled).toBe(false);
+    await fireEvent.press(stop);
+    expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers the command menu from the tray, and reports whether it is open', async () => {
+    const onCommands = jest.fn();
+    const props = {
+      value: '',
+      onChangeText: jest.fn(),
+      onSend: jest.fn(),
+      onStop: jest.fn(),
+      streaming: false,
+      bottomInset: 0,
+      onCommands,
+    };
+    const view = await render(<ChatComposer {...props} commandsOpen={false} />);
+
+    const commands = view.getByLabelText('Commands');
+    expect(commands.props.accessibilityState.expanded).toBe(false);
+    await fireEvent.press(commands);
+    expect(onCommands).toHaveBeenCalledTimes(1);
+
+    await view.rerender(<ChatComposer {...props} commandsOpen />);
+    expect(view.getByLabelText('Commands').props.accessibilityState.expanded).toBe(true);
+  });
+
+  it('omits the command control when the screen has no menu to open', async () => {
+    await render(
+      <ChatComposer
+        value=""
+        onChangeText={jest.fn()}
+        onSend={jest.fn()}
+        onStop={jest.fn()}
+        streaming={false}
+        bottomInset={0}
+      />,
+    );
+
+    expect(screen.queryByLabelText('Commands')).toBeNull();
   });
 });

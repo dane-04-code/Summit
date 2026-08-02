@@ -77,7 +77,7 @@ status, and approve or stop work without opening a desktop dashboard.
 
 Summit is the mobile cockpit for your self-hosted AI agent.
 
-If you already run Hermes, Summit gives it a first-class mobile surface: pair with a 6-digit code,
+If you already run Hermes, Summit gives it a first-class mobile surface: pair with a short code,
 send messages from your phone, read streaming markdown cleanly, see agent status, and respond to
 blocking approve or stop decisions without returning to your desktop.
 
@@ -133,7 +133,7 @@ explainer clutter inside the screenshot.
 
 ### Screenshot 1: Pair by code
 
-Caption: Pair your agent with a 6-digit code.
+Caption: Pair your agent with a short code.
 
 Screen: Pair screen showing the copyable install prompt and code input.
 
@@ -203,7 +203,7 @@ decisions when the agent needs approval.
 
 Summit gives the agent a proper mobile cockpit:
 
-- Pair with a 6-digit code
+- Pair with a short code
 - Chat with streamed responses
 - Read markdown, code, and tables cleanly
 - See status while work runs
@@ -236,7 +236,7 @@ I would love feedback from anyone running Hermes or adjacent self-hosted agent s
 
 I built Summit: the mobile cockpit for your self-hosted AI agent.
 
-Pair your Hermes agent with a 6-digit code, chat from your phone, read markdown cleanly, see status,
+Pair your Hermes agent with a short code, chat from your phone, read markdown cleanly, see status,
 and approve or stop supported actions without opening the desktop.
 
 Built for people already running their own agents.
@@ -259,7 +259,7 @@ your phone.
 2. The problem: agents like Hermes are powerful on a server, but the mobile experience often falls
 back to raw chat. Markdown breaks, status is vague, and approvals are awkward.
 
-3. Summit pairs your phone to your agent with a 6-digit code, then gives you a real mobile surface
+3. Summit pairs your phone to your agent with a short code, then gives you a real mobile surface
 for chat, streaming output, status, and supported approve/stop actions.
 
 4. The relay flow uses a small connector next to Hermes. The connector dials outbound to Summit, so

@@ -28,6 +28,14 @@ type AgentContextValue = {
   /** Update the secret for an existing agent and drop its cached adapter. */
   repairAgent: (id: string, secret: string) => Promise<void>;
   renameAgent: (id: string, name: string) => Promise<void>;
+  /**
+   * Set the agent's identity mark. Either field may be passed alone; passing
+   * `null` clears that half back to the neutral default.
+   */
+  setAgentIdentity: (
+    id: string,
+    identity: { avatarId?: string | null; accentColor?: string | null },
+  ) => Promise<void>;
   removeAgent: (id: string) => Promise<void>;
   selectAgent: (id: string) => Promise<void>;
   /** Build the adapter for an agent (lazy Keychain read for its secret). */
@@ -96,6 +104,23 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     setAgents((prev) => upsertAgent(prev, updated));
   };
 
+  const setAgentIdentity = async (
+    id: string,
+    identity: { avatarId?: string | null; accentColor?: string | null },
+  ): Promise<void> => {
+    const target = agents.find((a) => a.id === id);
+    if (!target) return;
+    // Only overwrite the halves actually supplied, so picking a color never
+    // clears a glyph (and vice versa).
+    const updated: Agent = {
+      ...target,
+      ...('avatarId' in identity ? { avatarId: identity.avatarId ?? null } : null),
+      ...('accentColor' in identity ? { accentColor: identity.accentColor ?? null } : null),
+    };
+    await repo.upsertAgent(updated);
+    setAgents((prev) => upsertAgent(prev, updated));
+  };
+
   const removeAgent = async (id: string): Promise<void> => {
     await deleteAgentSecret(id);
     await repo.deleteAgent(id);
@@ -160,6 +185,7 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     addAgent,
     repairAgent,
     renameAgent,
+    setAgentIdentity,
     removeAgent,
     selectAgent,
     adapterFor,

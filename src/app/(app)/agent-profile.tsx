@@ -9,7 +9,7 @@ import React from 'react';
 import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
-import { Bot, Check, CircleAlert, Wrench } from 'lucide-react-native';
+import { Check, CircleAlert, Wrench } from 'lucide-react-native';
 
 import { useAgents } from '@/agents/AgentProvider';
 import { frameworkLabel } from '@/agents/frameworks';
@@ -17,6 +17,8 @@ import { colors, radius, space, typography } from '@/theme';
 import { ScreenHeader } from '@/ui/ScreenHeader';
 import { Card, Row, SectionLabel } from '@/ui/settings';
 import { agentProfileSubtitle, profileCapabilities } from '@/ui/agentProfile/profile';
+import { AgentAvatar } from '@/ui/agentIdentity/avatars';
+import { IdentityPicker } from '@/ui/agentIdentity/IdentityPicker';
 
 function StatusMark({ available }: { available: boolean }) {
   return available ? (
@@ -29,7 +31,7 @@ function StatusMark({ available }: { available: boolean }) {
 }
 
 export default function AgentProfileScreen() {
-  const { activeAgent } = useAgents();
+  const { activeAgent, setAgentIdentity } = useAgents();
 
   if (!activeAgent) {
     return (
@@ -65,9 +67,11 @@ export default function AgentProfileScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.hero}>
-            <View style={styles.avatar}>
-              <Bot size={27} color={colors.ink} strokeWidth={1.5} />
-            </View>
+            <AgentAvatar
+              avatarId={agent.avatarId}
+              accent={agent.accentColor}
+              size={58}
+            />
             <View style={styles.heroCopy}>
               <Text style={styles.name}>{agent.name}</Text>
               <View style={styles.connectedRow}>
@@ -75,6 +79,17 @@ export default function AgentProfileScreen() {
                 <Text style={styles.connectedText}>Paired and ready</Text>
               </View>
             </View>
+          </View>
+
+          <View style={styles.group}>
+            <SectionLabel>Identity</SectionLabel>
+            <IdentityPicker
+              avatarId={agent.avatarId ?? null}
+              accentColor={agent.accentColor ?? null}
+              onChange={(identity) => {
+                void setAgentIdentity(agent.id, identity);
+              }}
+            />
           </View>
 
           <View style={styles.group}>
@@ -125,16 +140,6 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
   content: { padding: space.lg, paddingBottom: space.xxl, gap: space.xl },
   hero: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm },
-  avatar: {
-    width: 58,
-    height: 58,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
   heroCopy: { flex: 1, minWidth: 0, gap: space.xs },
   name: { ...typography.h, color: colors.ink },
   connectedRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs + 2 },

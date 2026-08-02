@@ -11,7 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { Check, Copy } from 'lucide-react-native';
 import { ScreenHeader } from '@/ui/ScreenHeader';
@@ -24,6 +24,7 @@ import { captureError } from '@/lib/errorReporting';
 import { RELAY_WS_URL } from '@/config';
 import { colors, space, radius, typography, screenPadding } from '@/theme';
 import { encodeRelayCredential } from '@/agents/relay/credential';
+import { formatPairingCode, isPairingCode, normalizePairingCode } from '@/agents/relay/pairingCode';
 
 export const CURL_COMMAND = 'curl -fsSL https://get.summitapp.dev/connect | sh';
 
@@ -33,11 +34,14 @@ Run this exact command on the machine where you are running:
 
 ${CURL_COMMAND}
 
-When it finishes, reply with only the 6-digit pairing code. If it fails, send me the full error output instead.`;
+When it finishes, reply with only the pairing code it prints. If it fails, send me the full error output instead.`;
 
 export default function PairScreen() {
-  const { addAgent } = useAgents();
+  const { addAgent, agents } = useAgents();
   const router = useRouter();
+  // First run this screen is the unskippable start of the app. Reached again to
+  // add a second agent, it's an ordinary pushed screen you can back out of.
+  const isAddingAnother = agents.length > 0;
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +49,8 @@ export default function PairScreen() {
   const [copied, setCopied] = useState<'prompt' | 'command' | null>(null);
   const clientRef = useRef<RelayClient | null>(null);
 
-  const canSubmit = code.length === 6 && !loading;
+  // `code` is always canonical (unhyphenated, uppercase); the dash is display only.
+  const canSubmit = isPairingCode(code) && !loading;
 
   async function copyText(kind: 'prompt' | 'command') {
     await Clipboard.setStringAsync(kind === 'prompt' ? AGENT_PROMPT : CURL_COMMAND);
@@ -90,6 +95,7 @@ export default function PairScreen() {
           transport: 'relay',
           baseUrl: null,
           capabilities: defaultCapabilitiesFor(framework),
+          connectionVia: info.via ?? 'connector',
         },
         credential,
       );
@@ -111,7 +117,11 @@ export default function PairScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <ScreenHeader title="Pair your agent" showBack={false} />
+      <Stack.Screen options={{ gestureEnabled: isAddingAnother }} />
+      <ScreenHeader
+        title={isAddingAnother ? 'Add an agent' : 'Pair your agent'}
+        showBack={isAddingAnother}
+      />
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -125,8 +135,8 @@ export default function PairScreen() {
           bounces={false}
         >
           <Text style={styles.intro}>
-            Paste this prompt into your agent, then enter the 6-digit code it returns. Your API key
-            stays on your server.
+            Paste this prompt into your agent, then enter the code it returns. Your API key stays
+            on your server.
           </Text>
 
           <View style={styles.step}>
@@ -143,7 +153,7 @@ export default function PairScreen() {
                 </Text>
               </View>
               <Text style={styles.promptText}>
-                When it finishes, reply with only the 6-digit pairing code. If it fails, send me
+                When it finishes, reply with only the pairing code it prints. If it fails, send me
                 the full error output instead.
               </Text>
 
@@ -167,20 +177,25 @@ export default function PairScreen() {
             <StepHeader number="2" title="Enter the code" />
 
             <TextInput
-              accessibilityLabel="6-digit pairing code"
+              accessibilityLabel="Pairing code"
               style={[styles.codeInput, codeError && styles.codeInputError]}
-              placeholder="000000"
+              placeholder="XXXX-XXXX"
               placeholderTextColor={colors.lineFocus}
-              value={code}
+              // Show the grouped form, keep the canonical one in state. Typing
+              // past the dash still works: normalize discards it either way.
+              value={formatPairingCode(code)}
               onChangeText={(value) => {
                 setError(null);
                 setCodeError(false);
-                setCode(value.replace(/\D/g, '').slice(0, 6));
+                setCode(normalizePairingCode(value));
               }}
-              keyboardType="number-pad"
-              textContentType="oneTimeCode"
-              autoComplete="one-time-code"
-              maxLength={6}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              // Codes are alphanumeric now, so no numeric keypad and no
+              // one-time-code autofill — that heuristic only matches SMS digits.
+              autoComplete="off"
+              textContentType="none"
+              maxLength={9}
               returnKeyType="go"
               onSubmitEditing={() => canSubmit && handlePair()}
             />
@@ -206,7 +221,7 @@ export default function PairScreen() {
 
             <View style={styles.securityNote}>
               <Check size={13} color={colors.faint} strokeWidth={1.8} />
-              <Text style={styles.securityText}>Single-use code · expires after 10 minutes</Text>
+              <Text style={styles.securityText}>Single-use code · rotates every 3 minutes</Text>
             </View>
           </View>
         </ScrollView>
@@ -330,10 +345,13 @@ const styles = StyleSheet.create({
     color: colors.ink,
     textAlign: 'center',
     fontFamily: 'Menlo',
-    fontSize: 29,
+    // Sized for nine glyphs (eight plus the dash) rather than six, so the code
+    // still fits without wrapping on the narrowest phones. paddingLeft offsets
+    // the trailing letter-space so the text stays optically centred.
+    fontSize: 24,
     fontWeight: '600',
-    letterSpacing: 11,
-    paddingLeft: 11,
+    letterSpacing: 7,
+    paddingLeft: 7,
   },
   codeInputError: { borderColor: colors.error },
   error: { ...typography.caption, color: colors.error, paddingHorizontal: space.xs },

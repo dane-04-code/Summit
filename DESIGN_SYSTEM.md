@@ -14,7 +14,7 @@ conversation is the focus.
   matters most on a screen.
 - System font everywhere. Monospace only inside code blocks (built-in system mono).
 - No gradients, no heavy shadows, no custom theming, no animation beyond standard
-  list/keyboard motion.
+  list/keyboard motion. (One documented exception: the **agent identity mark** — see below.)
 
 ---
 
@@ -73,6 +73,28 @@ not branding theatre.
 - User: right-aligned bubble, `surface` background, `radius.bubble`, max 80%, `ink` text.
 - Agent: full width, no bubble, `ink` body text.
 - No name labels, timestamps, or avatars.
+
+### Agent identity mark (documented exception)
+
+Each paired agent may carry one **mark** — a glyph from a fixed set of ten (`AGENT_AVATAR_IDS`)
+and an accent from a fixed palette of ten (`agentAccentPalette`) — chosen by the user. Both halves
+are optional and independent; an agent with neither renders the neutral default it always had.
+
+This is the only place the app shows more than one accent color, and it is deliberately narrow:
+
+- **Where it appears:** the agent profile hero, the profile's identity picker, and the sidebar
+  agent-switcher row. Nowhere else.
+- **Where it does not:** the chat transcript. The "no avatars" rule above still holds absolutely —
+  message rows never carry a mark, a name, or a color.
+- **It never becomes a theme.** The mark tints a glyph, a hairline, and a wash (`accentAlpha`);
+  it never fills a surface, a button, or a bubble. `colors.accent` remains the app's single accent
+  and is not a pickable value, so an agent mark can never be mistaken for a link or focus ring.
+- Glyphs are authored SVG in one stroke language matching `lucide-react-native`, not raster art —
+  they scale from 28px to 58px and take the accent color directly.
+
+Rationale: with multiple agents paired, "which agent am I talking to" is a real question the
+switcher has to answer at a glance, and name text alone answers it slowly. The mark is identity,
+not decoration — which is why it stops at the switcher and the profile.
 
 ### Code block
 `surface` (slightly off-bg) rounded box, radius 10, system mono, optional copy. No border.

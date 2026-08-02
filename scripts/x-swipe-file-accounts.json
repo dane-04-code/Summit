@@ -1,0 +1,21 @@
+{
+  "_comment": "Stage 1 swipe-file account list for docs/launch-advice/x-trending-guide.md. Real handles confirmed via web research 2026-07-30; 'needs_handle' entries are categories to fill in once the fetch script's own search pass runs (twitterapi.io supports keyword/user search, not just known handles).",
+  "direct_competitors": [
+    { "handle": "clawket_ai", "name": "Clawket", "note": "needs_handle_confirm — open-source mobile client for OpenClaw + Hermes, App Store live, pixel-art 'Agent Office' UI. Closest direct competitor to Summit; study its launch posts and App Store review sentiment." }
+  ],
+  "core_ecosystem": [
+    { "handle": "openclaw", "name": "OpenClaw (official)", "note": "confirmed — ran the June 2026 iOS/Android launch that hit 1.5M+ views but landed at ~2.2 stars (buggy, hard-to-pair, unpolished). Direct proof point for Summit's 'first-class mobile flow' positioning." },
+    { "handle": "steipete", "name": "Peter Steinberger", "note": "confirmed — OpenClaw creator/steward, now at OpenAI. Highest-reach individual voice in this niche." },
+    { "handle": "NousResearch", "name": "Nous Research", "note": "confirmed — builds Hermes Agent, posts feature launches (Hermes Desktop, memory features) that consistently get niche engagement." }
+  ],
+  "hosting_and_tooling": [
+    { "handle": "needs_handle", "name": "OneClaw", "note": "managed OpenClaw hosting with its own mobile app angle — adjacent product, not a direct competitor." },
+    { "handle": "needs_handle", "name": "AgentClaw", "note": "managed OpenClaw hosting, no-code deploy angle." },
+    { "handle": "needs_handle", "name": "ClawHub", "note": "skill registry for the OpenClaw/Hermes ecosystem — good source for what technical self-hosters currently care about." },
+    { "handle": "needs_handle", "name": "ClawTank", "note": "comparison/review content for self-hosted agent tools." }
+  ],
+  "recent_launches_to_study": [
+    { "handle": "needs_handle", "name": "OpenClaw mobile launch thread (2026-06-30)", "note": "the single most relevant swipe-file case study available: huge reach, badly reviewed. Pull replies/quote-tweets, not just the OP, to see what the audience actually objected to." }
+  ],
+  "how_to_finish_this_list": "The confirmed handles above are enough to run scripts/x-swipe-file.mjs once TWITTERAPI_KEY is set. To grow past these ~8 toward 50+, add more handles here as we find them (hosting providers' actual @handles, more recent-launch accounts, mid-size self-hosted-AI creators) — the script just reads whatever is in this file, no code change needed."
+}

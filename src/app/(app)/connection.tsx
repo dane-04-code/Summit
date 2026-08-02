@@ -15,6 +15,7 @@ import { RefreshCw, KeyRound, Trash2 } from 'lucide-react-native';
 import { useAgents } from '@/agents/AgentProvider';
 import { RelayClient } from '@/agents/relay/client';
 import { encodeRelayCredential } from '@/agents/relay/credential';
+import { formatPairingCode, isPairingCode, normalizePairingCode } from '@/agents/relay/pairingCode';
 import { RELAY_WS_URL } from '@/config';
 import type { AgentCapabilities } from '@/agents/types';
 import { SettingsScreen, SectionLabel, Card, Row } from '@/ui/settings';
@@ -179,14 +180,14 @@ export default function Connection() {
           <SectionLabel>Manage</SectionLabel>
           <Card>
             <Row
-              icon={<RefreshCw size={17} color={colors.ink} strokeWidth={1.5} />}
+              icon={<RefreshCw size={19} color={colors.ink2} strokeWidth={1.75} />}
               label="Retest connection"
               onPress={testing ? undefined : handleRetest}
               right={testing ? <ActivityIndicator color={colors.muted} /> : <View />}
             />
             {agent.transport === 'relay' ? (
               <Row
-                icon={<KeyRound size={17} color={colors.ink} strokeWidth={1.5} />}
+                icon={<KeyRound size={19} color={colors.ink2} strokeWidth={1.75} />}
                 label="Re-pair agent"
                 onPress={() => {
                   setRepairing((v) => !v);
@@ -208,31 +209,37 @@ export default function Connection() {
         {repairing && agent.transport === 'relay' ? (
           <View style={styles.repairCard}>
             <Text style={styles.repairHint}>
-              Ask your agent for a fresh 6-digit code, then enter it below.
+              Ask your agent for a fresh pairing code, then enter it below.
             </Text>
             <TextInput
+              accessibilityLabel="Pairing code"
               style={[styles.codeInput, pairError ? styles.codeInputError : null]}
-              placeholder="••••••"
+              placeholder="XXXX-XXXX"
               placeholderTextColor={colors.line}
-              value={code}
+              // Grouped for reading, canonical in state — same contract as the
+              // pair screen, so both fields accept the code exactly alike.
+              value={formatPairingCode(code)}
               onChangeText={(t) => {
                 setPairError(null);
-                setCode(t.replace(/\D/g, '').slice(0, 6));
+                setCode(normalizePairingCode(t));
               }}
-              keyboardType="number-pad"
-              maxLength={6}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              autoComplete="off"
+              textContentType="none"
+              maxLength={9}
               autoFocus
               returnKeyType="go"
-              onSubmitEditing={() => code.trim().length === 6 && !pairLoading && handleRepair()}
+              onSubmitEditing={() => isPairingCode(code) && !pairLoading && handleRepair()}
             />
             {pairError ? <Text style={styles.result}>{pairError}</Text> : null}
             <Pressable
               style={[
                 styles.primaryBtn,
-                (code.trim().length < 6 || pairLoading) && styles.btnDisabled,
+                (!isPairingCode(code) || pairLoading) && styles.btnDisabled,
               ]}
               onPress={handleRepair}
-              disabled={code.trim().length < 6 || pairLoading}
+              disabled={!isPairingCode(code) || pairLoading}
             >
               {pairLoading ? (
                 <ActivityIndicator color={colors.bg} />
@@ -247,7 +254,7 @@ export default function Connection() {
           <SectionLabel>Danger zone</SectionLabel>
           <Card>
             <Row
-              icon={<Trash2 size={17} color={colors.error} strokeWidth={1.5} />}
+              icon={<Trash2 size={19} color={colors.error} strokeWidth={1.75} />}
               label="Remove agent"
               danger
               onPress={confirmRemove}
@@ -268,10 +275,10 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.lg, padding: 24 },
   emptyText: { ...typography.body, color: colors.muted },
 
-  result: { ...typography.caption, marginTop: space.sm, paddingHorizontal: 4 },
+  result: { ...typography.caption, marginTop: space.sm, paddingHorizontal: 14 },
   resultOk: { color: colors.accent },
   resultErr: { color: colors.error },
-  capabilityHint: { ...typography.caption, color: colors.muted, marginTop: space.sm, paddingHorizontal: 4, lineHeight: 18 },
+  capabilityHint: { ...typography.caption, color: colors.muted, marginTop: space.sm, paddingHorizontal: 14, lineHeight: 18 },
 
   repairCard: {
     backgroundColor: colors.drawer,
@@ -290,9 +297,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.input,
     textAlign: 'center',
     fontFamily: 'Menlo',
-    fontSize: 28,
+    // Nine glyphs (eight plus the dash) rather than six — see the matching note
+    // on the pair screen's field.
+    fontSize: 23,
     fontWeight: '600',
-    letterSpacing: 10,
+    letterSpacing: 6,
+    paddingLeft: 6,
     color: colors.ink,
   },
   codeInputError: { borderColor: colors.error },

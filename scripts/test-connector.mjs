@@ -5,7 +5,7 @@
  * connector is. This exists so Loop 5 (docs/TESTING.md) runs anywhere Node
  * does, and it speaks the exact same relay protocol (protocol/protocol.ts).
  *
- * It dials the relay outbound, prints the 6-digit pairing code, proxies chat
+ * It dials the relay outbound, prints the pairing code, proxies chat
  * (SSE) and allow-listed REST calls to the upstream agent, and exposes a
  * loopback /notify endpoint so the agent-initiated push path is testable:
  *
@@ -31,22 +31,54 @@ const AGENT_NAME = process.env.AGENT_NAME || (FRAMEWORK === 'hermes' ? 'Hermes' 
 const NOTIFY_PORT = Number(process.env.NOTIFY_PORT || 8643);
 
 const CODE_FILE = path.join(os.tmpdir(), 'summit-test-connector-code');
+// The relay hands back a connector token with the code and, from then on,
+// rejects a reclaim that can't present it (relay/src/channel.ts). Mirrors the
+// Go connector's `connector_token` file — without it a reclaim 401-loops
+// forever and the only cure is deleting the code file by hand.
+const TOKEN_FILE = path.join(os.tmpdir(), 'summit-test-connector-token');
 
-function savedCode() {
+function readFile(file) {
   try {
-    return fs.readFileSync(CODE_FILE, 'utf8').trim() || null;
+    return fs.readFileSync(file, 'utf8').trim() || null;
   } catch {
     return null;
   }
 }
 
-function saveCode(code) {
+const savedCode = () => readFile(CODE_FILE);
+const savedToken = () => readFile(TOKEN_FILE);
+
+function saveIdentity(code, token) {
   try {
     fs.writeFileSync(CODE_FILE, code + '\n');
+    // A `code` frame without a token means an older relay; keep what we have
+    // rather than blanking a token that still works.
+    if (token) fs.writeFileSync(TOKEN_FILE, token + '\n');
   } catch {
     /* best effort */
   }
 }
+
+/** Drop the saved channel so the next dial mints a fresh code. Only for a code
+ *  that lapsed before anyone paired — clearing a paired one orphans the phone. */
+function clearIdentity() {
+  try {
+    fs.rmSync(CODE_FILE, { force: true });
+    fs.rmSync(TOKEN_FILE, { force: true });
+  } catch {
+    /* best effort */
+  }
+}
+
+/** Display form — K7M29XQP reads as K7M2-9XQP. Mirror of formatPairingCode in
+ *  /protocol/pairingCode.ts; the wire form is always unhyphenated. */
+function formatCode(code) {
+  const s = String(code);
+  return s.length === 8 ? `${s.slice(0, 4)}-${s.slice(4)}` : s;
+}
+
+/** Pending code rotation, cleared the moment a phone pairs. */
+let rotateTimer;
 
 /** Allow-list mirrors connector/hermes.go — the trust boundary. */
 const API_ALLOW = [
@@ -141,12 +173,28 @@ async function handleApiReq(frame) {
 
 function connect() {
   const code = savedCode();
-  const target = code ? `${RELAY_URL}?claim=${code}` : RELAY_URL;
+  const token = code ? savedToken() : null;
+  let target = RELAY_URL;
+  if (code) {
+    target += `?claim=${encodeURIComponent(code)}`;
+    if (token) target += `&token=${encodeURIComponent(token)}`;
+  }
   ws = new WebSocket(target);
 
+  let opened = false;
+
   ws.addEventListener('open', () => {
+    opened = true;
     console.log(`[connector] connected to relay ${RELAY_URL}`);
-    send({ t: 'hello', framework: FRAMEWORK, agentName: AGENT_NAME, agentVersion: '1.0' });
+    send({
+      t: 'hello',
+      framework: FRAMEWORK,
+      agentName: AGENT_NAME,
+      agentVersion: '1.0',
+      // Mirrors the Go connector: promising rotation is what earns the short
+      // code TTL, so tester loops exercise the same window real users get.
+      capabilities: ['code_rotation'],
+    });
     clearInterval(heartbeat);
     heartbeat = setInterval(() => send({ t: 'ping' }), 30000);
   });
@@ -160,10 +208,26 @@ function connect() {
     }
     switch (frame.t) {
       case 'code':
-        saveCode(frame.code);
+        saveIdentity(frame.code, frame.connectorToken);
+        clearTimeout(rotateTimer);
+        if (frame.paired) {
+          console.log('[connector] already paired — waiting for messages');
+          break;
+        }
         console.log(
-          `\n┌──────────────────────────┐\n│   Pairing code: ${String(frame.code).padEnd(6)}   │\n└──────────────────────────┘\n\nEnter this code in the Summit app.\n`,
+          `\n┌────────────────────────────┐\n│  Pairing code: ${formatCode(frame.code).padEnd(9)}   │\n└────────────────────────────┘\n\nEnter this code in the Summit app.\n`,
         );
+        if (frame.expiresAt) {
+          rotateTimer = setTimeout(() => {
+            console.log('[connector] code expired unused — fetching a fresh one');
+            clearIdentity();
+            ws.close(); // the close handler redials, this time without a claim
+          }, Math.max(5000, frame.expiresAt - Date.now()));
+        }
+        break;
+      case 'pair_ok':
+        clearTimeout(rotateTimer);
+        console.log('[connector] paired with the app');
         break;
       case 'chat':
         void streamChat(frame);
@@ -183,6 +247,14 @@ function connect() {
 
   ws.addEventListener('close', () => {
     clearInterval(heartbeat);
+    // Never upgraded while presenting a claim: the relay refused this channel
+    // (stale token, or its Durable Object storage was wiped by a `wrangler dev`
+    // restart). Retrying the same claim loops forever, so drop it and mint a
+    // fresh code — the phone can't be served by a channel we're locked out of.
+    if (!opened && code) {
+      console.log('[connector] relay rejected the saved channel — minting a fresh code');
+      clearIdentity();
+    }
     console.log('[connector] relay closed — reconnecting in 3s');
     setTimeout(connect, 3000);
   });

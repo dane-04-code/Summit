@@ -1,7 +1,7 @@
 # Onboarding
 
 The goal is **paired and in chat in under two minutes**. First-run connection has one primary path:
-the agent installs its connector and gives the user a six-digit code.
+the agent installs its connector and gives the user an eight-character code.
 
 ## The flow
 
@@ -9,7 +9,7 @@ the agent installs its connector and gives the user a six-digit code.
 Welcome → account → Pair your agent → chat
                          │
                          ├─ 1. Copy one prompt into the agent
-                         └─ 2. Enter the returned six-digit code
+                         └─ 2. Enter the returned eight-character code
 ```
 
 The advanced host + API-key connection implementation is retained for development, but it is hidden
@@ -26,7 +26,7 @@ Run this exact command on the machine where you are running:
 
 curl -fsSL https://get.summitapp.dev/connect | sh
 
-When it finishes, reply with only the 6-digit pairing code. If it fails, send me the full error
+When it finishes, reply with only the pairing code it prints. If it fails, send me the full error
 output instead.
 ```
 
@@ -34,7 +34,7 @@ The user can copy the whole agent prompt or just the terminal command. The promp
 one compact card; there is no nested scrolling or duplicated installer content.
 
 The connector runs beside the agent, finds its local credentials, dials the Summit relay, and prints
-a single-use six-digit code. The user enters that code and Summit opens chat immediately.
+a single-use eight-character code. The user enters that code and Summit opens chat immediately.
 
 ## Security and persistence
 

@@ -22,6 +22,11 @@ type Frame struct {
 	AgentVersion   string        `json:"agentVersion,omitempty"`
 	Code           string        `json:"code,omitempty"`
 	ConnectorToken string        `json:"connectorToken,omitempty"`
+	Capabilities   []string      `json:"capabilities,omitempty"`
+	// ExpiresAt (epoch ms) is when the advertised code stops being pairable;
+	// Paired marks a channel a phone has already claimed.
+	ExpiresAt int64 `json:"expiresAt,omitempty"`
+	Paired    bool  `json:"paired,omitempty"`
 	ReqID          string        `json:"reqId,omitempty"`
 	Delta          string        `json:"delta,omitempty"`
 	Message        string        `json:"message,omitempty"`
@@ -42,6 +47,9 @@ type Frame struct {
 	ApprovalID string `json:"approvalId,omitempty"`
 	Command    string `json:"command,omitempty"`
 	Decision   string `json:"decision,omitempty"`
+	// Via distinguishes this hello as coming from the Go connector (fallback
+	// path) vs a native framework plugin. The connector always sends "connector".
+	Via string `json:"via,omitempty"`
 }
 
 // ChatMessage matches the OpenAI messages array shape.
@@ -110,14 +118,19 @@ func main() {
 }
 
 func savedRelayIdentity() (string, string) {
-	home, err := os.UserHomeDir()
+	dir, err := summitDir()
 	if err != nil {
 		return "", ""
 	}
-	dir := filepath.Join(home, ".summit")
 	code, _ := os.ReadFile(filepath.Join(dir, "pairing_code"))
 	token, _ := os.ReadFile(filepath.Join(dir, "connector_token"))
-	return strings.TrimSpace(string(code)), strings.TrimSpace(string(token))
+	trimmed := strings.TrimSpace(string(code))
+	// A saved file that no longer looks like a code is worse than none: dialling
+	// with it just fails the relay's format gate. Fall back to a fresh pairing.
+	if !isChannelLocator(trimmed) {
+		return "", ""
+	}
+	return trimmed, strings.TrimSpace(string(token))
 }
 
 func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, openclawToken string, notify *notifier, outbox *replyOutbox) error {
@@ -139,11 +152,25 @@ func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, open
 	notify.setSender(func(f Frame) error { return writeFrame(conn, &writeMu, f) })
 	defer notify.setSender(nil)
 
+	// Advertising code_rotation is what lets the relay hand out a short-lived
+	// code: we promise to fetch a replacement when it lapses, so the user is
+	// never left staring at a dead one.
 	if err := writeFrame(conn, &writeMu, Frame{
-		T: "hello", Framework: framework, AgentName: agentName, AgentVersion: "1.0",
+		T: "hello", Framework: framework, AgentName: agentName, AgentVersion: "1.0", Via: "connector",
+		Capabilities: []string{"code_rotation"},
 	}); err != nil {
 		return fmt.Errorf("send hello: %w", err)
 	}
+
+	// Fires when the advertised code lapses unpaired: drop the saved channel and
+	// close the socket, which drops us back into main's redial loop and mints a
+	// fresh code. Stopped the moment a phone pairs, or when run() returns.
+	var rotate *time.Timer
+	defer func() {
+		if rotate != nil {
+			rotate.Stop()
+		}
+	}()
 
 	// For OpenClaw, open the persistent WS control plane to the local Gateway.
 	// Chat is bridged through it instead of Hermes HTTP.
@@ -190,13 +217,37 @@ func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, open
 		}
 		switch f.T {
 		case "code":
-			fmt.Printf("\n┌──────────────────────────┐\n│   Pairing code: %-6s   │\n└──────────────────────────┘\n\nEnter this code in the Summit app. Never share it with anyone else.\n\n", f.Code)
-			if home, err := os.UserHomeDir(); err == nil {
-				dir := filepath.Join(home, ".summit")
-				os.MkdirAll(dir, 0700)
-				os.WriteFile(filepath.Join(dir, "pairing_code"), []byte(f.Code+"\n"), 0600)
-				os.WriteFile(filepath.Join(dir, "connector_token"), []byte(f.ConnectorToken+"\n"), 0600)
+			if err := saveRelayIdentity(f.Code, f.ConnectorToken); err != nil {
+				log.Printf("save relay identity: %v", err)
 			}
+			if rotate != nil {
+				rotate.Stop()
+				rotate = nil
+			}
+			if f.Paired {
+				fmt.Print("\nPaired with your phone. Waiting for messages.\n\n")
+				break
+			}
+			fmt.Printf("\n┌────────────────────────────┐\n│  Pairing code: %-9s   │\n└────────────────────────────┘\n\nEnter this code in the Summit app. Never share it with anyone else.\n\n", formatPairingCode(f.Code))
+			if f.ExpiresAt > 0 {
+				// Give the window a floor: a clock skewed past the deadline
+				// would otherwise spin us through codes as fast as we can dial.
+				wait := time.Until(time.UnixMilli(f.ExpiresAt))
+				if wait < 5*time.Second {
+					wait = 5 * time.Second
+				}
+				rotate = time.AfterFunc(wait, func() {
+					fmt.Print("\nThat code expired unused — fetching a fresh one.\n\n")
+					clearRelayIdentity()
+					conn.Close() // unblocks ReadMessage; main redials without a claim
+				})
+			}
+		case "pair_ok":
+			if rotate != nil {
+				rotate.Stop()
+				rotate = nil
+			}
+			fmt.Print("\nPaired with your phone. Waiting for messages.\n\n")
 		case "chat":
 			if oc != nil {
 				go handleChatOpenClaw(conn, &writeMu, f, oc, outbox)

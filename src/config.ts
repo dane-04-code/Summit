@@ -8,6 +8,15 @@
 export const SIGNUP_ENABLED = true;
 
 /**
+ * Whether the in-app nudge toward the native Hermes/OpenClaw plugin is shown
+ * to connector users. Off until github.com/SummitAI-app/Summit-Hermes has a
+ * real tagged release — see docs/PLUGIN_CONNECTION_PLAN.md and
+ * docs/PROJECT_STATUS.md (plugin is alpha, real-device proof still open).
+ * Flip on once there's an actual install command to send.
+ */
+export const PLUGIN_NUDGE_ENABLED = false;
+
+/**
  * WebSocket base URL for the relay. Pairing code is appended as ?code=NNNNNN.
  * Device development uses production by default so a phone and an installed
  * agent plugin cannot silently land on different relays. Local relay tests

@@ -20,7 +20,8 @@ export const RELAY_ERROR_MESSAGES: Record<RelayErrorCode, string> = {
     "Can't reach the Summit relay. Check your internet connection and try again.",
   code_not_found:
     "That code wasn't found. Make sure your agent's connector is still running, then re-check the code.",
-  code_expired: 'That pairing code has expired. Ask your agent for a fresh code.',
+  code_expired:
+    'That pairing code has expired. Your connector prints a fresh one automatically — use the latest.',
   already_paired: 'That code was already used. Ask your agent for a new one.',
   code_locked: 'Too many attempts. Wait 15 minutes, then ask your agent for a new code.',
   agent_disconnected:
@@ -28,7 +29,7 @@ export const RELAY_ERROR_MESSAGES: Record<RelayErrorCode, string> = {
 };
 
 /**
- * True when the failure means the 6-digit code the user typed is the problem
+ * True when the failure means the code the user typed is the problem
  * (so the code field should show an error), rather than a transport failure
  * where the code is fine but the relay/connector is unavailable.
  */

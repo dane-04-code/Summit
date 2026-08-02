@@ -49,7 +49,11 @@ import { defaultCapabilitiesFor, frameworkLabel } from '@/agents/frameworks';
 import type { ConnectionState } from '@/agents/adapters/types';
 import { initialTurn, reduceTurn, turnToBlocks, settleBlocks, settleErrorBlocks, shouldFlush } from '@/ui/chat/streamReducer';
 import { recoverPendingReplies, recoveredMessageId, type RecoveredReply } from '@/ui/chat/recoverReplies';
+import { pendingPush } from '@/ui/chat/pushRoute';
 import type { ChatSession } from '@/agents/types';
+import { PLUGIN_NUDGE_ENABLED } from '@/config';
+import { PluginNudgeBanner, PLUGIN_INSTALL_PROMPT } from '@/ui/chat/PluginNudgeBanner';
+import { isPluginNudgeDismissed, dismissPluginNudge } from '@/ui/chat/pluginNudgePreference';
 
 // ---------------------------------------------------------------------------
 // Live streaming helpers
@@ -169,8 +173,11 @@ function MessageRow({
 // ---------------------------------------------------------------------------
 
 export default function AgentScreen() {
-  const { sessionId: notificationSessionId } = useLocalSearchParams<{ sessionId?: string }>();
-  const { activeAgent, adapterFor, repo, selectAgent } = useAgents();
+  const { sessionId: notificationSessionId, n: notificationTap } = useLocalSearchParams<{
+    sessionId?: string;
+    n?: string;
+  }>();
+  const { agents, activeAgent, adapterFor, repo, selectAgent } = useAgents();
   const { user } = useAuth();
   const accountName = user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'You';
   const account = { name: accountName, initial: accountName[0]?.toUpperCase() ?? '?' };
@@ -189,6 +196,10 @@ export default function AgentScreen() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [activeToolLabel, setActiveToolLabel] = useState<string | null>(null);
   const [completionReceipt, setCompletionReceipt] = useState<RecoveredReply | null>(null);
+  const [showPluginNudge, setShowPluginNudge] = useState(false);
+  // The command menu, opened by tapping the composer's + rather than typing a
+  // slash. Same menu, same commands — just reachable without knowing to type.
+  const [commandsOpen, setCommandsOpen] = useState(false);
   const connectionState: ConnectionState = activeAgent ? adapterConnectionState : 'unknown';
   const resolvedApprovalCommands = useMemo(() => approvalResolutions(messages), [messages]);
 
@@ -199,9 +210,19 @@ export default function AgentScreen() {
   // Set by the stop button; the stream loop checks it and ends the turn early.
   const stopRef = useRef(false);
   const syncingAgentRef = useRef<string | null>(null);
+  // Which agent the visible thread belongs to. A turn started before an agent
+  // switch keeps persisting to its own session, but must stop painting into the
+  // thread the user is now looking at.
+  const consumedPushSessionRef = useRef<string | null>(null);
+  const activeAgentIdRef = useRef<string | null>(activeAgent?.id ?? null);
+  useEffect(() => {
+    activeAgentIdRef.current = activeAgent?.id ?? null;
+  }, [activeAgent?.id]);
   const insets = useSafeAreaInsets();
   const updateInput = useCallback((text: string) => {
     setInput(text);
+    // Typing (or picking a command) answers the question the menu was asking.
+    setCommandsOpen(false);
   }, []);
 
   // Guard against setState after the screen unmounts mid-stream.
@@ -227,6 +248,22 @@ export default function AgentScreen() {
     const adapter = adapterFor(activeAgent);
     return adapter.subscribeConnectionState(setConnectionState);
   }, [activeAgent, adapterFor]);
+
+  // Nudge connector users toward the native plugin. Gated on PLUGIN_NUDGE_ENABLED
+  // until the plugin has a real tagged release — see src/config.ts.
+  useEffect(() => {
+    let cancelled = false;
+    if (!PLUGIN_NUDGE_ENABLED || !activeAgent || activeAgent.transport !== 'relay' || activeAgent.connectionVia === 'plugin') {
+      setShowPluginNudge(false);
+      return undefined;
+    }
+    void isPluginNudgeDismissed(repo, activeAgent.id).then((dismissed) => {
+      if (!cancelled) setShowPluginNudge(!dismissed);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAgent, repo]);
 
   const loadSessionSummaries = useCallback(async () => {
     if (!activeAgent) {
@@ -351,15 +388,20 @@ export default function AgentScreen() {
         }
         return;
       }
-      const requestedSession = typeof notificationSessionId === 'string'
-        ? await repo.getSession(notificationSessionId)
-        : null;
+      // A notification tap is honoured once — see `pushRoute.ts`.
+      const pending = pendingPush(
+        { sessionId: notificationSessionId, n: notificationTap },
+        consumedPushSessionRef.current,
+      );
+      const requestedSession = pending ? await repo.getSession(pending.sessionId) : null;
       // A push carries only an opaque local session id. Resolve it locally and
       // select its owner instead of treating it as a server-side identity.
+      // (Left unconsumed: the next pass loads it under the right agent.)
       if (requestedSession && requestedSession.agentId !== activeAgent.id) {
         await selectAgent(requestedSession.agentId);
         return;
       }
+      if (pending) consumedPushSessionRef.current = pending.tap;
       const sessions = await repo.listSessions(activeAgent.id); // newest-first
       const latest = requestedSession ?? sessions[0] ?? null;
       if (cancelled) return;
@@ -369,7 +411,7 @@ export default function AgentScreen() {
     return () => {
       cancelled = true;
     };
-  }, [activeAgent, notificationSessionId, repo, loadSession, loadSessionSummaries, selectAgent]);
+  }, [activeAgent, notificationSessionId, notificationTap, repo, loadSession, loadSessionSummaries, selectAgent]);
 
   const statusLabel =
     status === 'running' ? 'working' : status === 'error' ? 'connection error' : 'ready';
@@ -382,7 +424,10 @@ export default function AgentScreen() {
   const capabilities = activeAgent
     ? activeAgent.capabilities ?? defaultCapabilitiesFor(activeAgent.framework)
     : null;
-  const slashMatches = useMemo(() => matchCommands(input, capabilities), [input, capabilities]);
+  const slashMatches = useMemo(
+    () => matchCommands(commandsOpen ? '/' : input, capabilities),
+    [commandsOpen, input, capabilities],
+  );
   const agentFrameworkLabel = activeAgent ? frameworkLabel(activeAgent.framework) : 'Hermes';
   const sidebarTitle = activeAgent?.name ?? 'Summit';
   const sidebarSubtitle = activeAgent
@@ -461,6 +506,43 @@ export default function AgentScreen() {
     router.push('/(app)/settings');
   }, []);
 
+  const agentOptions = useMemo(
+    () =>
+      agents.map((agent) => ({
+        id: agent.id,
+        name: agent.name,
+        frameworkLabel: frameworkLabel(agent.framework),
+        avatarId: agent.avatarId ?? null,
+        accentColor: agent.accentColor ?? null,
+      })),
+    [agents],
+  );
+
+  // Switching is a clean cut: drop the outgoing agent's thread before the
+  // incoming one loads, so nothing from agent A is ever on screen under
+  // agent B's header. A run already in flight keeps writing to its own session.
+  const handleSelectAgent = useCallback(
+    async (id: string) => {
+      setSidebarOpen(false);
+      if (id === activeAgentIdRef.current) return;
+      Haptics.selectionAsync().catch(() => {});
+      sessionRef.current = null;
+      setActiveSessionId('');
+      setMessages([]);
+      setChatGroups([]);
+      setStatus('idle');
+      setActiveToolLabel(null);
+      setCompletionReceipt(null);
+      await selectAgent(id);
+    },
+    [selectAgent],
+  );
+
+  const handleAddAgent = useCallback(() => {
+    setSidebarOpen(false);
+    router.push('/(app)/pair' as '/');
+  }, []);
+
   const handleSlashSelect = useCallback(
     (cmd: SlashCommand) => {
       Haptics.selectionAsync().catch(() => {});
@@ -475,6 +557,11 @@ export default function AgentScreen() {
     },
     [handleOpenSettings, handleNewChat, updateInput],
   );
+
+  const handleToggleCommands = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    setCommandsOpen((open) => !open);
+  }, []);
 
   const handleOpenCron = useCallback(() => {
     setSidebarOpen(false);
@@ -586,13 +673,25 @@ export default function AgentScreen() {
     stopRef.current = false;
     if (clearComposer) updateInput('');
 
+    // A turn belongs to the agent that started it. If the user switches agents
+    // mid-run, the reply still streams and still persists to its own session —
+    // it just stops touching the thread, status, and session list on screen.
+    const turnAgentId = activeAgent.id;
+    const onScreen = () => activeAgentIdRef.current === turnAgentId;
+    const setThread: typeof setMessages = (updater) => {
+      if (onScreen()) setMessages(updater);
+    };
+    const setThreadStatus = (next: RunState) => {
+      if (onScreen()) setStatus(next);
+    };
+
     const session = await ensureSession();
     const now = Date.now();
     const userMsg: Message = { id: genId(), role: 'user', text };
     await repo.appendMessage({ id: userMsg.id, sessionId: session.id, message: userMsg, createdAt: now });
 
     const agentId = genId();
-    setMessages((prev) => [
+    setThread((prev) => [
       ...prev,
       userMsg,
       { id: agentId, role: 'agent', blocks: [{ kind: 'markdown', source: '' }] },
@@ -629,9 +728,11 @@ export default function AgentScreen() {
       });
       for await (const event of stream) {
         if (stopRef.current) break;
-        if (event.type === 'tool') setActiveToolLabel(event.label);
-        if (event.type === 'delta') setActiveToolLabel(null);
-        if (event.type === 'approval') setActiveToolLabel('Waiting for your approval');
+        if (onScreen()) {
+          if (event.type === 'tool') setActiveToolLabel(event.label);
+          if (event.type === 'delta') setActiveToolLabel(null);
+          if (event.type === 'approval') setActiveToolLabel('Waiting for your approval');
+        }
         if (event.type === 'done' || event.type === 'error') settledEventId = event.eventId;
         if (event.type === 'detached') detached = true;
         turn = reduceTurn(turn, event);
@@ -639,7 +740,7 @@ export default function AgentScreen() {
         const now = Date.now();
         if (shouldFlush(lastFlushAt, now, turn.done)) {
           lastFlushAt = now;
-          setMessages((prev) =>
+          setThread((prev) =>
             prev.map((m) =>
               m.id === agentId ? { id: agentId, role: 'agent', blocks: turnToBlocks(turn) } : m,
             ),
@@ -649,7 +750,7 @@ export default function AgentScreen() {
       }
     } catch (e) {
       captureError(e, { where: 'chat_stream', framework: activeAgent.framework });
-      setConnectionState('disconnected');
+      if (onScreen()) setConnectionState('disconnected');
       const reason = e instanceof Error && e.message.trim()
         ? e.message
         : typeof e === 'string' && e.trim()
@@ -661,32 +762,32 @@ export default function AgentScreen() {
     if (cancelledRef.current) return;
     setStreaming(false);
     setRunStartedAt(null);
-    setActiveToolLabel(null);
+    if (onScreen()) setActiveToolLabel(null);
 
     // The connector still owns this turn. Remove the temporary stream row;
     // reconnect sync will insert the settled reply with its durable event ID.
     if (detached) {
-      setStatus('idle');
-      setMessages((prev) => prev.filter((m) => m.id !== agentId));
+      setThreadStatus('idle');
+      setThread((prev) => prev.filter((m) => m.id !== agentId));
       return;
     }
 
     // A reply stopped before any text arrived just disappears — nothing to keep.
     if (stopRef.current && turn.text.trim() === '') {
-      setStatus('idle');
-      setMessages((prev) => prev.filter((m) => m.id !== agentId));
+      setThreadStatus('idle');
+      setThread((prev) => prev.filter((m) => m.id !== agentId));
       return;
     }
 
     if (turn.status === 'error') {
-      setStatus('error');
+      setThreadStatus('error');
       const finalAgentId = settledEventId ? recoveredMessageId(settledEventId) : agentId;
       const errorMsg: Message = {
         id: finalAgentId,
         role: 'agent',
         blocks: settleErrorBlocks(turn.text, turn.error ?? 'Something went wrong.'),
       };
-      setMessages((prev) =>
+      setThread((prev) =>
         prev.map((m) =>
           m.id === agentId ? errorMsg : m,
         ),
@@ -695,32 +796,36 @@ export default function AgentScreen() {
       const title = session.title ?? text.slice(0, 40);
       const updated: ChatSession = { ...session, title, updatedAt: Date.now() };
       await repo.upsertSession(updated);
-      sessionRef.current = updated;
-      setActiveSessionId(updated.id);
+      if (onScreen()) {
+        sessionRef.current = updated;
+        setActiveSessionId(updated.id);
+      }
       await acknowledgeSettledReply();
-      await loadSessionSummaries();
+      if (onScreen()) await loadSessionSummaries();
       return;
     }
 
-    setStatus('idle');
+    setThreadStatus('idle');
     const finalAgentId = settledEventId ? recoveredMessageId(settledEventId) : agentId;
     const settled: Message = { id: finalAgentId, role: 'agent', blocks: settleBlocks(turn.text) };
     // Snap from streaming markdown to the settled form (file card for pasted .md content, etc.)
-    setMessages((prev) => prev.map((m) => (m.id === agentId ? settled : m)));
+    setThread((prev) => prev.map((m) => (m.id === agentId ? settled : m)));
     // An approval gate holds the run open without `done` — surface the card so
     // the user can act. Pending state is ephemeral: never persisted to the repo.
     const pending = turn.pendingApproval;
     if (pending) {
-      setMessages((prev) => [...prev, buildApprovalMessage(genId(), pending)]);
+      setThread((prev) => [...prev, buildApprovalMessage(genId(), pending)]);
     }
     await repo.appendMessage({ id: settled.id, sessionId: session.id, message: settled, createdAt: Date.now() });
     const title = session.title ?? text.slice(0, 40);
     const updated: ChatSession = { ...session, title, updatedAt: Date.now() };
     await repo.upsertSession(updated);
-    sessionRef.current = updated;
-    setActiveSessionId(updated.id);
+    if (onScreen()) {
+      sessionRef.current = updated;
+      setActiveSessionId(updated.id);
+    }
     await acknowledgeSettledReply();
-    await loadSessionSummaries();
+    if (onScreen()) await loadSessionSummaries();
   }, [streaming, activeAgent, adapterFor, repo, ensureSession, loadSessionSummaries, updateInput]);
 
   const handleSend = useCallback(() => {
@@ -733,6 +838,20 @@ export default function AgentScreen() {
     },
     [submitText],
   );
+
+  const handleInstallPlugin = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    updateInput(PLUGIN_INSTALL_PROMPT);
+    composerRef.current?.focus();
+    setShowPluginNudge(false);
+    if (activeAgent) void dismissPluginNudge(repo, activeAgent.id);
+  }, [activeAgent, repo, updateInput]);
+
+  const handleDismissPluginNudge = useCallback(() => {
+    Haptics.selectionAsync().catch(() => {});
+    setShowPluginNudge(false);
+    if (activeAgent) void dismissPluginNudge(repo, activeAgent.id);
+  }, [activeAgent, repo]);
 
   const handleOpenRecoveredConversation = useCallback(() => {
     if (!completionReceipt) return;
@@ -772,6 +891,10 @@ export default function AgentScreen() {
             onOpen={handleOpenRecoveredConversation}
             onDismiss={() => setCompletionReceipt(null)}
           />
+        )}
+
+        {showPluginNudge && (
+          <PluginNudgeBanner onInstall={handleInstallPlugin} onDismiss={handleDismissPluginNudge} />
         )}
 
         <KeyboardAvoidingView
@@ -828,6 +951,8 @@ export default function AgentScreen() {
             streaming={streaming}
             bottomInset={insets.bottom}
             model={composerModel}
+            onCommands={handleToggleCommands}
+            commandsOpen={commandsOpen}
           />
         </KeyboardAvoidingView>
 
@@ -842,6 +967,10 @@ export default function AgentScreen() {
         activeId={activeSessionId}
         title={sidebarTitle}
         subtitle={sidebarSubtitle}
+        agents={agentOptions}
+        activeAgentId={activeAgent?.id ?? null}
+        onSelectAgent={handleSelectAgent}
+        onAddAgent={handleAddAgent}
         connectionState={connectionState}
         onRetryConnection={handleRetryConnection}
         account={account}
@@ -870,7 +999,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   modelNotice: {
-    marginHorizontal: space.lg,
+    marginHorizontal: space.md,
     marginBottom: space.sm,
     paddingHorizontal: space.md,
     paddingVertical: space.sm,

@@ -1,16 +1,30 @@
 /** Canonical relay protocol frame types. Relay imports from here directly. */
 
 /** Optional connector feature flags, negotiated at hello and echoed on pair.
- *  Absent means an older connector — the app must keep the feature's UI dark. */
-export type ConnectorCapability = 'model_picker';
-export type HelloFrame      = { t: 'hello'; framework: string; agentName: string; agentVersion: string; capabilities?: ConnectorCapability[] };
-export type CodeFrame       = { t: 'code'; code: string; connectorToken: string };
+ *  Absent means an older connector — the app must keep the feature's UI dark.
+ *  `code_rotation`: this connector honours `expiresAt` on the code frame and
+ *  will fetch a fresh code when the window closes. Relays give connectors
+ *  without it the old, longer code TTL, since they would otherwise strand the
+ *  user on a dead code until they restarted it by hand. */
+export type ConnectorCapability = 'model_picker' | 'code_rotation';
+/** Which agent-side process sent this hello: the Go connector (fallback/compat) or
+ *  a native framework plugin. Absent means an older connector — treat as 'connector'. */
+export type ConnectionVia   = 'connector' | 'plugin';
+export type HelloFrame      = { t: 'hello'; framework: string; agentName: string; agentVersion: string; capabilities?: ConnectorCapability[]; via?: ConnectionVia };
+/** `expiresAt` (epoch ms) is when this code stops being pairable; absent means
+ *  the relay is not asking for rotation. `paired` marks a channel that is
+ *  already claimed, so the connector shows a status line instead of reprinting
+ *  a code that can never be used again. */
+export type CodeFrame       = { t: 'code'; code: string; connectorToken: string; expiresAt?: number; paired?: boolean };
+/** Relay → connector once a phone has claimed the channel: stop the rotation
+ *  timer, the code's job is done. */
+export type PairOkFrame     = { t: 'pair_ok' };
 export type PairFrame       = { t: 'pair'; code: string };
 // Reconnect with the durable session token issued at pair time — the code is
 // single-use and short-lived, so the token (not the code) is the credential
 // the app keeps.
 export type ResumeFrame     = { t: 'resume'; token: string };
-export type PairedFrame     = { t: 'paired'; framework: string; agentName: string; agentVersion: string; sessionToken: string; capabilities?: ConnectorCapability[] };
+export type PairedFrame     = { t: 'paired'; framework: string; agentName: string; agentVersion: string; sessionToken: string; capabilities?: ConnectorCapability[]; via?: ConnectionVia };
 export type PairErrorFrame  = { t: 'pair_error'; reason: 'not_found' | 'expired' | 'already_paired' | 'locked' };
 export type PeerGoneFrame   = { t: 'peer_gone' };
 export type PingFrame       = { t: 'ping' };
@@ -77,7 +91,7 @@ export type ModelSelectFrame  = { t: 'model_select'; reqId: string; sessionId: s
 export type ModelResultFrame  = { t: 'model_result'; reqId: string; sessionId?: string; model: string; provider: string; message: string };
 
 export type AnyFrame =
-  | HelloFrame | CodeFrame | PairFrame | ResumeFrame | PairedFrame | PairErrorFrame
+  | HelloFrame | CodeFrame | PairOkFrame | PairFrame | ResumeFrame | PairedFrame | PairErrorFrame
   | PeerGoneFrame | PingFrame | PongFrame | ChatFrame | ChunkFrame | ActivityFrame | DoneFrame | ErrorFrame
   | SyncReqFrame | SyncReplyFrame | SyncDoneFrame | AckRepliesFrame
   | ApiReqFrame | ApiResFrame | RegisterPushFrame | NotifyFrame

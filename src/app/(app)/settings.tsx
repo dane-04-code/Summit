@@ -2,19 +2,21 @@ import React, { useEffect, useState } from 'react';
 import { ScrollView, View, Text, Pressable, StyleSheet, Alert, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import Constants from 'expo-constants';
-import { Bell, Bot, Clock, ChevronRight } from 'lucide-react-native';
+import { Bell, Bot, Clock, LogOut, ChevronRight, Plus } from 'lucide-react-native';
 
 import { useAuth } from '@/context/AuthContext';
 import { useAgents } from '@/agents/AgentProvider';
 import { accountName, accountInitial } from '@/lib/account';
 import { SettingsScreen, SectionLabel, Card, Row } from '@/ui/settings';
-import { colors, radius, typography } from '@/theme';
+import { colors, space, typography } from '@/theme';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 
+const ICON = { size: 19, strokeWidth: 1.75 } as const;
+
 export default function Settings() {
   const { user, signOut } = useAuth();
-  const { activeAgent, renameAgent } = useAgents();
+  const { agents, activeAgent, renameAgent } = useAgents();
   const [agentName, setAgentName] = useState(activeAgent?.name ?? '');
 
   const name = accountName(user);
@@ -44,8 +46,10 @@ export default function Settings() {
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* Account card */}
+        {/* Account — the one lit element on the screen: an inverted ink mark,
+            the same treatment the app mark uses, so the page has an anchor. */}
         <Pressable
           onPress={() => router.push('/(app)/account' as '/')}
           style={({ pressed }) => [styles.accountCard, pressed && styles.accountPressed]}
@@ -65,19 +69,24 @@ export default function Settings() {
               </Text>
             ) : null}
           </View>
-          <ChevronRight size={18} color={colors.muted} strokeWidth={1.5} />
+          <ChevronRight size={17} color={colors.faint} strokeWidth={2} />
         </Pressable>
 
         {/* Agent */}
         <View style={styles.group}>
           <SectionLabel>Agent</SectionLabel>
           <Card>
+            <Row
+              icon={<Bot size={ICON.size} color={colors.ink2} strokeWidth={ICON.strokeWidth} />}
+              label="Connected agent"
+              value={activeAgent ? activeAgent.name : 'None'}
+              onPress={() =>
+                router.push((activeAgent ? '/(app)/connection' : '/(app)/pair') as '/')
+              }
+            />
             {activeAgent ? (
               <View style={styles.nameRow}>
-                <View style={styles.nameMain}>
-                  <Text style={styles.nameLabel}>Display name</Text>
-                  <Text style={styles.nameSub}>Shown in the chat header and sidebar</Text>
-                </View>
+                <Text style={styles.nameLabel}>Display name</Text>
                 <TextInput
                   style={styles.nameInput}
                   value={agentName}
@@ -88,53 +97,57 @@ export default function Settings() {
                   returnKeyType="done"
                   onSubmitEditing={saveAgentName}
                   onBlur={saveAgentName}
+                  accessibilityLabel="Agent display name"
                 />
               </View>
             ) : null}
-            <Row
-              icon={<Bot size={17} color={colors.ink} strokeWidth={1.5} />}
-              label="Connected agent"
-              value={activeAgent ? activeAgent.name : 'None'}
-              onPress={() =>
-                router.push((activeAgent ? '/(app)/connection' : '/(app)/pair') as '/')
-              }
-            />
+            {activeAgent ? (
+              <Row
+                icon={<Plus size={ICON.size} color={colors.ink2} strokeWidth={ICON.strokeWidth} />}
+                label="Add another agent"
+                sublabel="Pair a second Hermes or OpenClaw instance"
+                onPress={() => router.push('/(app)/pair' as '/')}
+              />
+            ) : null}
           </Card>
+          {activeAgent ? (
+            <Text style={styles.hint}>
+              {agents.length > 1
+                ? 'Switch agents from the name at the top of the sidebar.'
+                : 'Shown in the chat header and the agent switcher.'}
+            </Text>
+          ) : null}
         </View>
 
-        {/* Data */}
+        {/* Device */}
         <View style={styles.group}>
-          <SectionLabel>Data</SectionLabel>
+          <SectionLabel>On this device</SectionLabel>
           <Card>
             <Row
-              icon={<Clock size={17} color={colors.ink} strokeWidth={1.5} />}
+              icon={<Bell size={ICON.size} color={colors.ink2} strokeWidth={ICON.strokeWidth} />}
+              label="Notifications"
+              sublabel="What this agent can send while you're away"
+              onPress={() => router.push('/(app)/notifications' as '/')}
+            />
+            <Row
+              icon={<Clock size={ICON.size} color={colors.ink2} strokeWidth={ICON.strokeWidth} />}
               label="History & data"
+              sublabel="Conversations stored on this phone"
               onPress={() => router.push('/(app)/data' as '/')}
             />
           </Card>
         </View>
 
-        <View style={styles.group}>
-          <SectionLabel>Notifications</SectionLabel>
-          <Card>
-            <Row
-              icon={<Bell size={17} color={colors.ink} strokeWidth={1.5} />}
-              label="Notifications"
-              sublabel="Choose what this agent can send while you are away"
-              onPress={() => router.push('/(app)/notifications' as '/')}
-            />
-          </Card>
-        </View>
-
         {/* Sign out */}
-        <Pressable
-          onPress={confirmSignOut}
-          style={({ pressed }) => [styles.signOut, pressed && styles.signOutPressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Sign out"
-        >
-          <Text style={styles.signOutText}>Sign out</Text>
-        </Pressable>
+        <Card>
+          <Row
+            icon={<LogOut size={ICON.size} color={colors.error} strokeWidth={ICON.strokeWidth} />}
+            label="Sign out"
+            danger
+            onPress={confirmSignOut}
+            right={<View />}
+          />
+        </Card>
 
         <Text style={styles.version}>Summit · v{APP_VERSION}</Text>
       </ScrollView>
@@ -144,67 +157,61 @@ export default function Settings() {
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
-  content: { padding: 16, paddingBottom: 32, gap: 24 },
+  content: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.lg,
+    paddingBottom: space.xxl,
+    gap: space.xl,
+  },
 
   accountCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 13,
-    backgroundColor: colors.drawer,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 14,
-    padding: 14,
+    gap: 14,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: space.lg,
   },
-  accountPressed: { backgroundColor: colors.surface },
+  accountPressed: { backgroundColor: colors.hover },
   avatar: {
-    width: 48,
-    height: 48,
+    width: 46,
+    height: 46,
     borderRadius: 9999,
-    backgroundColor: colors.surface2,
+    backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { fontSize: 19, fontWeight: '600', color: colors.ink },
+  avatarText: { fontSize: 19, fontWeight: '600', color: colors.bg },
   accountText: { flex: 1, minWidth: 0 },
-  accountName: { fontSize: 17, fontWeight: '600', color: colors.ink, lineHeight: 21 },
-  accountEmail: { ...typography.small, color: colors.muted, marginTop: 1 },
+  accountName: { fontSize: 17, fontWeight: '600', color: colors.ink, letterSpacing: -0.2 },
+  accountEmail: { ...typography.caption, color: colors.muted, marginTop: 2 },
 
   group: { gap: 0 },
+
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    gap: space.md,
+    minHeight: 52,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
   },
-  nameMain: { flex: 1, minWidth: 0 },
-  nameLabel: { fontSize: 16, color: colors.ink },
-  nameSub: { ...typography.caption, color: colors.muted, marginTop: 1 },
+  nameLabel: { fontSize: 16, color: colors.ink, letterSpacing: -0.1 },
   nameInput: {
     flex: 1,
-    maxWidth: 190,
-    height: 38,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: radius.control,
-    paddingHorizontal: 10,
+    ...typography.small,
     color: colors.ink,
-    backgroundColor: colors.bg,
-    textAlign: 'right',
+    textAlign: 'left',
+    padding: 0,
   },
 
-  signOut: {
-    height: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.drawer,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 14,
+  hint: {
+    ...typography.caption,
+    color: colors.faint,
+    marginTop: space.sm,
+    paddingHorizontal: space.lg - 2,
+    lineHeight: 17,
   },
-  signOutPressed: { backgroundColor: colors.surface },
-  signOutText: { fontSize: 16, fontWeight: '500', color: colors.error },
 
   version: { ...typography.caption, color: colors.faint, textAlign: 'center' },
 });

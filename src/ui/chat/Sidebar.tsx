@@ -20,9 +20,18 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { PanelLeftClose, Search, Plus, Settings, CalendarClock } from 'lucide-react-native';
+import {
+  PanelLeftClose,
+  Search,
+  Plus,
+  Settings,
+  CalendarClock,
+  ChevronDown,
+  Check,
+} from 'lucide-react-native';
 
 import { colors, radius, space, typography } from '../../theme';
+import { AgentAvatar } from '@/ui/agentIdentity/avatars';
 import type { ConnectionState } from '@/agents/adapters/types';
 import { ConnectionBadge } from './ConnectionBadge';
 import type { ChatGroup, ChatSummary, RunState } from './types';
@@ -35,16 +44,31 @@ const DOT: Record<RunState, string> = {
 
 const SCRIM_OPACITY = 0.55;
 
+/** One paired agent, as the switcher needs it. */
+export type AgentOption = {
+  id: string;
+  name: string;
+  frameworkLabel: string;
+  /** Identity mark; either half may be absent (see `agentIdentity/avatars`). */
+  avatarId?: string | null;
+  accentColor?: string | null;
+};
+
 interface SidebarProps {
   visible: boolean;
   groups: ChatGroup[];
   activeId: string;
   title: string;
   subtitle: string;
+  /** Every paired agent, most-recent-first. One entry = no switcher chrome. */
+  agents: AgentOption[];
+  activeAgentId: string | null;
+  onSelectAgent: (id: string) => void;
+  onAddAgent: () => void;
   connectionState: ConnectionState;
   onRetryConnection?: () => void;
   account: { name: string; initial: string };
-  /** Capability-gated: only agents with jobs get the Cron Drops entry. */
+  /** Capability-gated: only agents with jobs get the Cron Jobs entry. */
   showCron: boolean;
   onClose: () => void;
   onNewChat: () => void;
@@ -93,12 +117,52 @@ function ChatRow({
   );
 }
 
+// ── Agent switcher row ──────────────────────────────────────────────────────
+
+function AgentRow({
+  agent,
+  active,
+  onPress,
+}: {
+  agent: AgentOption;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={`${agent.name}, ${agent.frameworkLabel}`}
+      style={({ pressed }) => [styles.agentRow, (active || pressed) && styles.rowActive]}
+    >
+      {/* One mark carries both halves of the identity: the glyph and the accent
+          tint that fills it. A separate color dot alongside would say the same
+          thing twice, and this row already ends in a check. */}
+      <AgentAvatar avatarId={agent.avatarId} accent={agent.accentColor} size={28} />
+      <View style={styles.rowText}>
+        <Text style={styles.rowTitle} numberOfLines={1}>
+          {agent.name}
+        </Text>
+        <Text style={styles.rowPreview} numberOfLines={1}>
+          {agent.frameworkLabel}
+        </Text>
+      </View>
+      {active ? <Check size={16} color={colors.ink} strokeWidth={2} /> : null}
+    </Pressable>
+  );
+}
+
 export function Sidebar({
   visible,
   groups,
   activeId,
   title,
   subtitle,
+  agents,
+  activeAgentId,
+  onSelectAgent,
+  onAddAgent,
   connectionState,
   onRetryConnection,
   account,
@@ -119,6 +183,11 @@ export function Sidebar({
   const [query, setQuery] = useState('');
   const [renameTarget, setRenameTarget] = useState<ChatSummary | null>(null);
   const [renameText, setRenameText] = useState('');
+  const [agentsOpen, setAgentsOpen] = useState(false);
+
+  // One agent is the common case: the identity block stays a plain label and
+  // nothing about multi-agent is visible until a second one is paired.
+  const canSwitchAgents = agents.length > 1;
 
   // Drive the slide/fade from `visible`; clear the search once fully closed.
   // (The panel stays mounted but off-screen + non-interactive when closed.)
@@ -128,9 +197,18 @@ export function Sidebar({
       duration: visible ? 220 : 190,
       useNativeDriver: true,
     }).start(({ finished }) => {
-      if (finished && !visible) setQuery('');
+      if (finished && !visible) {
+        setQuery('');
+        setAgentsOpen(false);
+      }
     });
   }, [visible, progress]);
+
+  // A second agent can be removed while the list is open; collapse rather than
+  // leave a one-row expander behind.
+  useEffect(() => {
+    if (!canSwitchAgents) setAgentsOpen(false);
+  }, [canSwitchAgents]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -214,12 +292,30 @@ export function Sidebar({
       <Animated.View
         style={[styles.panel, { width: panelWidth, transform: [{ translateX }] }]}
       >
-        {/* identity header */}
+        {/* identity header — doubles as the agent switcher once >1 is paired */}
         <View style={[styles.header, { paddingTop: insets.top + space.md }]}>
-          <View style={styles.identity}>
-            <Text style={styles.appName} numberOfLines={1}>
-              {title}
-            </Text>
+          <Pressable
+            disabled={!canSwitchAgents}
+            onPress={() => setAgentsOpen((open) => !open)}
+            accessibilityRole={canSwitchAgents ? 'button' : undefined}
+            accessibilityLabel={canSwitchAgents ? `${title}, switch agent` : undefined}
+            accessibilityState={canSwitchAgents ? { expanded: agentsOpen } : undefined}
+            style={({ pressed }) => [
+              styles.identity,
+              canSwitchAgents && styles.identityTappable,
+              canSwitchAgents && pressed && styles.pressable,
+            ]}
+          >
+            <View style={styles.identityLine}>
+              <Text style={styles.appName} numberOfLines={1}>
+                {title}
+              </Text>
+              {canSwitchAgents ? (
+                <View style={agentsOpen ? styles.chevronOpen : undefined}>
+                  <ChevronDown size={15} color={colors.muted} strokeWidth={1.8} />
+                </View>
+              ) : null}
+            </View>
             <Text style={styles.workspace} numberOfLines={1}>
               {subtitle}
             </Text>
@@ -230,7 +326,7 @@ export function Sidebar({
                 compact
               />
             </View>
-          </View>
+          </Pressable>
           <Pressable
             onPress={onClose}
             hitSlop={8}
@@ -241,6 +337,39 @@ export function Sidebar({
             <PanelLeftClose size={20} color={colors.muted} strokeWidth={1.6} />
           </Pressable>
         </View>
+
+        {/* agent switcher */}
+        {canSwitchAgents && agentsOpen ? (
+          <View style={styles.agentList}>
+            {agents.map((agent) => (
+              <AgentRow
+                key={agent.id}
+                agent={agent}
+                active={agent.id === activeAgentId}
+                onPress={() => {
+                  setAgentsOpen(false);
+                  onSelectAgent(agent.id);
+                }}
+              />
+            ))}
+            <Pressable
+              onPress={() => {
+                setAgentsOpen(false);
+                onAddAgent();
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Add another agent"
+              style={({ pressed }) => [styles.agentAddRow, pressed && styles.rowActive]}
+            >
+              {/* Sits in the same 28px column as the agent marks above, so the
+                  labels of every row in the list share one left edge. */}
+              <View style={styles.agentAddIcon}>
+                <Plus size={16} color={colors.muted} strokeWidth={1.8} />
+              </View>
+              <Text style={styles.agentAddLabel}>Add another agent</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {/* search */}
         <View style={styles.searchWrap}>
@@ -305,11 +434,11 @@ export function Sidebar({
             <Pressable
               onPress={onOpenCron}
               accessibilityRole="button"
-              accessibilityLabel="Cron Drops"
+              accessibilityLabel="Cron Jobs"
               style={({ pressed }) => [styles.navRow, pressed && styles.pressable]}
             >
               <CalendarClock size={18} color={colors.muted} strokeWidth={1.6} />
-              <Text style={styles.navLabel}>Cron Drops</Text>
+              <Text style={styles.navLabel}>Cron Jobs</Text>
             </Pressable>
           ) : null}
 
@@ -411,11 +540,28 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  // Only the switchable form takes a hit target + press surface; a single-agent
+  // header stays a plain label with no affordance to misread.
+  identityTappable: {
+    borderRadius: radius.control,
+    marginLeft: -space.sm,
+    paddingLeft: space.sm,
+    paddingVertical: space.xs,
+  },
+  identityLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs + 1,
+  },
+  chevronOpen: {
+    transform: [{ rotate: '180deg' }],
+  },
   appName: {
     ...typography.small,
     fontWeight: '600',
     color: colors.ink,
     letterSpacing: -0.1,
+    flexShrink: 1,
   },
   workspace: {
     ...typography.caption,
@@ -437,6 +583,39 @@ const styles = StyleSheet.create({
   },
   pressable: {
     backgroundColor: colors.surface2,
+  },
+
+  // agent switcher
+  agentList: {
+    paddingHorizontal: space.sm + 2,
+    paddingBottom: space.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.line,
+    marginBottom: space.md,
+  },
+  agentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md - 1,
+    borderRadius: radius.control,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.sm + 1,
+  },
+  agentAddRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md - 1,
+    borderRadius: radius.control,
+    paddingHorizontal: space.sm,
+    paddingVertical: space.sm + 1,
+  },
+  agentAddIcon: {
+    width: 28,
+    alignItems: 'center',
+  },
+  agentAddLabel: {
+    ...typography.small,
+    color: colors.muted,
   },
 
   // search
