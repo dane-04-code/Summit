@@ -1,14 +1,18 @@
 import React from 'react';
 import { act, render, screen, fireEvent } from '@testing-library/react-native';
 
-const mockAuthorize = jest.fn();
+const mockCreate = jest.fn();
+const mockSetActive = jest.fn();
+const mockStartSSOFlow = jest.fn();
 const mockReplace = jest.fn();
-jest.mock('react-native-auth0', () => ({
-  useAuth0: () => ({ authorize: mockAuthorize, user: null, isLoading: false }),
-}));
-jest.mock('expo-apple-authentication', () => ({
-  isAvailableAsync: jest.fn().mockResolvedValue(false),
-  signInAsync: jest.fn(),
+
+jest.mock('@clerk/clerk-expo', () => ({
+  useSignIn: () => ({
+    isLoaded: true,
+    signIn: { create: mockCreate },
+    setActive: mockSetActive,
+  }),
+  useSSO: () => ({ startSSOFlow: mockStartSSOFlow }),
 }));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: mockReplace, push: jest.fn() }),
@@ -19,7 +23,9 @@ jest.mock('expo-router', () => ({
 import SignInScreen from '@/app/(auth)/sign-in';
 
 beforeEach(() => {
-  mockAuthorize.mockReset();
+  mockCreate.mockReset();
+  mockSetActive.mockReset();
+  mockStartSSOFlow.mockReset();
   mockReplace.mockReset();
 });
 
@@ -33,21 +39,34 @@ it('offers account creation without automatic keyboard translation', async () =>
   expect(mockReplace).toHaveBeenCalledWith('/(auth)/sign-up');
 });
 
-it('starts Auth0 sign-in', async () => {
-  mockAuthorize.mockResolvedValue({});
+it('starts sign-in with email and password', async () => {
+  mockCreate.mockResolvedValue({ status: 'complete', createdSessionId: 'sess_test' });
   await render(<SignInScreen />);
 
+  await act(async () => {
+    fireEvent.changeText(screen.getByPlaceholderText('you@example.com'), 'user@example.com');
+  });
+  await act(async () => {
+    fireEvent.changeText(screen.getByPlaceholderText('••••••••'), 'hunter2');
+  });
   await act(async () => {
     fireEvent.press(screen.getByText('Continue with email'));
   });
 
-  expect(mockAuthorize).toHaveBeenCalledWith({ scope: 'openid profile email offline_access' });
+  expect(mockCreate).toHaveBeenCalledWith({ identifier: 'user@example.com', password: 'hunter2' });
+  expect(mockSetActive).toHaveBeenCalledWith({ session: 'sess_test' });
 });
 
 it('surfaces auth errors', async () => {
-  mockAuthorize.mockRejectedValue(new Error('Invalid login credentials'));
+  mockCreate.mockRejectedValue(new Error('Invalid login credentials'));
   await render(<SignInScreen />);
 
+  await act(async () => {
+    fireEvent.changeText(screen.getByPlaceholderText('you@example.com'), 'user@example.com');
+  });
+  await act(async () => {
+    fireEvent.changeText(screen.getByPlaceholderText('••••••••'), 'hunter2');
+  });
   await act(async () => {
     fireEvent.press(screen.getByText('Continue with email'));
   });

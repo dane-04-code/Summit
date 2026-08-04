@@ -20,7 +20,7 @@ describe('AuthProvider', () => {
     expect(screen.getByTestId('session').props.children).toBe('signed-out');
   });
 
-  it('exposes Auth0 loading state', async () => {
+  it('exposes loading state', async () => {
     await render(
       <AuthProvider>
         <TestConsumer />

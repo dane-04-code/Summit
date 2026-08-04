@@ -31,16 +31,23 @@ import {
 } from 'lucide-react-native';
 
 import { colors, radius, space, typography } from '../../theme';
-import { AgentAvatar } from '@/ui/agentIdentity/avatars';
+import { AgentAvatar, accentHex } from '@/ui/agentIdentity/avatars';
 import type { ConnectionState } from '@/agents/adapters/types';
 import { ConnectionBadge } from './ConnectionBadge';
 import type { ChatGroup, ChatSummary, RunState } from './types';
 
-const DOT: Record<RunState, string> = {
-  running: colors.accent,
-  idle: colors.muted,
-  error: colors.error,
-};
+/**
+ * The recents dot. `running` and `error` are live signals and always win, so a
+ * chosen agent color can never mask a failed or in-flight run. Only the idle
+ * dot — every row's state today, and otherwise a flat grey that says nothing —
+ * carries the active agent's accent, which makes an open drawer read as
+ * belonging to that agent at a glance.
+ */
+function dotColor(state: RunState, accent: string | null): string {
+  if (state === 'running') return colors.accent;
+  if (state === 'error') return colors.error;
+  return accent ?? colors.muted;
+}
 
 const SCRIM_OPACITY = 0.55;
 
@@ -84,11 +91,14 @@ interface SidebarProps {
 function ChatRow({
   chat,
   active,
+  accent,
   onPress,
   onLongPress,
 }: {
   chat: ChatSummary;
   active: boolean;
+  /** Resolved hex for the active agent's accent, or null. */
+  accent: string | null;
   onPress: () => void;
   onLongPress: () => void;
 }) {
@@ -103,7 +113,7 @@ function ChatRow({
         (active || pressed) && styles.rowActive,
       ]}
     >
-      <View style={[styles.rowDot, { backgroundColor: DOT[chat.state] }]} />
+      <View style={[styles.rowDot, { backgroundColor: dotColor(chat.state, accent) }]} />
       <View style={styles.rowText}>
         <Text style={styles.rowTitle} numberOfLines={1}>
           {chat.title}
@@ -188,6 +198,13 @@ export function Sidebar({
   // One agent is the common case: the identity block stays a plain label and
   // nothing about multi-agent is visible until a second one is paired.
   const canSwitchAgents = agents.length > 1;
+
+  // Derived from the agent list rather than taken as a prop, so the drawer can
+  // never show one agent's name in another's color.
+  const activeAccent = useMemo(
+    () => accentHex(agents.find((a) => a.id === activeAgentId)?.accentColor),
+    [agents, activeAgentId],
+  );
 
   // Drive the slide/fade from `visible`; clear the search once fully closed.
   // (The panel stays mounted but off-screen + non-interactive when closed.)
@@ -307,7 +324,13 @@ export function Sidebar({
             ]}
           >
             <View style={styles.identityLine}>
-              <Text style={styles.appName} numberOfLines={1}>
+              {/* The agent's name carries its own accent — the one place the
+                  drawer names who you're talking to, so it's the one place the
+                  color is worth spending. */}
+              <Text
+                style={[styles.appName, activeAccent ? { color: activeAccent } : null]}
+                numberOfLines={1}
+              >
                 {title}
               </Text>
               {canSwitchAgents ? (
@@ -419,6 +442,7 @@ export function Sidebar({
                     key={chat.id}
                     chat={chat}
                     active={chat.id === activeId}
+                    accent={activeAccent}
                     onPress={handleSelect(chat.id)}
                     onLongPress={() => handleChatActions(chat)}
                   />

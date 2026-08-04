@@ -7,7 +7,7 @@ import { Bell, Bot, Clock, LogOut, ChevronRight, Plus } from 'lucide-react-nativ
 import { useAuth } from '@/context/AuthContext';
 import { useAgents } from '@/agents/AgentProvider';
 import { accountName, accountInitial } from '@/lib/account';
-import { SettingsScreen, SectionLabel, Card, Row } from '@/ui/settings';
+import { SettingsScreen, SectionLabel, Card, Row, cardMetrics } from '@/ui/settings';
 import { colors, space, typography } from '@/theme';
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
@@ -20,7 +20,7 @@ export default function Settings() {
   const [agentName, setAgentName] = useState(activeAgent?.name ?? '');
 
   const name = accountName(user);
-  const email = user?.email ?? '';
+  const email = user?.primaryEmailAddress?.emailAddress ?? '';
 
   useEffect(() => {
     setAgentName(activeAgent?.name ?? '');
@@ -188,20 +188,31 @@ const styles = StyleSheet.create({
 
   group: { gap: 0 },
 
+  // Geometry copied from the shared `Row` so this editable row sits on exactly
+  // the same grid as the read-only rows above and below it in the card.
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: space.md,
+    gap: cardMetrics.iconGap,
     minHeight: 52,
-    paddingVertical: space.md,
-    paddingHorizontal: space.lg,
+    paddingVertical: 13,
+    paddingHorizontal: cardMetrics.pad,
   },
   nameLabel: { fontSize: 16, color: colors.ink, letterSpacing: -0.1 },
   nameInput: {
     flex: 1,
-    ...typography.small,
+    // Matches `Row`'s value column: same size, same right alignment. Left
+    // alignment put a 15px value hard against a 16px label, which read as two
+    // different rows fighting for the same baseline.
+    //
+    // Size and weight are spelled out rather than spread from `typography.small`
+    // on purpose: that token carries a fixed `lineHeight`, and a TextInput with
+    // an explicit leading centers on the leading box instead of its own frame,
+    // which is what pushed the typed text off the label's centerline.
+    fontSize: typography.small.fontSize,
+    fontWeight: typography.small.fontWeight,
     color: colors.ink,
-    textAlign: 'left',
+    textAlign: 'right',
     padding: 0,
   },
 

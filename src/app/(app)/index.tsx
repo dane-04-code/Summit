@@ -37,6 +37,7 @@ import { matchCommands, type SlashCommand } from '@/ui/chat/slashCommands';
 import { CopiedToast } from '@/ui/chat/CopiedToast';
 import { EventDisclosure } from '@/ui/chat/EventDisclosure';
 import { useAuth } from '@/context/AuthContext';
+import { accountName, accountInitial } from '@/lib/account';
 import { messageToText } from '@/ui/chat/types';
 import { approvalResolutions, type ApprovalCommand } from '@/ui/chat/approvalPrompt';
 import { renameSession } from '@/ui/chat/sessionActions';
@@ -179,8 +180,8 @@ export default function AgentScreen() {
   }>();
   const { agents, activeAgent, adapterFor, repo, selectAgent } = useAgents();
   const { user } = useAuth();
-  const accountName = user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'You';
-  const account = { name: accountName, initial: accountName[0]?.toUpperCase() ?? '?' };
+  const name = accountName(user);
+  const account = { name, initial: accountInitial(name) };
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<RunState>('idle');

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ScrollView, View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { Mail, LogOut, Trash2 } from 'lucide-react-native';
+import { useAuth as useClerkAuth } from '@clerk/clerk-expo';
 
 import { useAuth } from '@/context/AuthContext';
 import { useAgents } from '@/agents/AgentProvider';
@@ -11,12 +12,13 @@ import { colors, space, typography } from '@/theme';
 
 export default function Account() {
   const { user, signOut } = useAuth();
+  const { getToken } = useClerkAuth();
   const { agents, removeAgent } = useAgents();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const name = accountName(user);
-  const email = user?.email ?? '';
+  const email = user?.primaryEmailAddress?.emailAddress ?? '';
   const provider = providerLabel(authProvider(user));
 
   // Best-effort local wipe: drop every agent (cascades its sessions + messages)
@@ -32,8 +34,11 @@ export default function Account() {
     setError(null);
     setBusy(true);
     try {
+      const token = await getToken();
+      if (!token) throw new Error('Not signed in.');
       const { error: fnError } = await supabase.functions.invoke('delete-account', {
         method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (fnError) throw fnError;
       await wipeLocal();

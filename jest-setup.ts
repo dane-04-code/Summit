@@ -1,13 +1,26 @@
 import '@testing-library/react-native/extend-expect';
 import React from 'react';
 
-jest.mock('react-native-auth0', () => ({
-  Auth0Provider: ({ children }: { children: React.ReactNode }) => children,
-  useAuth0: () => ({
-    user: null,
-    isLoading: false,
-    authorize: jest.fn().mockResolvedValue({}),
-    clearSession: jest.fn().mockResolvedValue(undefined),
+jest.mock('@clerk/clerk-expo', () => ({
+  ClerkProvider: ({ children }: { children: React.ReactNode }) => children,
+  useUser: () => ({ isLoaded: true, user: null }),
+  useAuth: () => ({ isLoaded: true, isSignedIn: false, signOut: jest.fn().mockResolvedValue(undefined) }),
+  useSignIn: () => ({
+    isLoaded: true,
+    signIn: { create: jest.fn().mockResolvedValue({ status: 'complete', createdSessionId: 'sess_test' }) },
+    setActive: jest.fn().mockResolvedValue(undefined),
+  }),
+  useSignUp: () => ({
+    isLoaded: true,
+    signUp: {
+      create: jest.fn().mockResolvedValue({ status: 'complete', createdSessionId: 'sess_test' }),
+      prepareEmailAddressVerification: jest.fn().mockResolvedValue(undefined),
+      attemptEmailAddressVerification: jest.fn().mockResolvedValue({ status: 'complete', createdSessionId: 'sess_test' }),
+    },
+    setActive: jest.fn().mockResolvedValue(undefined),
+  }),
+  useSSO: () => ({
+    startSSOFlow: jest.fn().mockResolvedValue({ createdSessionId: null, authSessionResult: null }),
   }),
 }));
 

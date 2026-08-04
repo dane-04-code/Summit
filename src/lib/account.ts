@@ -1,19 +1,24 @@
 /**
- * Display helpers for the signed-in Supabase user. Email auth has no name, so we
- * fall back to the email's local part, then a neutral placeholder.
+ * Display helpers for the signed-in Clerk user.
  */
 
+type ExternalAccount = { provider?: string };
+
 type AccountUser = {
-  email?: string | null;
-  name?: string | null;
-  nickname?: string | null;
-  sub?: string;
-  user_metadata?: { full_name?: string; name?: string };
-  app_metadata?: { provider?: string };
+  fullName?: string | null;
+  firstName?: string | null;
+  primaryEmailAddress?: { emailAddress?: string | null } | null;
+  externalAccounts?: ExternalAccount[];
+  passwordEnabled?: boolean;
 };
 
 export function accountName(user: AccountUser | null): string {
-  return user?.name ?? user?.nickname ?? user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? user?.email?.split('@')[0] ?? 'You';
+  return (
+    user?.fullName ??
+    user?.firstName ??
+    user?.primaryEmailAddress?.emailAddress?.split('@')[0] ??
+    'You'
+  );
 }
 
 export function accountInitial(name: string): string {
@@ -23,10 +28,10 @@ export function accountInitial(name: string): string {
 export type AuthProviderKind = 'apple' | 'google' | 'email' | 'unknown';
 
 export function authProvider(user: AccountUser | null): AuthProviderKind {
-  const provider = user?.sub?.split('|')[0] ?? user?.app_metadata?.provider;
-  if (provider === 'apple' || provider === 'google' || provider === 'google-oauth2' || provider === 'email') {
-    return provider === 'google-oauth2' ? 'google' : provider;
-  }
+  const provider = user?.externalAccounts?.[0]?.provider;
+  if (provider === 'oauth_apple') return 'apple';
+  if (provider === 'oauth_google') return 'google';
+  if (user?.passwordEnabled) return 'email';
   return 'unknown';
 }
 

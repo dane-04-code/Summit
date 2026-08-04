@@ -1,10 +1,10 @@
 import React, { createContext, useContext } from 'react';
-import { useAuth0 } from 'react-native-auth0';
-import type { User } from 'react-native-auth0';
+import { useAuth as useClerkAuth, useUser } from '@clerk/clerk-expo';
+import type { UserResource } from '@clerk/types';
 
 type AuthContextValue = {
-  session: { user: User } | null;
-  user: User | null;
+  session: { user: UserResource } | null;
+  user: UserResource | null;
   loading: boolean;
   signOut: () => Promise<void>;
 };
@@ -17,15 +17,17 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { user, isLoading, clearSession } = useAuth0();
+  const { isLoaded: userLoaded, user } = useUser();
+  const { isLoaded: authLoaded, signOut: clerkSignOut } = useClerkAuth();
+  const loading = !userLoaded || !authLoaded;
 
   return (
     <AuthContext.Provider
       value={{
         session: user ? { user } : null,
-        user,
-        loading: isLoading,
-        signOut: () => clearSession().catch(() => undefined),
+        user: user ?? null,
+        loading,
+        signOut: () => clerkSignOut().catch(() => undefined),
       }}
     >
       {children}

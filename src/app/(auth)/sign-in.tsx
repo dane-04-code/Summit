@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,185 +7,196 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
+  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { useAuth0 } from 'react-native-auth0';
+import * as AuthSession from 'expo-auth-session';
+import { useSignIn, useSSO } from '@clerk/clerk-expo';
 import { SIGNUP_ENABLED } from '@/config';
 import { BrandMark } from '@/ui/BrandMark';
-import { EyeIcon, AppleLogo } from '@/ui/authIcons';
+import { AppleLogo, GoogleLogo, GitHubLogo } from '@/ui/authIcons';
+import { useWarmUpBrowser } from '@/lib/oauth';
 import { colors, space, radius, typography, screenPadding } from '@/theme';
-
-type FocusField = 'email' | 'password' | null;
 
 export default function SignInScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [focused, setFocused] = useState<FocusField>(null);
+  const [focused, setFocused] = useState<'email' | 'password' | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  const { authorize } = useAuth0();
+  const { signIn, setActive, isLoaded } = useSignIn();
+  const { startSSOFlow } = useSSO();
+  const passwordRef = useRef<TextInput>(null);
+
+  useWarmUpBrowser();
+
+  const canSubmit = email.trim().length > 0 && password.length > 0 && !loading;
 
   async function handleEmailSignIn() {
+    if (!isLoaded || !canSubmit) return;
     setError(null);
     setLoading(true);
     try {
-      await authorize({ scope: 'openid profile email offline_access' });
+      const attempt = await signIn.create({ identifier: email.trim(), password });
+      if (attempt.status === 'complete') {
+        await setActive({ session: attempt.createdSessionId });
+      } else {
+        setError('Sign in needs an extra step. Please try again.');
+      }
     } catch (e: any) {
-      if (e?.code !== 'a0.session.user_cancelled') setError(e?.message ?? 'Sign in failed.');
-    } finally { setLoading(false); }
+      setError(e?.errors?.[0]?.message ?? e?.message ?? 'Sign in failed.');
+    } finally {
+      setLoading(false);
+    }
   }
 
-  async function handleApple() {
+  async function handleProvider(strategy: 'oauth_apple' | 'oauth_google' | 'oauth_github') {
     setError(null);
+    setLoading(true);
     try {
-      setLoading(true);
-      await authorize({ connection: 'apple', scope: 'openid profile email offline_access' });
+      const { createdSessionId, setActive: activateSSO } = await startSSOFlow({
+        strategy,
+        redirectUrl: AuthSession.makeRedirectUri(),
+      });
+      if (createdSessionId && activateSSO) {
+        await activateSSO({ session: createdSessionId });
+      }
     } catch (e: any) {
-      if (e?.code !== 'a0.session.user_cancelled') setError(e?.message ?? 'Apple sign-in failed.');
-    } finally { setLoading(false); }
-  }
-
-  async function handleProvider(connection: string) {
-    setError(null); setLoading(true);
-    try { await authorize({ connection, scope: 'openid profile email offline_access' }); }
-    catch (e: any) { if (e?.code !== 'a0.session.user_cancelled') setError(e?.message ?? 'Sign in failed.'); }
-    finally { setLoading(false); }
+      setError(e?.errors?.[0]?.message ?? e?.message ?? 'Sign in failed.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView
-        testID="sign-in-scroll"
-        style={styles.flex}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.container}>
-          {/* brand */}
-          <View style={styles.brandArea}>
-            <BrandMark />
-            <Text style={[styles.title, styles.brandTitle]}>Welcome back</Text>
-            <Text style={[styles.subtitle, styles.brandSubtitle]}>
-              Sign in to pick up where you and your agent left off.
-            </Text>
-          </View>
-
-          {/* form */}
-          <View style={styles.form}>
-            <View>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={[styles.input, focused === 'email' && styles.inputFocused]}
-                placeholder="you@example.com"
-                placeholderTextColor={colors.faint}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
-                textContentType="emailAddress"
-                autoComplete="email"
-                onFocus={() => setFocused('email')}
-                onBlur={() => setFocused(null)}
-              />
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          testID="sign-in-scroll"
+          style={styles.flex}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.container}>
+            {/* brand */}
+            <View style={styles.brandArea}>
+              <BrandMark />
+              <Text style={[styles.title, styles.brandTitle]}>Welcome back</Text>
+              <Text style={[styles.subtitle, styles.brandSubtitle]}>
+                Sign in to pick up where you and your agent left off.
+              </Text>
             </View>
 
-            <View style={styles.hiddenAuth0Field}>
-              <Text style={styles.label}>Password</Text>
-              <View style={styles.passwordWrap}>
+            {/* form */}
+            <View style={styles.form}>
+              <View>
+                <Text style={styles.label}>Email</Text>
                 <TextInput
-                  style={[
-                    styles.input,
-                    styles.passwordInput,
-                    focused === 'password' && styles.inputFocused,
-                  ]}
-                  placeholder="Your password"
+                  style={[styles.input, focused === 'email' && styles.inputFocused]}
+                  placeholder="you@example.com"
+                  placeholderTextColor={colors.faint}
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoFocus
+                  keyboardType="email-address"
+                  textContentType="username"
+                  autoComplete="email"
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  onFocus={() => setFocused('email')}
+                  onBlur={() => setFocused(null)}
+                />
+              </View>
+              <View>
+                <Text style={styles.label}>Password</Text>
+                <TextInput
+                  ref={passwordRef}
+                  style={[styles.input, focused === 'password' && styles.inputFocused]}
+                  placeholder="••••••••"
                   placeholderTextColor={colors.faint}
                   value={password}
                   onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
                   autoCapitalize="none"
+                  autoCorrect={false}
+                  secureTextEntry
                   textContentType="password"
-                  autoComplete="current-password"
+                  autoComplete="password"
+                  returnKeyType="go"
+                  onSubmitEditing={() => canSubmit && handleEmailSignIn()}
                   onFocus={() => setFocused('password')}
                   onBlur={() => setFocused(null)}
-                  onSubmitEditing={handleEmailSignIn}
-                  returnKeyType="go"
                 />
-                <Pressable
-                  style={styles.eyeBtn}
-                  onPress={() => setShowPassword((s) => !s)}
-                  accessibilityRole="button"
-                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-                  hitSlop={8}
-                >
-                  <EyeIcon off={showPassword} />
-                </Pressable>
               </View>
+              {error ? <Text style={styles.error}>{error}</Text> : null}
             </View>
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-          </View>
+            {/* actions */}
+            <View style={styles.actions}>
+              <Pressable
+                style={[styles.primaryBtn, !canSubmit && styles.btnDisabled]}
+                onPress={handleEmailSignIn}
+                disabled={!canSubmit}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.bg} />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Continue with email</Text>
+                )}
+              </Pressable>
 
-          {/* actions */}
-          <View style={styles.actions}>
-            <Pressable
-              style={[styles.primaryBtn, loading && styles.btnDisabled]}
-              onPress={handleEmailSignIn}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color={colors.bg} />
-              ) : (
-                <Text style={styles.primaryBtnText}>Continue with email</Text>
-              )}
-            </Pressable>
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
+              </View>
 
-            <>
-                <View style={styles.divider}>
-                  <View style={styles.dividerLine} />
-                  <Text style={styles.dividerText}>or</Text>
-                  <View style={styles.dividerLine} />
-                </View>
+              <Pressable
+                style={[styles.appleBtn, loading && styles.btnDisabled]}
+                onPress={() => handleProvider('oauth_apple')}
+                disabled={loading}
+              >
+                <AppleLogo />
+                <Text style={styles.appleBtnText}>Continue with Apple</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.appleBtn, loading && styles.btnDisabled]}
+                onPress={() => handleProvider('oauth_google')}
+                disabled={loading}
+              >
+                <GoogleLogo />
+                <Text style={styles.appleBtnText}>Continue with Google</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.appleBtn, loading && styles.btnDisabled]}
+                onPress={() => handleProvider('oauth_github')}
+                disabled={loading}
+              >
+                <GitHubLogo />
+                <Text style={styles.appleBtnText}>Continue with GitHub</Text>
+              </Pressable>
+            </View>
 
-                <Pressable
-                  style={[styles.appleBtn, loading && styles.btnDisabled]}
-                  onPress={handleApple}
-                  disabled={loading}
-                >
-                  <AppleLogo />
-                  <Text style={styles.appleBtnText}>Continue with Apple</Text>
-                </Pressable>
-                <Pressable style={[styles.appleBtn, loading && styles.btnDisabled]} onPress={() => handleProvider('google-oauth2')} disabled={loading}>
-                  <Text style={styles.appleBtnText}>Continue with Google</Text>
-                </Pressable>
-                <Pressable style={[styles.appleBtn, loading && styles.btnDisabled]} onPress={() => handleProvider('github')} disabled={loading}>
-                  <Text style={styles.appleBtnText}>Continue with GitHub</Text>
-                </Pressable>
-            </>
-          </View>
-
-          {/* footer */}
-          {SIGNUP_ENABLED && (
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>
-                No account yet?{' '}
-                <Text
-                  style={styles.footerLink}
-                  onPress={() => router.replace('/(auth)/sign-up')}
-                >
-                  Create one
+            {/* footer */}
+            {SIGNUP_ENABLED && (
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>
+                  No account yet?{' '}
+                  <Text style={styles.footerLink} onPress={() => router.replace('/(auth)/sign-up')}>
+                    Create one
+                  </Text>
                 </Text>
-              </Text>
-            </View>
-          )}
-        </View>
-      </ScrollView>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -209,29 +220,15 @@ const styles = StyleSheet.create({
   input: {
     ...typography.body,
     color: colors.ink,
-    height: 54,
+    height: 50,
     borderWidth: 1,
     borderColor: colors.line,
     borderRadius: radius.input,
     paddingHorizontal: space.lg,
-    paddingVertical: 0,
-    textAlignVertical: 'center',
     backgroundColor: colors.surface,
   },
   inputFocused: { borderColor: colors.lineFocus },
-  passwordWrap: { position: 'relative', justifyContent: 'center' },
-  passwordInput: { paddingRight: 46 },
-  eyeBtn: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   error: { ...typography.caption, color: colors.error, marginLeft: 2 },
-  hiddenAuth0Field: { display: 'none' },
 
   // actions
   actions: { marginTop: space.lg, gap: space.lg },

@@ -1,19 +1,20 @@
 // Supabase Edge Function: delete-account
 //
-// Permanently deletes the calling user's auth account. The app cannot do this
-// with the anon key (it needs the service role), so deletion goes through this
-// function. Required for App Store review (Apple guideline 5.1.1(v):
-// account-creating apps must offer in-app account deletion).
+// Permanently deletes the calling user's Clerk account. Auth is Clerk, not
+// Supabase Auth — this function verifies the caller's Clerk session token and
+// deletes them via the Clerk Backend API. Required for App Store review (Apple
+// guideline 5.1.1(v): account-creating apps must offer in-app account deletion).
 //
 // Deploy:
 //   supabase functions deploy delete-account
-// SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY are injected
-// by the platform — no extra secrets to set.
+// Requires CLERK_SECRET_KEY set as a function secret:
+//   supabase secrets set CLERK_SECRET_KEY=sk_...
 //
-// The client calls it via `supabase.functions.invoke('delete-account')`, which
-// forwards the signed-in user's JWT in the Authorization header.
+// The client calls it via `supabase.functions.invoke('delete-account', { headers: { Authorization } })`,
+// passing the signed-in user's Clerk session token explicitly (Supabase's own
+// auto-attached Authorization header is for Supabase Auth, which this app doesn't use).
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClerkClient, verifyToken } from 'https://esm.sh/@clerk/backend@1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,29 +33,28 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
   const authHeader = req.headers.get('Authorization');
-  if (!authHeader) return json({ error: 'Missing authorization header' }, 401);
+  if (!authHeader?.startsWith('Bearer ')) return json({ error: 'Missing authorization header' }, 401);
 
-  const url = Deno.env.get('SUPABASE_URL');
-  const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
-  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (!url || !anonKey || !serviceKey) {
-    return json({ error: 'Server misconfigured' }, 500);
+  const secretKey = Deno.env.get('CLERK_SECRET_KEY');
+  if (!secretKey) return json({ error: 'Server misconfigured' }, 500);
+
+  // Identify the caller from their own verified session token (never trust a
+  // user id from the request body).
+  const token = authHeader.slice('Bearer '.length);
+  let userId: string;
+  try {
+    const claims = await verifyToken(token, { secretKey });
+    userId = claims.sub;
+  } catch {
+    return json({ error: 'Invalid or expired session' }, 401);
   }
 
-  // Identify the caller from their own JWT (never trust a user id from the body).
-  const userClient = createClient(url, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const {
-    data: { user },
-    error: userErr,
-  } = await userClient.auth.getUser();
-  if (userErr || !user) return json({ error: 'Invalid or expired session' }, 401);
-
-  // Delete with service-role privileges.
-  const admin = createClient(url, serviceKey);
-  const { error: delErr } = await admin.auth.admin.deleteUser(user.id);
-  if (delErr) return json({ error: delErr.message }, 500);
+  const clerk = createClerkClient({ secretKey });
+  try {
+    await clerk.users.deleteUser(userId);
+  } catch (e) {
+    return json({ error: e instanceof Error ? e.message : 'Delete failed' }, 500);
+  }
 
   return json({ ok: true }, 200);
 });

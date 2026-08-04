@@ -17,6 +17,7 @@ import { AGENT_COLUMN_MIGRATIONS } from '@/db/schema';
 import { AGENT_AVATAR_IDS, AgentAvatar, accentHex, resolveAvatarId } from '@/ui/agentIdentity/avatars';
 import { agentAccentNames, agentAccentPalette, colors, resolveAccent } from '@/theme';
 import { Sidebar, type AgentOption } from '@/ui/chat/Sidebar';
+import type { ChatGroup, RunState } from '@/ui/chat/types';
 
 const SAFE_AREA_METRICS = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -156,12 +157,12 @@ describe('AgentAvatar', () => {
 
 // ── The switcher row ────────────────────────────────────────────────────────
 
-async function renderSidebar(agents: AgentOption[]) {
+async function renderSidebar(agents: AgentOption[], groups: ChatGroup[] = []) {
   await render(
     <SafeAreaProvider initialMetrics={SAFE_AREA_METRICS}>
       <Sidebar
         visible
-        groups={[]}
+        groups={groups}
         activeId=""
         title="Workshop"
         subtitle="Hermes"
@@ -222,5 +223,105 @@ describe('sidebar switcher rows', () => {
       // an unknown value must never take the row down with it.
       expect(screen.getByLabelText(`${agent.name}, ${agent.frameworkLabel}`)).toBeTruthy();
     }
+  });
+});
+
+// ── The accent's reach inside the drawer ────────────────────────────────────
+
+/** Flatten a style prop (array / nested) down to one resolved object. */
+function flatten(style: unknown): Record<string, unknown> {
+  if (Array.isArray(style)) return Object.assign({}, ...style.map(flatten));
+  return (style ?? {}) as Record<string, unknown>;
+}
+
+type Node = { props?: { style?: unknown }; children?: unknown };
+
+function subtreeHasText(node: unknown, text: string): boolean {
+  if (node === text) return true;
+  if (!node || typeof node !== 'object') return false;
+  if (Array.isArray(node)) return node.some((n) => subtreeHasText(n, text));
+  return subtreeHasText((node as Node).children, text);
+}
+
+function findDot(node: unknown): string | undefined {
+  if (!node || typeof node !== 'object') return undefined;
+  if (Array.isArray(node)) {
+    for (const n of node) {
+      const hit = findDot(n);
+      if (hit !== undefined) return hit;
+    }
+    return undefined;
+  }
+  const style = flatten((node as Node).props?.style);
+  if (style.width === 7 && style.height === 7) return style.backgroundColor as string;
+  return findDot((node as Node).children);
+}
+
+/**
+ * The status dot of one recents row, found by geometry inside the row that
+ * carries the given title — the connection badge uses the same 7×7 dot, so an
+ * unscoped search finds that one first.
+ */
+function rowDotColor(tree: unknown, title: string): string | undefined {
+  let best: string | undefined;
+  const walk = (node: unknown): void => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) return node.forEach(walk);
+    if (subtreeHasText(node, title)) {
+      const dot = findDot((node as Node).children);
+      // Keep descending: the deepest node holding both the title and a dot is
+      // the row itself, not an ancestor panel.
+      if (dot !== undefined) best = dot;
+      walk((node as Node).children);
+    }
+  };
+  walk(tree);
+  return best;
+}
+
+function chatGroup(state: RunState): ChatGroup[] {
+  return [
+    {
+      label: 'Today',
+      chats: [{ id: 'c1', title: 'Deploy check', preview: 'done', time: '9:41', state }],
+    },
+  ];
+}
+
+describe('accent inside the drawer', () => {
+  const MARKED: AgentOption[] = [
+    { id: 'a1', name: 'Workshop', frameworkLabel: 'Hermes', avatarId: 'ridge', accentColor: 'teal' },
+  ];
+  const UNMARKED: AgentOption[] = [{ id: 'a1', name: 'Workshop', frameworkLabel: 'Hermes' }];
+
+  it('tints the agent name in the header with its accent', async () => {
+    await renderSidebar(MARKED);
+    expect(flatten(screen.getByText('Workshop').props.style).color).toBe(
+      agentAccentPalette.teal,
+    );
+  });
+
+  it('leaves the name in default ink when no accent is chosen', async () => {
+    await renderSidebar(UNMARKED);
+    expect(flatten(screen.getByText('Workshop').props.style).color).toBe(colors.ink);
+  });
+
+  it('carries the accent onto idle recents dots', async () => {
+    await renderSidebar(MARKED, chatGroup('idle'));
+    expect(rowDotColor(screen.toJSON(), 'Deploy check')).toBe(agentAccentPalette.teal);
+  });
+
+  // These dots are live signals; an identity color must not overwrite them.
+  it.each([
+    ['running', colors.accent],
+    ['error', colors.error],
+  ] as const)('never lets an accent mask a %s run', async (state, expected) => {
+    await renderSidebar(MARKED, chatGroup(state));
+    expect(rowDotColor(screen.toJSON(), 'Deploy check')).toBe(expected);
+  });
+
+  it('falls back to grey on idle dots with no accent', async () => {
+    await renderSidebar(UNMARKED, chatGroup('idle'));
+    expect(rowDotColor(screen.toJSON(), 'Deploy check')).toBe(colors.muted);
   });
 });

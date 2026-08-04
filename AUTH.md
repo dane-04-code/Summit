@@ -1,59 +1,60 @@
-   # Auth Setup
+# Auth Setup
 
-Supabase Auth with Apple Sign-In, Google Sign-In, and email/password.
+Clerk (headless — no Clerk-branded UI components), with email/password, Apple, Google, and GitHub.
 
-## Supabase Project
+## Clerk Project
 
-- **URL:** `https://trgwyamvawrqfdgtjgcz.supabase.co`
-- **Anon key:** in `.env` as `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- **Publishable key:** in `.env` as `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY` (client-side, safe to expose)
+- **Secret key:** set as a Supabase function secret, `CLERK_SECRET_KEY` — used only by the
+  `delete-account` Edge Function to verify sessions and delete users via the Clerk Backend API.
+  Never ships in the app.
 
 ## Providers Configured
 
-| Provider | Status | Notes |
-|----------|--------|-------|
-| Email/password | ✅ | Confirm email on signup |
-| Apple Sign-In | ✅ | Service ID: `com.dane.agentmessenger.siwa`, Team: `WT9ZUR8B9B`, Key: `7XUPK4U4B8` |
-| Google | ✅ | Web OAuth client, callback to Supabase |
+Configure these in the Clerk dashboard under **User & Authentication**:
 
-**Supabase callback URL (all providers):** `https://trgwyamvawrqfdgtjgcz.supabase.co/auth/v1/callback`
+| Provider | Notes |
+|----------|-------|
+| Email/password | Email verification code (`email_code`) on sign-up |
+| Apple | OAuth, `oauth_apple` strategy |
+| Google | OAuth, `oauth_google` strategy |
+| GitHub | OAuth, `oauth_github` strategy |
 
 ## Code Structure
 
 ```
 src/
-  lib/supabase.ts          # Supabase client — SecureStore session adapter
-  context/AuthContext.tsx  # Session state, useAuth() hook, signOut
+  lib/clerk.ts              # Publishable key + SecureStore-backed token cache
+  lib/oauth.ts               # Browser warm-up + maybeCompleteAuthSession() for OAuth redirects
+  lib/account.ts             # Display helpers reading Clerk's user shape
+  context/AuthContext.tsx    # Session state, useAuth() hook, signOut
   app/
-    _layout.tsx            # AuthProvider + RouteGuard (redirects on auth state)
+    _layout.tsx             # ClerkProvider + AuthProvider + RouteGuard (redirects on auth state)
     (auth)/
-      _layout.tsx          # No-header layout for auth screens
-      sign-in.tsx          # Email sign-in (Apple + Google buttons TBD in Tasks 5/6)
-      sign-up.tsx          # Email registration + confirmation screen
+      sign-in.tsx            # Email/password fields + OAuth buttons (Clerk headless hooks)
+      sign-up.tsx             # Email/password + verification-code step + OAuth buttons
     (app)/
-      _layout.tsx          # Protected layout
-      index.tsx            # Chat screen (requires session)
-      settings.tsx         # Settings (requires session)
+      account.tsx             # Delete-account flow — passes a Clerk session token explicitly
 ```
 
 ## How Auth Flow Works
 
-1. App loads → `RouteGuard` checks session
+1. App loads → `RouteGuard` checks session (via `AuthContext`, backed by Clerk's `useUser`/`useAuth`)
 2. No session → redirect to `/(auth)/sign-in`
-3. Sign-in succeeds → Supabase fires `onAuthStateChange` → `RouteGuard` redirects to `/(app)/`
-4. Session persisted in iOS Keychain via `expo-secure-store`
+3. Sign-in succeeds → `useUser()`/`useAuth()` update → `RouteGuard` redirects to `/(app)/`
+4. Session persisted via Clerk's token cache, backed by `expo-secure-store`
 5. Sign-out → session cleared → `RouteGuard` redirects back to sign-in
 
-## Apple Secret Expiry
+## Why headless, not Clerk's prebuilt components
 
-The Apple client secret JWT **expires 180 days from generation (2026-12-24)**. Regenerate with:
+Clerk's prebuilt `<SignIn />`/`<SignUp />` components show "Secured by Clerk" branding unless
+you're on a paid plan. `sign-in.tsx`/`sign-up.tsx` build their own fields against Clerk's
+headless `useSignIn`/`useSignUp`/`useSSO` hooks instead — same free tier, no branding, and the
+screens match this app's own design system rather than Clerk's.
 
-```bash
-node generate-apple-secret.js   # (recreate from docs/superpowers/plans/2026-06-27-supabase-auth.md)
-```
+## Account Deletion
 
-Then paste the new JWT into **Supabase → Auth → Providers → Apple → Secret Key**.
-
-## Still To Build (Tasks 5 & 6)
-
-- Apple Sign-In button wired up in `sign-in.tsx`
-- Google Sign-In button + OAuth browser flow + `src/app/auth/callback.tsx`
+`supabase/functions/delete-account` deletes the Clerk account (not a Supabase Auth account — this
+app never creates one). The client fetches a Clerk session token via `getToken()` and passes it
+explicitly in the `Authorization` header, since Supabase's own auto-attached header is for
+Supabase Auth sessions this app doesn't have.

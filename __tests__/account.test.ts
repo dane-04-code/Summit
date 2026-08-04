@@ -1,16 +1,19 @@
-import type { User } from '@supabase/supabase-js';
 import { accountName, accountInitial, authProvider, providerLabel } from '@/lib/account';
 
-const user = (over: Partial<User>): User => over as User;
+type FakeUser = Parameters<typeof accountName>[0];
+
+const user = (over: NonNullable<FakeUser>): FakeUser => over;
 
 describe('accountName', () => {
-  it('prefers the metadata full name', () => {
-    expect(accountName(user({ user_metadata: { full_name: 'Alex Rivera' } }))).toBe('Alex Rivera');
+  it('prefers the full name', () => {
+    expect(accountName(user({ fullName: 'Alex Rivera' }))).toBe('Alex Rivera');
   });
 
-  it('falls back to the metadata name, then the email local part', () => {
-    expect(accountName(user({ user_metadata: { name: 'Sam' } }))).toBe('Sam');
-    expect(accountName(user({ email: 'dane@rivera.dev', user_metadata: {} }))).toBe('dane');
+  it('falls back to the first name, then the email local part', () => {
+    expect(accountName(user({ firstName: 'Sam' }))).toBe('Sam');
+    expect(accountName(user({ primaryEmailAddress: { emailAddress: 'dane@rivera.dev' } }))).toBe(
+      'dane',
+    );
   });
 
   it('returns a neutral placeholder with no user', () => {
@@ -30,17 +33,19 @@ describe('accountInitial', () => {
 
 describe('authProvider / providerLabel', () => {
   it('maps known providers', () => {
-    expect(providerLabel(authProvider(user({ app_metadata: { provider: 'apple' } })))).toBe('Apple');
-    expect(providerLabel(authProvider(user({ app_metadata: { provider: 'google' } })))).toBe(
-      'Google',
-    );
-    expect(providerLabel(authProvider(user({ app_metadata: { provider: 'email' } })))).toBe('Email');
+    expect(
+      providerLabel(authProvider(user({ externalAccounts: [{ provider: 'oauth_apple' }] }))),
+    ).toBe('Apple');
+    expect(
+      providerLabel(authProvider(user({ externalAccounts: [{ provider: 'oauth_google' }] }))),
+    ).toBe('Google');
+    expect(providerLabel(authProvider(user({ passwordEnabled: true })))).toBe('Email');
   });
 
   it('falls back for unknown/missing providers', () => {
     expect(providerLabel(authProvider(null))).toBe('Account');
-    expect(providerLabel(authProvider(user({ app_metadata: { provider: 'github' } })))).toBe(
-      'Account',
-    );
+    expect(
+      providerLabel(authProvider(user({ externalAccounts: [{ provider: 'oauth_github' }] }))),
+    ).toBe('Account');
   });
 });
