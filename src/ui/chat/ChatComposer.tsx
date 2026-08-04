@@ -32,6 +32,8 @@ import {
   composerHeightFor,
 } from '@/ui/chat/composerHeight';
 import { ProviderMark } from '@/ui/chat/providerMarks';
+import { ComposerQuotedReply } from '@/ui/chat/QuotedReply';
+import type { ReplyRef } from '@/ui/chat/types';
 
 /**
  * The composer is a two-row tray: the draft owns the full width on top, and a
@@ -157,6 +159,11 @@ type ChatComposerProps = {
   /** Opens (or closes) the command menu the parent renders above the tray. */
   onCommands?: () => void;
   commandsOpen?: boolean;
+  /** The message this draft is answering, if the user tapped Reply. */
+  reply?: ReplyRef | null;
+  /** What to call the agent in the reply strip's attribution. */
+  agentName?: string;
+  onClearReply?: () => void;
 };
 
 export type ChatComposerHandle = {
@@ -173,6 +180,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   model,
   onCommands,
   commandsOpen = false,
+  reply = null,
+  agentName = 'your agent',
+  onClearReply,
 }: ChatComposerProps, ref) {
   const [height, setHeight] = useState(COMPOSER_MIN_HEIGHT);
   const [listening, setListening] = useState(false);
@@ -305,6 +315,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   return (
     <View style={[styles.inputBar, { paddingBottom: trayBottomInset }]}>
       <Animated.View style={[styles.shell, { borderColor }]}>
+        {reply && onClearReply ? (
+          <ComposerQuotedReply reply={reply} agentName={agentName} onDismiss={onClearReply} />
+        ) : null}
+
         {listening || dictationNote ? (
           <View style={styles.dictationStatus} accessibilityLiveRegion="polite">
             {listening ? <ListeningBars /> : <Mic size={13} color={colors.error} strokeWidth={2} />}

@@ -174,9 +174,73 @@ work: build against the documented SDK contract, then confirm against a real
 running OpenClaw Gateway before calling it done. Fixture/schema-accurate is
 not the same as live-verified.
 
+## Build log
+
+### Phase 1 — built (2026-08-04). Chat parity, `via: 'plugin'`.
+
+Lives at `openclaw-plugin/` in this repo, published from there as
+`summit-openclaw`. It sits alongside `relay/` and `connector/` as a nested
+package with its own `node_modules`, vitest and tsconfig, excluded from the root
+jest/tsconfig. 34 unit tests, `tsc --noEmit` clean, esbuild bundle builds.
+
+**The first open question below is resolved: it is a real channel plugin, not a
+runtime-context bridge.** The deciding fact is that
+`runtime.channel.inbound.run(...)` is the only supported way to hand a message
+to the agent and get a routed, session-recorded, hook-observed reply back —
+`webhooks`/`admin-http-rpc` would mean re-implementing dispatch, which is the
+exact thing the connector already does badly from outside. The chat-platform
+trappings turned out to be cheap to decline rather than expensive to satisfy:
+`security.dm` and `pairing.text` are both **omitted entirely**, because the relay
+already refuses to forward an app frame until that device presents the session
+token minted at pair time (`relay/src/logic.ts`). Authorization lives one layer
+below the channel; a second allowlist in the plugin would be theatre.
+
+What was built:
+
+- `src/relay-client.ts` — outbound `wss://` speaking `protocol/protocol.ts`,
+  `via: 'plugin'` in the hello, `code_rotation`, channel reclaim across
+  restarts, 30s JSON heartbeat (Cloudflare ignores WS control pings).
+- `src/bridge.ts` — `chat` frame → `runtime.channel.inbound.run` → delivered
+  blocks emitted as `chunk`, settled as `done`/`error`. One turn per
+  conversation; the app's `sessionKey`/`sessionId` *is* the conversation id, so
+  one Summit thread is one OpenClaw session.
+- `src/outbox.ts` — port of `connector/outbox.go`. Included in Phase 1
+  deliberately: without it `sync_req` goes unanswered and offline recovery
+  regresses against the connector floor, which the plan forbids.
+- `src/channel.ts` — the channel object, import-cheap (no clients), reaching the
+  live connection through a module-level holder in `src/runtime.ts`.
+
+Wire-contract drift is structurally prevented rather than policed:
+`src/protocol.ts` is `export type *` from `protocol/protocol.ts` and the
+pairing-code helpers are imported directly, with esbuild inlining both at
+publish time.
+
+Notes for Phase 2+:
+
+- **Not live-verified.** Everything is contract-accurate against the installed
+  `openclaw@2026.6.11` typings and proven against a faked runtime. It has not
+  run against a real Gateway, and per this plan's own discipline that is not the
+  same as done. A first real-Gateway run is the gate on calling Phase 1
+  finished.
+- The app needed **no changes**: `via` is already read at `pair.tsx:98`,
+  persisted in `src/db/sqlite.ts`, and consumed at `src/app/(app)/index.tsx:257`
+  to suppress the "install the plugin" nudge. Phase 1 lights that path up by
+  sending the flag, nothing more.
+- `defaultCapabilitiesFor` in `src/agents/frameworks.ts` is still keyed on
+  framework alone, not `(framework, via)`. Phase 2 is the first phase that needs
+  a capability the connector doesn't have, so that is where the `via` dimension
+  should be added — not before.
+- `createChannelPluginBase` widens its optional surfaces back to `| undefined`,
+  so `createChatChannelPlugin` cannot see that `capabilities`/`config` were
+  supplied. `src/channel.ts` re-narrows with a documented assertion. If a later
+  SDK release fixes the typing, delete it.
+- The 15s `activity: "Thinking…"` heartbeat is a placeholder that matches the
+  connector exactly. Phase 3 replaces it with real tool names from
+  `before_tool_call` — that is the whole point of Phase 3.
+
 ## Open questions for whoever builds this
 
-- Exact `registerChannel`/`ChannelPlugin` adapter surface needed for a
+- **Resolved (Phase 1, see build log):** exact `registerChannel`/`ChannelPlugin` adapter surface needed for a
   "backend bridge to our own relay" channel (not a normal DM/group chat
   platform) isn't fully nailed down here — `createChatChannelPlugin` assumes
   DM security/pairing/threading concepts (allowlists, group policy) that

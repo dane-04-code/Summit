@@ -175,6 +175,35 @@ describe('ChatComposer', () => {
     expect(view.getByLabelText('Commands').props.accessibilityState.expanded).toBe(true);
   });
 
+  it('shows who is being replied to, and lets the reply be called off', async () => {
+    const onClearReply = jest.fn();
+    const props = {
+      value: '',
+      onChangeText: jest.fn(),
+      onSend: jest.fn(),
+      onStop: jest.fn(),
+      streaming: false,
+      bottomInset: 0,
+      agentName: 'Hermes',
+      onClearReply,
+    };
+    const view = await render(
+      <ChatComposer
+        {...props}
+        reply={{ id: 'a1', author: 'agent', preview: 'All three jobs are green.' }}
+      />,
+    );
+
+    expect(view.getByText('Replying to Hermes')).toBeTruthy();
+    expect(view.getByText('All three jobs are green.')).toBeTruthy();
+
+    await fireEvent.press(view.getByLabelText('Cancel reply'));
+    expect(onClearReply).toHaveBeenCalledTimes(1);
+
+    await view.rerender(<ChatComposer {...props} reply={null} />);
+    expect(view.queryByText('Replying to Hermes')).toBeNull();
+  });
+
   it('omits the command control when the screen has no menu to open', async () => {
     await render(
       <ChatComposer

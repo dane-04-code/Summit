@@ -14,7 +14,8 @@ conversation is the focus.
   matters most on a screen.
 - System font everywhere. Monospace only inside code blocks (built-in system mono).
 - No gradients, no heavy shadows, no custom theming, no animation beyond standard
-  list/keyboard motion. (One documented exception: the **agent identity mark** — see below.)
+  list/keyboard motion. (Two documented exceptions: the **agent identity mark** and the
+  **pre-auth welcome screen** — see below.)
 
 ---
 
@@ -95,6 +96,31 @@ This is the only place the app shows more than one accent color, and it is delib
 Rationale: with multiple agents paired, "which agent am I talking to" is a real question the
 switcher has to answer at a glance, and name text alone answers it slowly. The mark is identity,
 not decoration — which is why it stops at the switcher and the profile.
+
+### Pre-auth welcome screen (documented exception)
+
+The one screen a user sees before they have an agent is a brand surface, not product UI, and it
+is deliberately aligned with the marketing site rather than with the chat app. Two rules bend
+here and nowhere else:
+
+- **Display face.** `ArchivoExpanded-Bold` (`src/ui/brandFont.ts`) sets the `SUMMIT` wordmark and
+  the headline. It is Archivo pinned to the exact axes the website uses (`wght 700`, `wdth 118`),
+  instanced to a static TTF so it needs no variable-font support on device. It is scoped to this
+  screen: everything from sign-in onward stays on the system font, and the **code-only-mono** rule
+  is untouched.
+- **One authored motion moment.** `SignalPeak` (`src/ui/SignalPeak.tsx`) draws propagation rings
+  leaving the summit of the mark — flattened to `scaleY 0.3` so they read as ground-plane circles
+  seen near-edge-on, drawn *beneath* the mark so the mountain occludes their near half. They run
+  **two passes and then stop**; this is an arrival, not an ambient loop. It honours Reduce Motion
+  (`AccessibilityInfo.isReduceMotionEnabled`) by never starting, and uses RN's built-in `Animated`
+  with `useNativeDriver` — Reanimated is not wired into this project's Babel config.
+
+The mark itself (`assets/images/summit-peak.png`) is the website's own logo art, tinted from
+`colors` rather than shipped pre-coloured. The accent stays `colors.accent` — the site's amber
+lamp colour deliberately does **not** cross over, so the app keeps exactly one accent.
+
+Rationale: this screen has to look like the thing the user just read about. Past sign-in, the
+quiet cockpit resumes.
 
 ### Code block
 `surface` (slightly off-bg) rounded box, radius 10, system mono, optional copy. No border.

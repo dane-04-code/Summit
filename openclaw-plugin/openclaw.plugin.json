@@ -1,0 +1,43 @@
+{
+  "id": "summit",
+  "kind": "channel",
+  "channels": ["summit"],
+  "name": "Summit",
+  "description": "Summit channel plugin — bridges this OpenClaw Gateway to the Summit mobile app over Summit's relay.",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "channelConfigs": {
+    "summit": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "relayUrl": { "type": "string" },
+          "agentName": { "type": "string" },
+          "stateDir": { "type": "string" }
+        }
+      },
+      "uiHints": {
+        "relayUrl": {
+          "label": "Relay URL",
+          "description": "Summit relay to dial. Leave unset to use the hosted relay."
+        },
+        "agentName": {
+          "label": "Agent name",
+          "description": "Name shown in the Summit app once paired."
+        },
+        "stateDir": {
+          "label": "State directory",
+          "description": "Where the pairing identity and reply outbox are stored. Defaults to the plugin state dir."
+        }
+      }
+    }
+  }
+}

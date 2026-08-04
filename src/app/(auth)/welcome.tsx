@@ -5,11 +5,17 @@ import { useRouter } from 'expo-router';
 import { LockKeyhole } from 'lucide-react-native';
 import { SIGNUP_ENABLED } from '@/config';
 import { colors, space, radius, typography, screenPadding } from '@/theme';
+import { BRAND_DISPLAY_FONT, useBrandFont } from '@/ui/brandFont';
+import { SignalPeak } from '@/ui/SignalPeak';
 
-const SUMMIT_MARK = require('../../../assets/images/splash-icon.png');
+const SUMMIT_MARK = require('../../../assets/images/summit-peak.png');
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  // The screen renders immediately in the system font and swaps up to the
+  // display face when it lands, rather than holding the first frame hostage.
+  const brandFont = useBrandFont();
+  const display = brandFont ? { fontFamily: BRAND_DISPLAY_FONT } : styles.displayFallback;
 
   function start() {
     router.push(SIGNUP_ENABLED ? '/(auth)/sign-up' : '/(auth)/sign-in');
@@ -24,8 +30,8 @@ export default function WelcomeScreen() {
       >
         <View style={styles.header}>
           <View style={styles.brand}>
-            <Image source={SUMMIT_MARK} style={styles.mark} resizeMode="contain" />
-            <Text style={styles.wordmark}>Summit</Text>
+            <Image source={SUMMIT_MARK} style={styles.mark} resizeMode="contain" tintColor={colors.ink} />
+            <Text style={[styles.wordmark, display]}>SUMMIT</Text>
           </View>
           <Pressable
             accessibilityRole="button"
@@ -38,12 +44,15 @@ export default function WelcomeScreen() {
         </View>
 
         <View style={styles.hero}>
-          <Text style={styles.eyebrow}>YOUR AGENT. ANYWHERE.</Text>
-          <Text style={styles.title}>Stay close to the work.</Text>
+          <Text style={[styles.title, display]}>Your agent,{'\n'}within range</Text>
           <Text style={styles.subtitle}>
             Pair your self-hosted agent once. Chat, follow progress, and approve actions wherever
             you are.
           </Text>
+        </View>
+
+        <View style={styles.signal}>
+          <SignalPeak width={132} tint={colors.ink2} />
         </View>
 
         <View style={styles.footer}>
@@ -80,33 +89,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  mark: { width: 25, height: 24 },
+  mark: { width: 26, height: 18 },
   wordmark: {
-    ...typography.body,
     color: colors.ink,
-    fontWeight: '600',
-    letterSpacing: -0.3,
+    fontSize: 17,
+    lineHeight: 20,
+    letterSpacing: 0.5,
   },
   signInButton: { paddingHorizontal: space.sm, paddingVertical: space.sm },
   signInText: { ...typography.small, color: colors.ink2, fontWeight: '500' },
   pressed: { opacity: 0.55 },
 
-  hero: { paddingTop: 46, paddingBottom: space.xxl },
-  eyebrow: {
-    ...typography.caption,
-    color: colors.faint,
-    fontWeight: '600',
-    letterSpacing: 1.8,
-  },
+  hero: { paddingTop: 46 },
   title: {
     color: colors.ink,
-    fontSize: 42,
-    lineHeight: 46,
-    fontWeight: '600',
-    letterSpacing: -1.5,
-    maxWidth: 330,
-    marginTop: space.md,
+    fontSize: 44,
+    lineHeight: 44,
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
   },
+  /** Until the display face lands, the system font stands in at its own metrics. */
+  displayFallback: { fontWeight: '700', letterSpacing: -0.5 },
   subtitle: {
     ...typography.body,
     color: colors.muted,
@@ -114,7 +117,15 @@ const styles = StyleSheet.create({
     marginTop: space.lg,
   },
 
-  footer: { flex: 1, justifyContent: 'flex-end', paddingTop: space.xxl },
+  signal: {
+    flex: 1,
+    minHeight: 132,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: space.xl,
+  },
+
+  footer: { paddingTop: space.xl },
   privacyRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -125,7 +136,7 @@ const styles = StyleSheet.create({
   privacyText: { ...typography.caption, color: colors.faint },
   primaryButton: {
     minHeight: 54,
-    borderRadius: 12,
+    borderRadius: radius.control,
     backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',

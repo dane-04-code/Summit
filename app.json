@@ -46,6 +46,14 @@
           }
         }
       ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/ArchivoExpanded-Bold.ttf"
+          ]
+        }
+      ],
       "expo-secure-store",
       "expo-apple-authentication",
       "expo-sqlite",

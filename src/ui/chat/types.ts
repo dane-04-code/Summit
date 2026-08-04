@@ -58,9 +58,22 @@ export type AgentBlock =
 /** A pending run-approval request: the run id to resolve, plus what to show. */
 export type ApprovalRequest = { runId: string; title: string; command: string };
 
+/**
+ * What a message is answering. A *frozen snippet*, not a live pointer: the
+ * preview is captured when Reply is tapped and never re-read, so an edited or
+ * deleted original can't change what a sent reply appears to quote. The `id`
+ * is kept anyway — it's what a later scroll-to-original would resolve.
+ */
+export type ReplyRef = {
+  id: string;
+  author: 'user' | 'agent';
+  /** Short one-line snippet for the UI strip. Cosmetic — never sent. */
+  preview: string;
+};
+
 export type Message =
-  | { id: string; role: 'user'; text: string }
-  | { id: string; role: 'agent'; blocks: AgentBlock[] }
+  | { id: string; role: 'user'; text: string; replyTo?: ReplyRef }
+  | { id: string; role: 'agent'; blocks: AgentBlock[]; replyTo?: ReplyRef }
   | ({ id: string; role: 'action' } & ApprovalRequest);
 
 /** A conversation summary in the sidebar recents list. */
@@ -120,6 +133,60 @@ export function messageToText(message: Message): string {
   if (message.role === 'user') return message.text;
   if (message.role === 'action') return `${message.title}\n${message.command}`;
   return blocksToText(message.blocks);
+}
+
+// ── Reply helpers ───────────────────────────────────────────────────────────
+// A reply produces two derived strings from the same target, and they are not
+// interchangeable: a short one for the UI, and the full quoted body that is
+// folded into what the agent actually receives.
+
+/** Length of the cosmetic snippet in the reply strip. */
+export const REPLY_PREVIEW_CHARS = 100;
+
+/**
+ * Ceiling on the quoted original folded into the outbound message. Replying to
+ * a long agent dump must not dominate the next turn's context window.
+ */
+export const QUOTED_CONTEXT_CHARS = 4000;
+
+function truncate(text: string, maxChars: number): string {
+  return text.length <= maxChars ? text : `${text.slice(0, maxChars - 1).trimEnd()}…`;
+}
+
+/** Collapse a message to the single line shown in a reply strip. */
+export function replyPreview(message: Message, maxChars = REPLY_PREVIEW_CHARS): string {
+  return truncate(messageToText(message).replace(/\s+/g, ' ').trim(), maxChars);
+}
+
+/** Freeze a reply target into the ref stored on the outgoing message. */
+export function replyRefFor(message: Message): ReplyRef | null {
+  if (message.role === 'action') return null;
+  return { id: message.id, author: message.role, preview: replyPreview(message) };
+}
+
+/**
+ * The target message as a markdown blockquote, capped, for folding into the
+ * string handed to the adapter. This is the whole point of the feature: the
+ * referenced content travels with the new turn, so the agent sees it even when
+ * its own session memory has rolled over. Empty targets quote nothing.
+ */
+export function buildQuotedContext(target: Message, maxChars = QUOTED_CONTEXT_CHARS): string {
+  const body = truncate(messageToText(target).trim(), maxChars);
+  if (!body) return '';
+  return body
+    .split('\n')
+    .map((line) => (line.trim() ? `> ${line}` : '>'))
+    .join('\n');
+}
+
+/** The outbound string for a reply: the quoted original, then what was typed. */
+export function withQuotedContext(
+  target: Message | null,
+  typed: string,
+  maxChars = QUOTED_CONTEXT_CHARS,
+): string {
+  const quoted = target ? buildQuotedContext(target, maxChars) : '';
+  return quoted ? `${quoted}\n\n${typed}` : typed;
 }
 
 // ── Markdown document helpers ───────────────────────────────────────────────

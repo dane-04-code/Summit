@@ -89,6 +89,7 @@
       "/node_modules/",
       "<rootDir>/relay/",
       "<rootDir>/connector/",
+      "<rootDir>/openclaw-plugin/",
       "<rootDir>/protocol/",
       "<rootDir>/__tests__/fixtures/"
     ],

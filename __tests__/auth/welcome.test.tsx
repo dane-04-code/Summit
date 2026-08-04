@@ -15,8 +15,8 @@ beforeEach(() => mockPush.mockClear());
 it('renders supported Summit onboarding without a fictional agent cockpit', async () => {
   await render(<WelcomeScreen />);
 
-  expect(screen.getByText('Summit')).toBeTruthy();
-  expect(screen.getByText('Stay close to the work.')).toBeTruthy();
+  expect(screen.getByText('SUMMIT')).toBeTruthy();
+  expect(screen.getByText('Your agent,\nwithin range')).toBeTruthy();
   expect(screen.queryByText('Production checks passed')).toBeNull();
   expect(screen.queryByText('Deploy the new release?')).toBeNull();
   expect(screen.getByText('Your agent key stays on your server')).toBeTruthy();

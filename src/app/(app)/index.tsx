@@ -38,12 +38,14 @@ import { CopiedToast } from '@/ui/chat/CopiedToast';
 import { EventDisclosure } from '@/ui/chat/EventDisclosure';
 import { useAuth } from '@/context/AuthContext';
 import { accountName, accountInitial } from '@/lib/account';
-import { messageToText } from '@/ui/chat/types';
+import { messageToText, replyRefFor, withQuotedContext } from '@/ui/chat/types';
+import { QuotedReply } from '@/ui/chat/QuotedReply';
+import { MessageActionMenu, type MessageAnchor } from '@/ui/chat/MessageActionMenu';
 import { approvalResolutions, type ApprovalCommand } from '@/ui/chat/approvalPrompt';
 import { renameSession } from '@/ui/chat/sessionActions';
 import { buildApprovalMessage, resolveApproval } from '@/ui/chat/approval';
 import type { ApprovalDecision } from '@/ui/chat/approval';
-import type { Message, RunState, MarkdownFile, ChatGroup } from '@/ui/chat/types';
+import type { Message, RunState, MarkdownFile, ChatGroup, ReplyRef } from '@/ui/chat/types';
 import { useAgents } from '@/agents/AgentProvider';
 import { captureError } from '@/lib/errorReporting';
 import { defaultCapabilitiesFor, frameworkLabel } from '@/agents/frameworks';
@@ -119,25 +121,47 @@ function formatElapsed(milliseconds: number): string {
 
 function MessageRow({
   message,
+  agentName,
   onApprove,
   onStop,
   onApprovalCommand,
   resolvedApprovalCommand,
   onOpenFile,
-  onCopy,
+  onLongPress,
 }: {
   message: Message;
+  agentName: string;
   onApprove: (id: string) => void;
   onStop: (id: string) => void;
   onApprovalCommand: (command: ApprovalCommand) => void;
   resolvedApprovalCommand?: ApprovalCommand;
   onOpenFile: (file: MarkdownFile) => void;
-  onCopy: (message: Message) => void;
+  onLongPress: (message: Message, anchor: MessageAnchor) => void;
 }) {
+  const pressableRef = useRef<View>(null);
+
+  // The menu opens *at* the message, so it needs where the message actually
+  // landed — measured at press time rather than tracked, since the thread
+  // scrolls and grows underneath it.
+  const handleLongPress = useCallback(
+    (align: MessageAnchor['align']) => {
+      pressableRef.current?.measureInWindow((x, y, width, height) => {
+        onLongPress(message, { x, y, width, height, align });
+      });
+    },
+    [message, onLongPress],
+  );
+
   if (message.role === 'user') {
     return (
       <View style={styles.userRow}>
-        <Pressable onLongPress={() => onCopy(message)} style={styles.userBubble}>
+        <Pressable
+          ref={pressableRef}
+          onLongPress={() => handleLongPress('right')}
+          style={styles.userBubble}
+          accessibilityHint="Press and hold to reply or copy"
+        >
+          {message.replyTo ? <QuotedReply reply={message.replyTo} agentName={agentName} /> : null}
           <Text style={styles.userText}>{message.text}</Text>
         </Pressable>
       </View>
@@ -158,7 +182,13 @@ function MessageRow({
   }
 
   return (
-    <Pressable onLongPress={() => onCopy(message)} style={styles.block}>
+    <Pressable
+      ref={pressableRef}
+      onLongPress={() => handleLongPress('left')}
+      style={styles.block}
+      accessibilityHint="Press and hold to reply or copy"
+    >
+      {message.replyTo ? <QuotedReply reply={message.replyTo} agentName={agentName} /> : null}
       <AgentMessage
         blocks={message.blocks}
         onOpenFile={onOpenFile}
@@ -198,6 +228,11 @@ export default function AgentScreen() {
   const [activeToolLabel, setActiveToolLabel] = useState<string | null>(null);
   const [completionReceipt, setCompletionReceipt] = useState<RecoveredReply | null>(null);
   const [showPluginNudge, setShowPluginNudge] = useState(false);
+  // The long-pressed message and where it sits, while its action menu is open.
+  const [actionTarget, setActionTarget] = useState<{ message: Message; anchor: MessageAnchor } | null>(null);
+  // The message the next send answers. The *whole* message, not just its
+  // preview — the outbound quote needs the full body, not the UI snippet.
+  const [replyTarget, setReplyTarget] = useState<Message | null>(null);
   // The command menu, opened by tapping the composer's + rather than typing a
   // slash. Same menu, same commands — just reachable without knowing to type.
   const [commandsOpen, setCommandsOpen] = useState(false);
@@ -303,6 +338,9 @@ export default function AgentScreen() {
     async (session: ChatSession | null) => {
       sessionRef.current = session;
       setActiveSessionId(session?.id ?? '');
+      // A reply target belongs to the thread it was picked in — it must never
+      // survive into a different conversation's composer.
+      setReplyTarget(null);
       if (!session) {
         setMessages([]);
         return;
@@ -430,6 +468,7 @@ export default function AgentScreen() {
     [commandsOpen, input, capabilities],
   );
   const agentFrameworkLabel = activeAgent ? frameworkLabel(activeAgent.framework) : 'Hermes';
+  const agentDisplayName = activeAgent?.name ?? AGENT_NAME;
   const sidebarTitle = activeAgent?.name ?? 'Summit';
   const sidebarSubtitle = activeAgent
     ? agentFrameworkLabel
@@ -440,6 +479,7 @@ export default function AgentScreen() {
     sessionRef.current = null;
     setActiveSessionId('');
     setMessages([]);
+    setReplyTarget(null);
     updateInput('');
     setStreaming(false);
     setStatus('idle');
@@ -468,6 +508,25 @@ export default function AgentScreen() {
     setCopiedAt(Date.now());
   }, []);
 
+  const handleLongPressMessage = useCallback((message: Message, anchor: MessageAnchor) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setActionTarget({ message, anchor });
+  }, []);
+
+  const handleMenuReply = useCallback(() => {
+    if (!actionTarget) return;
+    Haptics.selectionAsync().catch(() => {});
+    setReplyTarget(actionTarget.message);
+    setActionTarget(null);
+    composerRef.current?.focus();
+  }, [actionTarget]);
+
+  const handleMenuCopy = useCallback(() => {
+    if (!actionTarget) return;
+    handleCopyMessage(actionTarget.message);
+    setActionTarget(null);
+  }, [actionTarget, handleCopyMessage]);
+
   const handleSelectChat = useCallback(
     async (id: string) => {
       const session = await repo.getSession(id);
@@ -494,6 +553,7 @@ export default function AgentScreen() {
         sessionRef.current = null;
         setActiveSessionId('');
         setMessages([]);
+        setReplyTarget(null);
         setStreaming(false);
         setStatus('idle');
       }
@@ -530,6 +590,7 @@ export default function AgentScreen() {
       sessionRef.current = null;
       setActiveSessionId('');
       setMessages([]);
+      setReplyTarget(null);
       setChatGroups([]);
       setStatus('idle');
       setActiveToolLabel(null);
@@ -668,7 +729,11 @@ export default function AgentScreen() {
     });
   }, [activeAgent, adapterFor]);
 
-  const submitText = useCallback(async (rawText: string, clearComposer: boolean) => {
+  const submitText = useCallback(async (
+    rawText: string,
+    clearComposer: boolean,
+    reply: Message | null = null,
+  ) => {
     const text = rawText.trim();
     if (!text || streaming || !activeAgent) return;
     stopRef.current = false;
@@ -688,7 +753,17 @@ export default function AgentScreen() {
 
     const session = await ensureSession();
     const now = Date.now();
-    const userMsg: Message = { id: genId(), role: 'user', text };
+    const replyRef = reply ? replyRefFor(reply) : null;
+    const userMsg: Message = {
+      id: genId(),
+      role: 'user',
+      text,
+      ...(replyRef ? { replyTo: replyRef } : {}),
+    };
+    // What's stored and shown is the raw typed line; what the agent receives
+    // carries the quoted original ahead of it, so the reference survives even
+    // when the host's own session memory has rolled over.
+    const outboundText = withQuotedContext(reply, text);
     await repo.appendMessage({ id: userMsg.id, sessionId: session.id, message: userMsg, createdAt: now });
 
     const agentId = genId();
@@ -723,7 +798,7 @@ export default function AgentScreen() {
     };
     try {
       const adapter = adapterFor(activeAgent);
-      const stream = adapter.sendMessage(text, {
+      const stream = adapter.sendMessage(outboundText, {
         sessionId: session.id,
         sessionKey: session.remoteSessionKey ?? undefined,
       });
@@ -830,8 +905,15 @@ export default function AgentScreen() {
   }, [streaming, activeAgent, adapterFor, repo, ensureSession, loadSessionSummaries, updateInput]);
 
   const handleSend = useCallback(() => {
-    void submitText(input, true);
-  }, [input, submitText]);
+    const reply = replyTarget;
+    setReplyTarget(null);
+    void submitText(input, true, reply);
+  }, [input, replyTarget, submitText]);
+
+  const composerReply: ReplyRef | null = useMemo(
+    () => (replyTarget ? replyRefFor(replyTarget) : null),
+    [replyTarget],
+  );
 
   const handleApprovalCommand = useCallback(
     (command: ApprovalCommand) => {
@@ -908,12 +990,13 @@ export default function AgentScreen() {
             renderItem={({ item }) => (
               <MessageRow
                 message={item}
+                agentName={agentDisplayName}
                 onApprove={handleApprove}
                 onStop={handleStop}
                 onApprovalCommand={handleApprovalCommand}
                 resolvedApprovalCommand={resolvedApprovalCommands.get(item.id)}
                 onOpenFile={handleOpenFile}
-                onCopy={handleCopyMessage}
+                onLongPress={handleLongPressMessage}
               />
             )}
             keyExtractor={(item) => item.id}
@@ -954,6 +1037,9 @@ export default function AgentScreen() {
             model={composerModel}
             onCommands={handleToggleCommands}
             commandsOpen={commandsOpen}
+            reply={composerReply}
+            agentName={agentDisplayName}
+            onClearReply={() => setReplyTarget(null)}
           />
         </KeyboardAvoidingView>
 
@@ -986,6 +1072,15 @@ export default function AgentScreen() {
       />
 
       <MdReader file={openFile} onClose={() => setOpenFile(null)} />
+
+      {actionTarget && (
+        <MessageActionMenu
+          anchor={actionTarget.anchor}
+          onReply={handleMenuReply}
+          onCopy={handleMenuCopy}
+          onDismiss={() => setActionTarget(null)}
+        />
+      )}
     </>
   );
 }
