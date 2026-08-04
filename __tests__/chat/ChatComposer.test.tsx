@@ -64,6 +64,49 @@ describe('ChatComposer', () => {
     expect(input.props.textAlignVertical).toBe('top');
   });
 
+  it('keeps the field scrollable at rest so iOS reports a truthful content height', async () => {
+    // iOS pins a UITextView's contentSize to its frame while scrolling is off,
+    // so a field that disables scrolling below its maximum can never measure
+    // its way past one line — the draft wraps into clipped, unreachable space.
+    await render(
+      <ChatComposer
+        value=""
+        onChangeText={jest.fn()}
+        onSend={jest.fn()}
+        onStop={jest.fn()}
+        streaming={false}
+        bottomInset={0}
+      />,
+    );
+
+    expect(screen.getByLabelText('Message input').props.scrollEnabled).not.toBe(false);
+  });
+
+  it('collapses after a send clears the draft from the parent', async () => {
+    const props = {
+      onChangeText: jest.fn(),
+      onSend: jest.fn(),
+      onStop: jest.fn(),
+      streaming: false,
+      bottomInset: 0,
+    };
+    const view = await render(<ChatComposer {...props} value={'A five line draft'} />);
+
+    await fireEvent(view.getByLabelText('Message input'), 'contentSizeChange', {
+      nativeEvent: { contentSize: { width: 200, height: 120 } },
+    });
+    await waitFor(() => {
+      expect(StyleSheet.flatten(view.getByLabelText('Message input').props.style).height).toBe(120);
+    });
+
+    // The send path clears `value` from the parent; `onChangeText` never fires.
+    await view.rerender(<ChatComposer {...props} value="" />);
+
+    await waitFor(() => {
+      expect(StyleSheet.flatten(view.getByLabelText('Message input').props.style).height).toBe(28);
+    });
+  });
+
   it('grows from a native content measurement even when it arrives before the text update', async () => {
     const props = {
       onChangeText: jest.fn(),

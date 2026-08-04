@@ -210,6 +210,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
 
   useEffect(() => {
     valueRef.current = value;
+    // A send clears the draft from the parent without going through
+    // `onChangeText`, so the tray has to collapse on its own rather than
+    // waiting for a measurement that may never come.
+    if (!value) setHeight(COMPOSER_MIN_HEIGHT);
   }, [value]);
 
   useEffect(() => {
@@ -339,7 +343,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
           onBlur={() => animateFocus(0)}
           autoCorrect
           multiline
-          scrollEnabled={displayedHeight >= COMPOSER_MAX_HEIGHT}
+          // Scrolling stays enabled at every height. iOS pins a UITextView's
+          // contentSize to its frame while scrolling is off, so disabling it
+          // makes `onContentSizeChange` report the height the field already
+          // has — the field never learns it needs to grow, and the wrapped
+          // line is clipped with no way to reach it. There is nothing to
+          // scroll below the maximum anyway, because the frame is the
+          // content.
+          scrollEnabled
           onContentSizeChange={
             Platform.OS === 'web'
               ? undefined
