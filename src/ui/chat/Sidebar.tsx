@@ -55,9 +55,9 @@ const SCRIM_OPACITY = 0.55;
 export type AgentOption = {
   id: string;
   name: string;
+  framework: string;
   frameworkLabel: string;
-  /** Identity mark; either half may be absent (see `agentIdentity/avatars`). */
-  avatarId?: string | null;
+  /** User-chosen accent tint; absent renders the neutral default. */
   accentColor?: string | null;
 };
 
@@ -146,10 +146,10 @@ function AgentRow({
       accessibilityLabel={`${agent.name}, ${agent.frameworkLabel}`}
       style={({ pressed }) => [styles.agentRow, (active || pressed) && styles.rowActive]}
     >
-      {/* One mark carries both halves of the identity: the glyph and the accent
-          tint that fills it. A separate color dot alongside would say the same
-          thing twice, and this row already ends in a check. */}
-      <AgentAvatar avatarId={agent.avatarId} accent={agent.accentColor} size={28} />
+      {/* One mark carries both halves of the identity: the harness logo and the
+          accent tint that fills its tile. A separate color dot alongside would
+          say the same thing twice, and this row already ends in a check. */}
+      <AgentAvatar framework={agent.framework} accent={agent.accentColor} size={28} />
       <View style={styles.rowText}>
         <Text style={styles.rowTitle} numberOfLines={1}>
           {agent.name}

@@ -1,11 +1,18 @@
 ---
 name: summit-launch-copy
-description: Write or audit Summit beta recruitment, App Store, website, demo, community, and X copy for technical self-hosters. Use when preparing external launch material; it enforces truthful Hermes-first claims and the mobile-agent-cockpit positioning.
+description: Write or audit Summit beta recruitment, website, demo, community, and X copy. Use when preparing external launch material; it enforces truthful Hermes-first claims and the mobile-agent-cockpit positioning. App Store Connect listing fields belong to summit-app-store, not this skill.
 ---
 
 # Summit Launch Copy
 
 Read `product-brief.md`, `docs/GO_TO_MARKET_PLAN.md`, and `docs/PUBLISHING_COPY.md`. Request or consume the current evidence ledger before drafting.
+
+## Scope note
+
+App Store Connect listing fields (name, subtitle, keyword field, promotional text, description,
+what's new, screenshot captions) belong to `summit-app-store` — hand those off; character budgets and
+keyword mechanics make it a specialist surface. This skill owns website, beta recruitment, demo,
+community, and X copy.
 
 ## Positioning
 

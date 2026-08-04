@@ -1,37 +1,32 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
-import { colors, radius } from '@/theme';
+import { Image } from 'react-native';
+import { colors } from '@/theme';
 
-/** The Summit mountain-peak glyph (the rounded Λ from the app icon). */
-export function PeakGlyph({ size = 32, color = colors.bg }: { size?: number; color?: string }) {
+/**
+ * The Summit mark — the website's own mountain logo art, shipped white on
+ * transparent and tinted at runtime so one file serves every surface. This is
+ * the single source of the mark in the app; anything drawing it imports from
+ * here rather than reaching for the asset directly.
+ */
+export const SUMMIT_MARK = require('../../assets/images/summit-peak.png');
+
+/** Intrinsic aspect of the mark art. Shared with the marketing site. */
+export const MARK_ASPECT = 540 / 363;
+
+/**
+ * The mark at the head of the auth screens. It sits bare on the background
+ * rather than inside a tile: the art is the identity, and a container around
+ * it would be chrome the screen hasn't earned.
+ */
+export function BrandMark({ width = 76, tint = colors.ink }: { width?: number; tint?: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 18 18" fill="none">
-      <Path
-        d="M3.4 14.2 9 3.8l5.6 10.4"
-        stroke={color}
-        strokeWidth={2.6}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
+    <Image
+      source={SUMMIT_MARK}
+      style={{ width, height: Math.round(width / MARK_ASPECT) }}
+      resizeMode="contain"
+      tintColor={tint}
+      accessibilityRole="image"
+      accessibilityLabel="Summit"
+    />
   );
 }
-
-/** The glyph in the rounded-square ink tile used at the top of auth screens. */
-export function BrandMark({ size = 60 }: { size?: number }) {
-  return (
-    <View style={[styles.tile, { width: size, height: size }]}>
-      <PeakGlyph size={Math.round(size * 0.53)} />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  tile: {
-    borderRadius: radius.bubble,
-    backgroundColor: colors.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

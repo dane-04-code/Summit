@@ -226,7 +226,7 @@ shadow.
 
 Soft, moderate corner radii scaled to the size of the element rather than one global radius:
 small controls and code fill use `10px` (`radius.control` / `radius.code`), inputs use `14px`
-(`radius.input`), the app mark uses `16px` (`radius.appMark`), and the user message bubble — the
+(`radius.input`), the cron drop card uses `16px` (`radius.appMark`), and the user message bubble — the
 largest and most prominent rounded shape on screen — uses `18px` (`radius.bubble`). No sharp
 corners; fully rounded chrome is confined to the composer tray's own controls, where every
 control is a `36px` circle or a pill of the same height. Borders are limited to rare
@@ -300,9 +300,16 @@ The tray pays the home-indicator inset only while the keyboard is down — once 
 keyboard-avoiding view has already cleared the safe area and the tray sits `12px` above the keys.
 
 ### App Mark
-A small rounded-square mark (`16px` radius, light `ink` fill, dark glyph) paired with the "Summit"
-wordmark (muted, uppercase, tracked) — used at the top of the Connect screen. Functions as basic
-identity, explicitly not branding theatre.
+The Summit mountain — the website's own logo art, shipped white on transparent and tinted from
+`colors` at every size, so one file serves every surface. `BrandMark` (`src/ui/BrandMark.tsx`) is
+the single source of the mark; nothing else requires the asset directly. It sits bare on the
+background at the head of the auth screens (`76pt` wide), never inside a tile or badge — the art
+is the identity, and a container around it is chrome the screen hasn't earned. Paired with the
+"Summit" wordmark (muted, uppercase, tracked) where a wordmark is wanted.
+
+The same mark is the app icon, the splash art, and the Android adaptive/monochrome layers — always
+white on `bg` (`#0F1012`), so icon, launch frame, and first screen read as one continuous surface
+rather than three different brands.
 
 ## Do's and Don'ts
 

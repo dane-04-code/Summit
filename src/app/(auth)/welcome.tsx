@@ -7,8 +7,7 @@ import { SIGNUP_ENABLED } from '@/config';
 import { colors, space, radius, typography, screenPadding } from '@/theme';
 import { BRAND_DISPLAY_FONT, useBrandFont } from '@/ui/brandFont';
 import { SignalPeak } from '@/ui/SignalPeak';
-
-const SUMMIT_MARK = require('../../../assets/images/summit-peak.png');
+import { SUMMIT_MARK } from '@/ui/BrandMark';
 
 export default function WelcomeScreen() {
   const router = useRouter();

@@ -175,9 +175,9 @@ function ActivityStatus({ label }: { label?: string }) {
       accessibilityLabel={`Agent status: ${visibleLabel}`}
       accessibilityLiveRegion="polite"
     >
-      <Text style={styles.activityLabel}>
+      <View style={styles.activityRow}>
         {characters.map((character, index) => (
-          <Animated.Text
+          <Animated.View
             key={`${index}-${character}`}
             style={{
               opacity: progress.interpolate({
@@ -187,10 +187,10 @@ function ActivityStatus({ label }: { label?: string }) {
               }),
             }}
           >
-            {character}
-          </Animated.Text>
+            <Text style={styles.activityLabel}>{character}</Text>
+          </Animated.View>
         ))}
-      </Text>
+      </View>
     </View>
   );
 }
@@ -381,6 +381,9 @@ const styles = StyleSheet.create({
   activityStatus: {
     alignSelf: 'flex-start',
     paddingVertical: space.xs,
+  },
+  activityRow: {
+    flexDirection: 'row',
   },
   activityLabel: {
     ...typography.caption,

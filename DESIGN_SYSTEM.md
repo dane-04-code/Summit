@@ -14,7 +14,7 @@ conversation is the focus.
   matters most on a screen.
 - System font everywhere. Monospace only inside code blocks (built-in system mono).
 - No gradients, no heavy shadows, no custom theming, no animation beyond standard
-  list/keyboard motion. (Two documented exceptions: the **agent identity mark** and the
+  list/keyboard motion. (Two documented exceptions: the **agent mark** and the
   **pre-auth welcome screen** — see below.)
 
 ---
@@ -57,7 +57,7 @@ System font for everything. Built-in monospace only inside code blocks.
 ## Spacing & shape
 
 - **Spacing scale:** `4 · 8 · 12 · 16 · 24 · 32`.
-- **Radii:** user bubble `18` · input `14` · code block `10` · app mark `16`.
+- **Radii:** user bubble `18` · input `14` · code block `10` · cron drop card `16`.
 - **Screen padding:** `24` horizontal (generous).
 - **Hairline:** `1px` in `line`. Use rarely.
 
@@ -66,36 +66,46 @@ System font for everything. Built-in monospace only inside code blocks.
 ## Components
 
 ### App mark
-A small rounded-square mark (light `ink` fill, dark glyph) at the top of the Connect
-screen, with the wordmark "Summit" (muted, uppercase, tracked) — basic identity,
-not branding theatre.
+The Summit mountain — the website's own logo art (`assets/images/summit-peak.png`),
+shipped white on transparent and tinted from `colors` at every size. `BrandMark`
+(`src/ui/BrandMark.tsx`) is the only place the asset is required; everything else
+imports from there. It sits bare on the background, never in a tile or badge: the
+art is the identity, and a container around it is chrome the screen hasn't earned.
+Paired with the wordmark "Summit" (muted, uppercase, tracked) where a wordmark is
+wanted — basic identity, not branding theatre.
+
+The same mark is the app icon, the splash art, and the Android adaptive/monochrome
+layers, always white on `bg` — so the icon, the launch frame, and the first screen
+are one continuous surface.
 
 ### Message rows (hybrid layout)
 - User: right-aligned bubble, `surface` background, `radius.bubble`, max 80%, `ink` text.
 - Agent: full width, no bubble, `ink` body text.
 - No name labels, timestamps, or avatars.
 
-### Agent identity mark (documented exception)
+### Agent mark (documented exception)
 
-Each paired agent may carry one **mark** — a glyph from a fixed set of ten (`AGENT_AVATAR_IDS`)
-and an accent from a fixed palette of ten (`agentAccentPalette`) — chosen by the user. Both halves
-are optional and independent; an agent with neither renders the neutral default it always had.
+Each paired agent shows one **mark**: the connected harness's official logo (Hermes, OpenClaw —
+`assets/images/harness-*.png`) on a tile tinted with an accent from a fixed palette of ten
+(`agentAccentPalette`), chosen by the user. The mark itself identifies the harness and is not
+user-chosen; only the tint is. A framework without an official mark yet falls back to a neutral
+`Bot` icon. An agent with no accent chosen renders the neutral default it always had.
 
 This is the only place the app shows more than one accent color, and it is deliberately narrow:
 
-- **Where it appears:** the agent profile hero, the profile's identity picker, and the sidebar
+- **Where it appears:** the agent profile hero, the profile's accent picker, and the sidebar
   agent-switcher row. Nowhere else.
 - **Where it does not:** the chat transcript. The "no avatars" rule above still holds absolutely —
   message rows never carry a mark, a name, or a color.
-- **It never becomes a theme.** The mark tints a glyph, a hairline, and a wash (`accentAlpha`);
-  it never fills a surface, a button, or a bubble. `colors.accent` remains the app's single accent
-  and is not a pickable value, so an agent mark can never be mistaken for a link or focus ring.
-- Glyphs are authored SVG in one stroke language matching `lucide-react-native`, not raster art —
-  they scale from 28px to 58px and take the accent color directly.
+- **It never becomes a theme.** The accent tints a tile background, a hairline, and a wash
+  (`accentAlpha`); it never fills a surface, a button, or a bubble. `colors.accent` remains the
+  app's single accent and is not a pickable value, so an agent's accent can never be mistaken for
+  a link or focus ring.
 
 Rationale: with multiple agents paired, "which agent am I talking to" is a real question the
-switcher has to answer at a glance, and name text alone answers it slowly. The mark is identity,
-not decoration — which is why it stops at the switcher and the profile.
+switcher has to answer at a glance, and name text alone answers it slowly. The official harness
+logo answers "what is this" faster than a name does; the accent answers "which one of several" —
+which is why the mark stops at the switcher and the profile.
 
 ### Pre-auth welcome screen (documented exception)
 

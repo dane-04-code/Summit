@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Image, StyleSheet, Animated, Easing, AccessibilityInfo } from 'react-native';
 import { colors } from '@/theme';
-
-const PEAK = require('../../assets/images/summit-peak.png');
+import { SUMMIT_MARK, MARK_ASPECT } from '@/ui/BrandMark';
 
 /**
  * Geometry measured from the alpha channel of the source mark (1604 x 1077):
@@ -11,7 +10,6 @@ const PEAK = require('../../assets/images/summit-peak.png');
  * These values are shared with the marketing site's `mark-geometry.ts`.
  */
 const PEAK_POINT = { x: 0.5087, y: 0.0446 };
-const PEAK_ASPECT = 1604 / 1077;
 
 /** Rings read as ground-plane circles seen near-edge-on, not as flat halos. */
 const RING_FLATTEN = 0.3;
@@ -92,7 +90,7 @@ function Ring({ index, diameter }: { index: number; diameter: number }) {
  * peak rather than across it.
  */
 export function SignalPeak({ width = 128, tint = colors.ink }: { width?: number; tint?: string }) {
-  const height = Math.round(width / PEAK_ASPECT);
+  const height = Math.round(width / MARK_ASPECT);
   const ringDiameter = Math.round(width * 2.1);
 
   return (
@@ -109,7 +107,7 @@ export function SignalPeak({ width = 128, tint = colors.ink }: { width?: number;
           <Ring key={i} index={i} diameter={ringDiameter} />
         ))}
       </View>
-      <Image source={PEAK} style={{ width, height }} resizeMode="contain" tintColor={tint} />
+      <Image source={SUMMIT_MARK} style={{ width, height }} resizeMode="contain" tintColor={tint} />
     </View>
   );
 }

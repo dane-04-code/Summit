@@ -57,7 +57,7 @@ for links/focus/the one thing that matters most on a screen, never used broadly.
 ## Spacing, radii, layout
 
 - Spacing scale (px): `4 · 8 · 12 · 16 · 24 · 32`
-- Radii: bubble `18` · input `14` · code block `10` · small controls `10` · app mark `16`
+- Radii: bubble `18` · input `14` · code block `10` · small controls `10` · cron drop card `16`
 - Screen padding: `24` horizontal, generous
 - Hairlines: `1px` in `line`, used rarely
 
@@ -74,7 +74,7 @@ for links/focus/the one thing that matters most on a screen, never used broadly.
   muted label like "searching the web…".
 - **Input bar:** pinned above keyboard, `surface` rounded field (radius 14) + circular send
   button in `ink` (light fill) with a dark (`onAccentBtn`) arrow glyph.
-- **Connect screen:** app mark (rounded square, `ink` fill, dark glyph) + uppercase tracked
+- **Connect screen:** app mark (the Summit mountain, `ink`-tinted, bare on `bg`) + uppercase tracked
   "Summit" wordmark, `title` heading, one-line `muted` subtitle, two `surface` filled fields,
   an expandable mono-on-surface help disclosure, one light primary button. Errors in `error`,
   plain and specific. Vertically composed, not crammed at the top.

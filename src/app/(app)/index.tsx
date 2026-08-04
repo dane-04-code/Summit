@@ -572,8 +572,8 @@ export default function AgentScreen() {
       agents.map((agent) => ({
         id: agent.id,
         name: agent.name,
+        framework: agent.framework,
         frameworkLabel: frameworkLabel(agent.framework),
-        avatarId: agent.avatarId ?? null,
         accentColor: agent.accentColor ?? null,
       })),
     [agents],

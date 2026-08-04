@@ -24,7 +24,6 @@ type AgentRow = {
   base_url: string | null;
   capabilities: string | null;
   connection_via: string | null;
-  avatar_id: string | null;
   accent_color: string | null;
   created_at: number;
   last_used_at: number;
@@ -59,7 +58,6 @@ function toAgent(row: AgentRow): Agent {
       ? (JSON.parse(row.capabilities) as AgentCapabilities)
       : null,
     connectionVia: (row.connection_via as Agent['connectionVia']) ?? null,
-    avatarId: row.avatar_id ?? null,
     accentColor: row.accent_color ?? null,
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at,
@@ -125,8 +123,8 @@ export class SqliteRepository implements Repository {
 
   async upsertAgent(agent: Agent): Promise<void> {
     await this.require().runAsync(
-      `INSERT INTO agents (id, name, framework, transport, base_url, capabilities, connection_via, avatar_id, accent_color, created_at, last_used_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO agents (id, name, framework, transport, base_url, capabilities, connection_via, accent_color, created_at, last_used_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name,
          framework = excluded.framework,
@@ -134,7 +132,6 @@ export class SqliteRepository implements Repository {
          base_url = excluded.base_url,
          capabilities = excluded.capabilities,
          connection_via = excluded.connection_via,
-         avatar_id = excluded.avatar_id,
          accent_color = excluded.accent_color,
          last_used_at = excluded.last_used_at`,
       agent.id,
@@ -144,7 +141,6 @@ export class SqliteRepository implements Repository {
       agent.baseUrl,
       agent.capabilities ? JSON.stringify(agent.capabilities) : null,
       agent.connectionVia ?? null,
-      agent.avatarId ?? null,
       agent.accentColor ?? null,
       agent.createdAt,
       agent.lastUsedAt,

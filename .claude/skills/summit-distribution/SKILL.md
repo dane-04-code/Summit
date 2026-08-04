@@ -1,6 +1,6 @@
 ---
 name: summit-distribution
-description: Plan or execute Summit's public distribution channels — App Store listing/ASO, Product Hunt, r/openclaw, Hermes Discord, or other community channels. Use once summit-growth-command has cleared a channel to open, or when asked how/where to distribute Summit publicly.
+description: Plan or execute Summit's public distribution channels — Product Hunt, r/openclaw, Hermes Discord, or other community channels, plus which channel opens when. Use once summit-growth-command has cleared a channel to open, or when asked how/where to distribute Summit publicly. The App Store listing itself belongs to summit-app-store.
 ---
 
 # Summit Distribution
@@ -14,7 +14,7 @@ The audience is technical self-hosters who already run Hermes — not general AI
 ## Channel notes
 
 - **r/openclaw / Hermes Discord** — Post as a community member sharing a tool, not a corporate announcement. Link the proof (device-test sequence), not a feature list.
-- **App Store listing/ASO** — Keywords should target "self-hosted agent," "Hermes," "agent client" over generic chatbot terms. Screenshots show the real conversation surface, not marketing mockups.
+- **App Store listing/ASO** — Owned by `summit-app-store`, not this skill. Hand off anything touching keywords, subtitle, description, or screenshots. This skill only decides *when* the store channel opens and what custom product page each inbound channel needs.
 - **Product Hunt** — Time it after community channels show organic pull (per summit-growth-command); a cold launch there wastes the one shot at that audience.
 
 ## Non-negotiables

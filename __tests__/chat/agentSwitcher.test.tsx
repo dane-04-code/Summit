@@ -17,8 +17,8 @@ const SAFE_AREA_METRICS = {
 };
 
 const AGENTS: AgentOption[] = [
-  { id: 'a1', name: 'Workshop', frameworkLabel: 'Hermes' },
-  { id: 'a2', name: 'Server box', frameworkLabel: 'OpenClaw' },
+  { id: 'a1', name: 'Workshop', framework: 'hermes', frameworkLabel: 'Hermes' },
+  { id: 'a2', name: 'Server box', framework: 'openclaw', frameworkLabel: 'OpenClaw' },
 ];
 
 async function renderSidebar(overrides: Partial<React.ComponentProps<typeof Sidebar>> = {}) {

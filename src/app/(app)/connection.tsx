@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
 
   primaryBtn: {
     height: 50,
-    borderRadius: radius.input,
+    borderRadius: radius.control,
     backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',

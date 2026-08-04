@@ -18,7 +18,7 @@ import { ScreenHeader } from '@/ui/ScreenHeader';
 import { Card, Row, SectionLabel } from '@/ui/settings';
 import { agentProfileSubtitle, profileCapabilities } from '@/ui/agentProfile/profile';
 import { AgentAvatar } from '@/ui/agentIdentity/avatars';
-import { IdentityPicker } from '@/ui/agentIdentity/IdentityPicker';
+import { AccentPicker } from '@/ui/agentIdentity/AccentPicker';
 
 function StatusMark({ available }: { available: boolean }) {
   return available ? (
@@ -31,7 +31,7 @@ function StatusMark({ available }: { available: boolean }) {
 }
 
 export default function AgentProfileScreen() {
-  const { activeAgent, setAgentIdentity } = useAgents();
+  const { activeAgent, setAgentAccent } = useAgents();
 
   if (!activeAgent) {
     return (
@@ -68,7 +68,7 @@ export default function AgentProfileScreen() {
         >
           <View style={styles.hero}>
             <AgentAvatar
-              avatarId={agent.avatarId}
+              framework={agent.framework}
               accent={agent.accentColor}
               size={58}
             />
@@ -82,12 +82,11 @@ export default function AgentProfileScreen() {
           </View>
 
           <View style={styles.group}>
-            <SectionLabel>Identity</SectionLabel>
-            <IdentityPicker
-              avatarId={agent.avatarId ?? null}
+            <SectionLabel>Accent</SectionLabel>
+            <AccentPicker
               accentColor={agent.accentColor ?? null}
-              onChange={(identity) => {
-                void setAgentIdentity(agent.id, identity);
+              onChange={(accentColor) => {
+                void setAgentAccent(agent.id, accentColor);
               }}
             />
           </View>

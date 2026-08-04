@@ -45,12 +45,11 @@ export type Agent = {
   /** Optional so existing fixtures/tests need no update; absent = 'connector'. */
   connectionVia?: ConnectionVia | null;
   /**
-   * User-chosen identity mark. Both halves are independent and both are
-   * optional — an agent with neither shows the neutral default. Values are
-   * validated at render time (`resolveAvatarId` / `resolveAccent`), so an
-   * unknown string from an older or newer build degrades instead of throwing.
+   * User-chosen accent color. The mark itself is the official framework logo
+   * (or a neutral fallback) and is not user-chosen; only the tint is. Value is
+   * validated at render time (`resolveAccent`), so an unknown string from an
+   * older or newer build degrades to the neutral default instead of throwing.
    */
-  avatarId?: string | null;
   accentColor?: string | null;
   createdAt: number;
   lastUsedAt: number;
@@ -64,7 +63,6 @@ export type NewAgentInput = {
   baseUrl: string | null;
   capabilities?: AgentCapabilities | null;
   connectionVia?: ConnectionVia | null;
-  avatarId?: string | null;
   accentColor?: string | null;
 };
 

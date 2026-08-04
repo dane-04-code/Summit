@@ -26,9 +26,8 @@ export function buildAgent(input: NewAgentInput, now: number = Date.now()): Agen
     baseUrl: input.baseUrl,
     capabilities: input.capabilities ?? null,
     connectionVia: input.connectionVia ?? null,
-    // Unset stays unset: pairing never assigns a mark, so a fresh agent looks
-    // exactly as it did before identity marks existed until the user picks one.
-    avatarId: input.avatarId ?? null,
+    // Unset stays unset: pairing never assigns an accent, so a fresh agent
+    // shows its plain framework mark until the user picks a color.
     accentColor: input.accentColor ?? null,
     createdAt: now,
     lastUsedAt: now,

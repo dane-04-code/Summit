@@ -357,7 +357,7 @@ const styles = StyleSheet.create({
   error: { ...typography.caption, color: colors.error, paddingHorizontal: space.xs },
   pairButton: {
     height: 52,
-    borderRadius: radius.input,
+    borderRadius: radius.control,
     backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',

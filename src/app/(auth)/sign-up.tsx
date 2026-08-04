@@ -22,6 +22,70 @@ import { colors, space, radius, typography, screenPadding } from '@/theme';
 
 type FocusField = 'email' | 'password' | 'code' | null;
 
+const CODE_LENGTH = 6;
+
+/**
+ * Six-box OTP entry: a single hidden TextInput drives real keyboard/paste
+ * behavior while the visible boxes just mirror its value. Tapping anywhere
+ * in the row focuses the hidden input, so it still feels like one control.
+ */
+function CodeInput({
+  value,
+  onChangeText,
+  onSubmitEditing,
+  focused,
+  onFocus,
+  onBlur,
+}: {
+  value: string;
+  onChangeText: (text: string) => void;
+  onSubmitEditing: () => void;
+  focused: boolean;
+  onFocus: () => void;
+  onBlur: () => void;
+}) {
+  const inputRef = useRef<TextInput>(null);
+  const digits = value.split('');
+
+  return (
+    <Pressable onPress={() => inputRef.current?.focus()}>
+      <View style={styles.codeRow}>
+        {Array.from({ length: CODE_LENGTH }).map((_, i) => {
+          const filled = digits[i] != null;
+          const isCursor = focused && i === digits.length;
+          return (
+            <View
+              key={i}
+              style={[
+                styles.codeBox,
+                (filled || isCursor) && styles.codeBoxFocused,
+              ]}
+            >
+              <Text style={styles.codeDigit}>{digits[i] ?? ''}</Text>
+            </View>
+          );
+        })}
+      </View>
+      <TextInput
+        ref={inputRef}
+        style={styles.codeHiddenInput}
+        value={value}
+        onChangeText={(text) => onChangeText(text.replace(/[^0-9]/g, '').slice(0, CODE_LENGTH))}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoFocus
+        keyboardType="number-pad"
+        textContentType="oneTimeCode"
+        returnKeyType="go"
+        onSubmitEditing={onSubmitEditing}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        caretHidden
+      />
+    </Pressable>
+  );
+}
+
 export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -139,26 +203,15 @@ export default function SignUpScreen() {
               <>
                 {/* verification form */}
                 <View style={styles.form}>
-                  <View>
-                    <Text style={styles.label}>Code</Text>
-                    <TextInput
-                      style={[styles.input, focused === 'code' && styles.inputFocused]}
-                      placeholder="123456"
-                      placeholderTextColor={colors.faint}
-                      value={code}
-                      onChangeText={setCode}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      autoFocus
-                      keyboardType="number-pad"
-                      textContentType="oneTimeCode"
-                      returnKeyType="go"
-                      onSubmitEditing={() => canVerify && handleVerify()}
-                      onFocus={() => setFocused('code')}
-                      onBlur={() => setFocused(null)}
-                    />
-                  </View>
-                  {error ? <Text style={styles.error}>{error}</Text> : null}
+                  <CodeInput
+                    value={code}
+                    onChangeText={setCode}
+                    onSubmitEditing={() => canVerify && handleVerify()}
+                    focused={focused === 'code'}
+                    onFocus={() => setFocused('code')}
+                    onBlur={() => setFocused(null)}
+                  />
+                  {error ? <Text style={[styles.error, styles.codeError]}>{error}</Text> : null}
                 </View>
 
                 <View style={styles.actions}>
@@ -329,11 +382,33 @@ const styles = StyleSheet.create({
   inputFocused: { borderColor: colors.lineFocus },
   error: { ...typography.caption, color: colors.error, marginLeft: 2 },
 
+  // code entry
+  codeRow: { flexDirection: 'row', justifyContent: 'center', gap: space.sm },
+  codeBox: {
+    width: 46,
+    height: 56,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: radius.input,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  codeBoxFocused: { borderColor: colors.lineFocus },
+  codeDigit: { ...typography.title, color: colors.ink },
+  codeHiddenInput: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    opacity: 0,
+  },
+  codeError: { textAlign: 'center', marginTop: space.sm },
+
   // actions
   actions: { marginTop: space.lg, gap: space.lg },
   primaryBtn: {
     height: 52,
-    borderRadius: 12,
+    borderRadius: radius.control,
     backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',
@@ -345,7 +420,7 @@ const styles = StyleSheet.create({
   dividerText: { ...typography.caption, color: colors.faint },
   appleBtn: {
     height: 52,
-    borderRadius: radius.input,
+    borderRadius: radius.control,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: 'transparent',

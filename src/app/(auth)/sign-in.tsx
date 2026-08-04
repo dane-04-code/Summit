@@ -234,7 +234,7 @@ const styles = StyleSheet.create({
   actions: { marginTop: space.lg, gap: space.lg },
   primaryBtn: {
     height: 52,
-    borderRadius: 12,
+    borderRadius: radius.control,
     backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
   dividerText: { ...typography.caption, color: colors.faint },
   appleBtn: {
     height: 52,
-    borderRadius: radius.input,
+    borderRadius: radius.control,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: 'transparent',

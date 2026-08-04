@@ -102,16 +102,15 @@ describe('empty streaming reply', () => {
       <AgentMessage blocks={[{ kind: 'markdown', source: '' }]} />,
     );
     expect(view.getByLabelText('Agent status: Thinking…')).toBeTruthy();
-    expect(view.getByText('Thinking…')).toBeTruthy();
-    expect(view.queryByText('Working')).toBeNull();
+    expect(view.queryByLabelText('Agent status: Working')).toBeNull();
   });
 
   it('shows structured activity without a message bubble', async () => {
     const view = await render(
       <AgentMessage blocks={[{ kind: 'activity', label: 'Searching the web…' }]} />,
     );
-    expect(view.getByText('Searching the web…')).toBeTruthy();
-    expect(view.queryByText('Working')).toBeNull();
+    expect(view.getByLabelText('Agent status: Searching the web…')).toBeTruthy();
+    expect(view.queryByLabelText('Agent status: Working')).toBeNull();
   });
 
   it('keeps a multi-step tool update as one quiet live status', async () => {
