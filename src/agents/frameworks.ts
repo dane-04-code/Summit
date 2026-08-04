@@ -28,9 +28,13 @@ export function defaultCapabilitiesFor(framework: AgentFramework): AgentCapabili
   return {
     framework,
     // OpenClaw pushes exec approvals over the connector's persistent WS
-    // (approval_req/approval_resolve frames) — live-validated Phase 2.
+    // (approval_req/approval_resolve frames) — live-validated Phase 2. "Stop"
+    // is the same card's deny action (submitStop in src/ui/chat/approval.ts),
+    // so it's live wherever approval is — unlike Hermes, whose approval/stop
+    // REST calls are allow-listed in the connector but dormant until its send
+    // path moves off /v1/chat/completions onto the Runs API.
     hasRunApproval: native || framework === 'openclaw',
-    hasRunStop: native,
+    hasRunStop: native || framework === 'openclaw',
     hasStreaming: true,
     hasJobs: native,
     hasSessions: native,

@@ -164,7 +164,10 @@ export class RelayAdapter implements AgentAdapter {
 
   async stopRun(runId: string): Promise<void> {
     if (this.framework === 'openclaw') {
-      // No run-stop on the Gateway; stopping an approval card means denying it.
+      // The Gateway does have a chat.abort method (mid-turn interrupt), but the
+      // only "stop" affordance in the app today is the approval card's stop
+      // button, whose runId is the Gateway's approval id, not a chat turn id —
+      // stopping it means denying the pending command.
       const client = await this.ensureConnected();
       await client.resolveApproval(runId, 'deny');
       return;

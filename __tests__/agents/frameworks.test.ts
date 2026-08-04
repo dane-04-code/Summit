@@ -31,14 +31,15 @@ describe('defaultCapabilitiesFor', () => {
     });
   });
 
-  it('gives OpenClaw messaging plus push approvals', () => {
+  it('gives OpenClaw messaging plus push approvals and their stop action', () => {
     const caps = defaultCapabilitiesFor('openclaw');
     expect(caps.framework).toBe('openclaw');
     // The Gateway pushes exec approvals over the connector's persistent WS.
     expect(caps.hasRunApproval).toBe(true);
-    // No jobs/sessions/run-stop integration yet — still the floor there.
+    // "Stop" on that same card is the deny action — live wherever approval is.
+    expect(caps.hasRunStop).toBe(true);
+    // No jobs/sessions integration yet — still the floor there.
     expect(caps.hasJobs).toBe(false);
-    expect(caps.hasRunStop).toBe(false);
     expect(caps.hasSessions).toBe(false);
   });
 });

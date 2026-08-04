@@ -10,8 +10,28 @@
 > resolve is `{id, decision}` with enum allow-once/allow-always/deny, and
 > receiving approval pushes requires the **operator.admin** scope. Details in
 > `docs/openclaw-adapter-research.md` (§4 rewritten). Remaining ideas, not
-> commitments: run-stop (chat.abort), allow-always surfacing, approvals while
-> the app is closed (currently only pushed as a notification).
+> commitments: allow-always surfacing, approvals while the app is closed
+> (currently only pushed as a notification).
+
+> **UPDATE 2026-08-04 — "run-stop" re-scoped, not missing.** Checked the
+> Gateway's real RPC registry (`server-methods-*.js` in the installed
+> `openclaw` npm package): `chat.abort` exists, takes `{sessionKey, runId,
+> agentId?}`, needs `operator.write`. But the app's only "stop" affordance is
+> the approval card's stop button (`submitStop` in `src/ui/chat/approval.ts`),
+> whose `runId` is the Gateway's **approval id**, not a chat-turn id — wiring
+> `chat.abort` there would be wrong (wrong id space) and redundant (denying the
+> approval already stops the pending command). Fixed the actual gap instead:
+> `defaultCapabilitiesFor('openclaw').hasRunStop` was hardcoded `false` even
+> though that same deny-as-stop path is live-tested; flipped it to `true` and
+> corrected a stale comment in `relay.ts` claiming "no run-stop on the
+> Gateway." A real mid-turn interrupt (`chat.abort` while streaming, no
+> approval pending) is a genuine future feature `chat.abort` would enable —
+> but Hermes doesn't have that button either, so it's new scope, not parity.
+> Also worth knowing: in the shipped relay/connector path, OpenClaw's
+> approval+stop loop is live; Hermes's equivalent is allow-listed in the
+> connector but dormant until Hermes's send path moves off
+> `/v1/chat/completions` onto the Runs API (see `run-approval-armed-not-lit`
+> memory) — OpenClaw is ahead here, not behind.
 
 **Audience:** an agent picking this up cold. Read this top-to-bottom first; every claim links to the file that proves it. **Do not re-research the protocol** — it's already verified (see §"Source of truth").
 
