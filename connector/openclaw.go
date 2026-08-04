@@ -5,7 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"regexp"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -175,15 +179,18 @@ type ocClient struct {
 	subscribed bool
 
 	// One reader goroutine (readLoop) owns the socket after dial and demuxes:
-	// turn events go to the active turn channel, approval pushes to onApproval.
-	mu         sync.Mutex
-	turnCh     chan Frame
-	turnRunID  string
-	onApproval func(ocApproval)
-	pending    []ocApproval
-	closed     bool
-	done       chan struct{}
-	closeOnce  sync.Once
+	// turn events go to the active turn channel, approval pushes to onApproval,
+	// and any "res" whose id matches a pendingCalls entry goes to that call's
+	// waiter (cron.*, or any future synchronous req/res method).
+	mu           sync.Mutex
+	turnCh       chan Frame
+	turnRunID    string
+	onApproval   func(ocApproval)
+	pending      []ocApproval
+	pendingCalls map[string]chan []byte
+	closed       bool
+	done         chan struct{}
+	closeOnce    sync.Once
 }
 
 func (c *ocClient) write(raw []byte) error {
@@ -227,9 +234,285 @@ func (c *ocClient) resolveApproval(approvalID, decision string) error {
 	return c.write(raw)
 }
 
+// ocCallTimeout bounds a synchronous call() — generous, since cron.list on a
+// large job set is the slowest of these, but must not hang the app forever if
+// the Gateway never answers.
+const ocCallTimeout = 15 * time.Second
+
+// call sends a req and blocks for its matching res, demuxed by readLoop via
+// pendingCalls. Returns the res's payload on ok:true, or an error describing
+// the Gateway's error/errorMessage on ok:false.
+func (c *ocClient) call(method string, params any) (json.RawMessage, error) {
+	id := newID()
+	ch := make(chan []byte, 1)
+	c.mu.Lock()
+	if c.pendingCalls == nil {
+		c.pendingCalls = map[string]chan []byte{}
+	}
+	c.pendingCalls[id] = ch
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		delete(c.pendingCalls, id)
+		c.mu.Unlock()
+	}()
+
+	raw, _ := json.Marshal(map[string]any{
+		"type": "req", "id": id, "method": method, "params": params,
+	})
+	if err := c.write(raw); err != nil {
+		return nil, fmt.Errorf("%s: %w", method, err)
+	}
+
+	select {
+	case resRaw := <-ch:
+		var res struct {
+			OK      bool            `json:"ok"`
+			Payload json.RawMessage `json:"payload"`
+			Error   struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(resRaw, &res); err != nil {
+			return nil, fmt.Errorf("%s: bad response: %w", method, err)
+		}
+		if !res.OK {
+			msg := res.Error.Message
+			if msg == "" {
+				msg = "request rejected"
+			}
+			return nil, fmt.Errorf("%s: %s", method, msg)
+		}
+		return res.Payload, nil
+	case <-c.done:
+		return nil, fmt.Errorf("%s: gateway connection lost", method)
+	case <-time.After(ocCallTimeout):
+		return nil, fmt.Errorf("%s: timed out", method)
+	}
+}
+
+// ocCronSchedule, ocCronPayload, ocCronDelivery, ocCronState, ocCronJob mirror
+// the Gateway's CronJobSchema (compiled source of the installed openclaw npm
+// package, 2026.6.11 — server-methods/cron.ts + schema.ts). Not yet
+// live-verified against a running Gateway; fixture-driven like Phase 1 was
+// before its live pass.
+type ocCronSchedule struct {
+	Kind    string `json:"kind"`
+	At      string `json:"at,omitempty"`
+	EveryMs int64  `json:"everyMs,omitempty"`
+	Expr    string `json:"expr,omitempty"`
+}
+
+type ocCronPayload struct {
+	Kind    string   `json:"kind"`
+	Text    string   `json:"text,omitempty"`
+	Message string   `json:"message,omitempty"`
+	Argv    []string `json:"argv,omitempty"`
+}
+
+type ocCronDelivery struct {
+	Mode string `json:"mode,omitempty"`
+	To   string `json:"to,omitempty"`
+}
+
+type ocCronState struct {
+	NextRunAtMs   *int64 `json:"nextRunAtMs,omitempty"`
+	RunningAtMs   *int64 `json:"runningAtMs,omitempty"`
+	LastRunAtMs   *int64 `json:"lastRunAtMs,omitempty"`
+	LastRunStatus string `json:"lastRunStatus,omitempty"`
+}
+
+type ocCronJob struct {
+	ID       string          `json:"id"`
+	Name     string          `json:"name"`
+	Enabled  bool            `json:"enabled"`
+	Schedule ocCronSchedule  `json:"schedule"`
+	Payload  ocCronPayload   `json:"payload"`
+	Delivery *ocCronDelivery `json:"delivery,omitempty"`
+	State    ocCronState     `json:"state"`
+}
+
+// msToRFC3339 renders a Gateway epoch-ms field the way jobs.ts's str() field
+// readers expect: an ISO string, or "" (omitted) when unset.
+func msToRFC3339(ms *int64) string {
+	if ms == nil {
+		return ""
+	}
+	return time.UnixMilli(*ms).UTC().Format(time.RFC3339)
+}
+
+// translateCronJob maps one Gateway cron job record onto the field names
+// src/agents/adapters/jobs.ts already knows how to read from Hermes's
+// GET /api/jobs (a deliberately lenient normalizer — snake_case, several
+// aliases per field) so no app-side change is needed for either framework.
+func translateCronJob(job ocCronJob) map[string]any {
+	schedule := map[string]any{}
+	switch job.Schedule.Kind {
+	case "every":
+		expr := fmt.Sprintf("every %dm", job.Schedule.EveryMs/60000)
+		schedule = map[string]any{"kind": "interval", "expr": expr, "display": expr}
+	case "at":
+		schedule = map[string]any{"kind": "cron", "expr": job.Schedule.At, "display": "At " + job.Schedule.At}
+	default: // "cron"
+		schedule = map[string]any{"kind": "cron", "expr": job.Schedule.Expr, "display": job.Schedule.Expr}
+	}
+
+	out := map[string]any{
+		"id":       job.ID,
+		"name":     job.Name,
+		"enabled":  job.Enabled,
+		"schedule": schedule,
+		"skills":   []string{},
+	}
+	if job.State.RunningAtMs != nil {
+		out["state"] = "running"
+	} else if !job.Enabled {
+		out["state"] = "paused"
+	}
+	switch job.State.LastRunStatus {
+	case "ok", "error":
+		out["last_status"] = job.State.LastRunStatus
+	}
+	if at := msToRFC3339(job.State.LastRunAtMs); at != "" {
+		out["last_run_at"] = at
+	}
+	if at := msToRFC3339(job.State.NextRunAtMs); at != "" && job.Enabled {
+		out["next_run_at"] = at
+	}
+
+	switch {
+	case job.Delivery == nil || job.Delivery.Mode == "" || job.Delivery.Mode == "none":
+		out["deliver"] = "local"
+	case job.Delivery.Mode == "announce" && job.Delivery.To != "":
+		out["deliver"] = job.Delivery.To
+	case job.Delivery.Mode == "announce":
+		out["deliver"] = "origin"
+	default:
+		out["deliver"] = job.Delivery.Mode
+	}
+
+	switch job.Payload.Kind {
+	case "agentTurn":
+		out["prompt"] = job.Payload.Message
+		out["no_agent"] = false
+	case "systemEvent":
+		out["prompt"] = job.Payload.Text
+		out["no_agent"] = true
+	case "command":
+		out["script"] = strings.Join(job.Payload.Argv, " ")
+		out["no_agent"] = true
+	}
+	return out
+}
+
+// cronList fetches every job with full detail (the Gateway's cron.list
+// defaults to full records; compact:true would drop schedule/delivery/payload,
+// which the app's Cron UI needs) and returns Hermes-shaped {"jobs": [...]}.
+func (c *ocClient) cronList() ([]byte, error) {
+	payload, err := c.call("cron.list", map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+	var page struct {
+		Jobs []ocCronJob `json:"jobs"`
+	}
+	if err := json.Unmarshal(payload, &page); err != nil {
+		return nil, fmt.Errorf("cron.list: bad payload: %w", err)
+	}
+	jobs := make([]map[string]any, len(page.Jobs))
+	for i, j := range page.Jobs {
+		jobs[i] = translateCronJob(j)
+	}
+	return json.Marshal(map[string]any{"jobs": jobs})
+}
+
+// cronGet fetches one job's full record, translated the same way as
+// cronList's entries — readJobRunResponse (jobs.ts) reads last_run_at/
+// last_status straight off it when there's no nested latest_run/last_run/run.
+func (c *ocClient) cronGet(jobID string) ([]byte, error) {
+	payload, err := c.call("cron.get", map[string]any{"id": jobID})
+	if err != nil {
+		return nil, err
+	}
+	var job ocCronJob
+	if err := json.Unmarshal(payload, &job); err != nil {
+		return nil, fmt.Errorf("cron.get: bad payload: %w", err)
+	}
+	return json.Marshal(translateCronJob(job))
+}
+
+// cronRun triggers an out-of-schedule run (POST /api/jobs/{id}/run).
+func (c *ocClient) cronRun(jobID string) error {
+	_, err := c.call("cron.run", map[string]any{"id": jobID})
+	return err
+}
+
+// cronSetEnabled pauses (enabled:false) or resumes (enabled:true) a job.
+func (c *ocClient) cronSetEnabled(jobID string, enabled bool) error {
+	_, err := c.call("cron.update", map[string]any{
+		"id":    jobID,
+		"patch": map[string]any{"enabled": enabled},
+	})
+	return err
+}
+
+var (
+	ocJobsListRe  = regexp.MustCompile(`^/api/jobs$`)
+	ocJobGetRe    = regexp.MustCompile(`^/api/jobs/([^/]+)$`)
+	ocJobActionRe = regexp.MustCompile(`^/api/jobs/([^/]+)/(pause|resume|run)$`)
+)
+
+// doOpenClawAPI maps the app's Hermes-shaped job REST calls onto the
+// Gateway's cron.* WS methods. Anything outside this small allow-list —
+// including Hermes-only run approval/stop paths, which OpenClaw handles over
+// the persistent WS push/resolve frames instead — is refused.
+func doOpenClawAPI(method, path string, oc *ocClient) (int, string) {
+	if method == "GET" && ocJobsListRe.MatchString(path) {
+		body, err := oc.cronList()
+		if err != nil {
+			return http.StatusBadGateway, errBody(err)
+		}
+		return http.StatusOK, string(body)
+	}
+	if method == "GET" {
+		if m := ocJobGetRe.FindStringSubmatch(path); m != nil {
+			body, err := oc.cronGet(m[1])
+			if err != nil {
+				return http.StatusBadGateway, errBody(err)
+			}
+			return http.StatusOK, string(body)
+		}
+	}
+	if method == "POST" {
+		if m := ocJobActionRe.FindStringSubmatch(path); m != nil {
+			jobID, action := m[1], m[2]
+			var err error
+			switch action {
+			case "pause":
+				err = oc.cronSetEnabled(jobID, false)
+			case "resume":
+				err = oc.cronSetEnabled(jobID, true)
+			case "run":
+				err = oc.cronRun(jobID)
+			}
+			if err != nil {
+				return http.StatusBadGateway, errBody(err)
+			}
+			return http.StatusOK, `{}`
+		}
+	}
+	return http.StatusForbidden, `{"error":"path not allowed"}`
+}
+
+func errBody(err error) string {
+	raw, _ := json.Marshal(map[string]string{"error": err.Error()})
+	return string(raw)
+}
+
 // readLoop is the single socket reader: approval pushes fire onApproval, turn
-// events feed the active chat channel, everything else is dropped. On read
-// error it wakes any in-flight chat via the done channel.
+// events feed the active chat channel, a "res" matching a pending call() goes
+// to its waiter, everything else is dropped. On read error it wakes any
+// in-flight chat and pending calls via the done channel.
 func (c *ocClient) readLoop() {
 	for {
 		_, raw, err := c.conn.ReadMessage()
@@ -239,6 +522,23 @@ func (c *ocClient) readLoop() {
 			c.mu.Unlock()
 			c.closeOnce.Do(func() { close(c.done) })
 			return
+		}
+		var env struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		}
+		json.Unmarshal(raw, &env)
+		if env.Type == "res" && env.ID != "" {
+			c.mu.Lock()
+			ch, ok := c.pendingCalls[env.ID]
+			if ok {
+				delete(c.pendingCalls, env.ID)
+			}
+			c.mu.Unlock()
+			if ok {
+				ch <- raw
+				continue
+			}
 		}
 		if ap, ok := parseApproval(raw); ok {
 			c.mu.Lock()

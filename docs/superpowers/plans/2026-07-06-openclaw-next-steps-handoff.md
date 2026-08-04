@@ -33,6 +33,42 @@
 > `/v1/chat/completions` onto the Runs API (see `run-approval-armed-not-lit`
 > memory) — OpenClaw is ahead here, not behind.
 
+> **UPDATE 2026-08-04 — Jobs/cron built (fixture-driven, not live-verified).**
+> Checked the Gateway's real cron schema (`schema-*.js`, `cron-*.js` in the
+> installed `openclaw` npm package): `cron.list`/`cron.get`/`cron.run`/
+> `cron.update` exist, need no more than the connector's existing
+> `operator.admin` scope, and — key finding — `cron.list` returns **full** job
+> records by default (schedule/payload/delivery/state); only `compact:true`
+> strips them to id/name/enabled/nextRunAtMs, so no per-job `cron.get` fan-out
+> is needed for the list view. Built end-to-end:
+> - `connector/openclaw.go`: a generic `ocClient.call(method, params)` —
+>   readLoop now demuxes a third case (`res` matching a pending call id)
+>   alongside turn events and approval pushes. `cronList`/`cronGet`/`cronRun`/
+>   `cronSetEnabled` (pause via `patch:{enabled:false}`, resume `true`) sit on
+>   top, plus `translateCronJob` mapping the Gateway's job shape onto the exact
+>   field names `src/agents/adapters/jobs.ts`'s lenient normalizer already
+>   reads from Hermes's `GET /api/jobs` — no app-side change needed.
+> - `connector/main.go`: `doOpenClawAPI` routes the app's five job REST paths
+>   (`GET /api/jobs`, `GET /api/jobs/{id}`, `POST .../pause|resume|run`) onto
+>   those methods; anything else (including Hermes-only run approval/stop) is
+>   refused, same as before.
+> - `frameworks.ts`: `hasJobs: native || framework === 'openclaw'`.
+> - Tests: `connector/openclaw_test.go` covers `translateCronJob` (cron/every/
+>   at schedules, agentTurn/systemEvent/command payloads, running/paused
+>   state, delivery fallback), the `call()` round trip via a fake Gateway
+>   server, and `doOpenClawAPI` routing. `__tests__/agents/frameworks.test.ts`
+>   updated.
+> **Not done / next:** same caveat as Phase 1 originally had — this is
+> schema-accurate against the installed openclaw npm package's compiled
+> source, but has never run against a live Gateway. Do that before trusting it
+> (Task A's playbook applies again: point a connector at a real Gateway,
+> confirm `cron.list`'s actual field names match what's assumed here, fix
+> `translateCronJob`/tests if they don't). Job creation (`cron.add`)/deletion
+> (`cron.remove`) aren't wired — the app has no create-job UI to call them
+> from. `hasSessions` was investigated and skipped: it isn't backed by any
+> real UI even for Hermes (no adapter methods, just a settings-screen display
+> row), so there's no actual feature to build parity for.
+
 **Audience:** an agent picking this up cold. Read this top-to-bottom first; every claim links to the file that proves it. **Do not re-research the protocol** — it's already verified (see §"Source of truth").
 
 ## Where we are (done, on branch `build/first-pages`, pushed)

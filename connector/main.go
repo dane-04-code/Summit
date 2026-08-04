@@ -16,32 +16,32 @@ import (
 
 // Frame is the shared JSON envelope for all relay protocol messages.
 type Frame struct {
-	T              string        `json:"t"`
-	Framework      string        `json:"framework,omitempty"`
-	AgentName      string        `json:"agentName,omitempty"`
-	AgentVersion   string        `json:"agentVersion,omitempty"`
-	Code           string        `json:"code,omitempty"`
-	ConnectorToken string        `json:"connectorToken,omitempty"`
-	Capabilities   []string      `json:"capabilities,omitempty"`
+	T              string   `json:"t"`
+	Framework      string   `json:"framework,omitempty"`
+	AgentName      string   `json:"agentName,omitempty"`
+	AgentVersion   string   `json:"agentVersion,omitempty"`
+	Code           string   `json:"code,omitempty"`
+	ConnectorToken string   `json:"connectorToken,omitempty"`
+	Capabilities   []string `json:"capabilities,omitempty"`
 	// ExpiresAt (epoch ms) is when the advertised code stops being pairable;
 	// Paired marks a channel a phone has already claimed.
-	ExpiresAt int64 `json:"expiresAt,omitempty"`
-	Paired    bool  `json:"paired,omitempty"`
-	ReqID          string        `json:"reqId,omitempty"`
-	Delta          string        `json:"delta,omitempty"`
-	Message        string        `json:"message,omitempty"`
-	Messages       []ChatMessage `json:"messages,omitempty"`
-	SessionID      string        `json:"sessionId,omitempty"`
-	SessionKey     string        `json:"sessionKey,omitempty"`
-	EventID        string        `json:"eventId,omitempty"`
-	Label          string        `json:"label,omitempty"`
-	Reply          *SettledReply `json:"reply,omitempty"`
-	IDs            []string      `json:"ids,omitempty"`
-	Method         string        `json:"method,omitempty"`
-	Path           string        `json:"path,omitempty"`
-	Status         int           `json:"status,omitempty"`
-	Body           string        `json:"body,omitempty"`
-	Title          string        `json:"title,omitempty"`
+	ExpiresAt  int64         `json:"expiresAt,omitempty"`
+	Paired     bool          `json:"paired,omitempty"`
+	ReqID      string        `json:"reqId,omitempty"`
+	Delta      string        `json:"delta,omitempty"`
+	Message    string        `json:"message,omitempty"`
+	Messages   []ChatMessage `json:"messages,omitempty"`
+	SessionID  string        `json:"sessionId,omitempty"`
+	SessionKey string        `json:"sessionKey,omitempty"`
+	EventID    string        `json:"eventId,omitempty"`
+	Label      string        `json:"label,omitempty"`
+	Reply      *SettledReply `json:"reply,omitempty"`
+	IDs        []string      `json:"ids,omitempty"`
+	Method     string        `json:"method,omitempty"`
+	Path       string        `json:"path,omitempty"`
+	Status     int           `json:"status,omitempty"`
+	Body       string        `json:"body,omitempty"`
+	Title      string        `json:"title,omitempty"`
 	// Push approvals (OpenClaw): connector → app `approval_req`, app →
 	// connector `approval_resolve` with decision approve|deny.
 	ApprovalID string `json:"approvalId,omitempty"`
@@ -261,7 +261,7 @@ func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, open
 				log.Printf("ack reply outbox: %v", err)
 			}
 		case "api_req":
-			go handleApiReq(conn, &writeMu, f, hermesBase, apiKey)
+			go handleApiReq(conn, &writeMu, f, hermesBase, apiKey, oc)
 		case "approval_resolve":
 			if oc != nil {
 				if err := oc.resolveApproval(f.ApprovalID, f.Decision); err != nil {
@@ -345,10 +345,20 @@ func handleSync(conn *websocket.Conn, writeMu *sync.Mutex, reqID string, outbox 
 	}
 }
 
-// handleApiReq proxies a single allow-listed Hermes REST call (jobs, run
-// approval/stop) and returns the status + raw body to the app.
-func handleApiReq(conn *websocket.Conn, writeMu *sync.Mutex, f Frame, hermesBase, apiKey string) {
-	status, body := doAPI(f.Method, f.Path, f.Body, hermesBase, apiKey)
+// handleApiReq proxies a single allow-listed REST-shaped call and returns the
+// status + raw body to the app. Hermes has a real REST API behind this
+// (jobs, run approval/stop); OpenClaw doesn't, so the same paths are mapped
+// onto the Gateway's WS cron.* methods instead — the app's adapter code is
+// unaware of the difference (src/agents/adapters/relay.ts calls the same
+// `this.api()` either way).
+func handleApiReq(conn *websocket.Conn, writeMu *sync.Mutex, f Frame, hermesBase, apiKey string, oc *ocClient) {
+	var status int
+	var body string
+	if oc != nil {
+		status, body = doOpenClawAPI(f.Method, f.Path, oc)
+	} else {
+		status, body = doAPI(f.Method, f.Path, f.Body, hermesBase, apiKey)
+	}
 	if err := writeFrame(conn, writeMu, Frame{T: "api_res", ReqID: f.ReqID, Status: status, Body: body}); err != nil {
 		log.Printf("write api_res: %v", err)
 	}

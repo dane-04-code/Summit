@@ -36,7 +36,11 @@ export function defaultCapabilitiesFor(framework: AgentFramework): AgentCapabili
     hasRunApproval: native || framework === 'openclaw',
     hasRunStop: native || framework === 'openclaw',
     hasStreaming: true,
-    hasJobs: native,
+    // The connector maps the app's Hermes-shaped /api/jobs REST calls onto
+    // the Gateway's cron.* WS methods (connector/openclaw.go: doOpenClawAPI,
+    // translateCronJob) — list/get/pause/resume/run, same UI either way.
+    // Fixture-driven only so far, not yet live-verified against a Gateway.
+    hasJobs: native || framework === 'openclaw',
     hasSessions: native,
   };
 }
