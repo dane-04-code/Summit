@@ -6,7 +6,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Animated, Easing } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, Animated, Easing } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 
@@ -120,15 +120,24 @@ function CodeBlock({ lines }: { lines: CodeLine[] }) {
       >
         <Text style={styles.copyText}>{copied ? 'Copied' : 'Copy'}</Text>
       </Pressable>
-      {lines.map((line, i) => (
-        <Text key={i} style={styles.codeLine}>
-          {line.segments.map((seg, j) => (
-            <Text key={j} style={seg.tone === 'error' ? styles.errorText : undefined}>
-              {seg.text}
+      <ScrollView
+        horizontal
+        nestedScrollEnabled
+        showsHorizontalScrollIndicator
+        contentContainerStyle={styles.codeScrollContent}
+      >
+        <View>
+          {lines.map((line, i) => (
+            <Text key={i} style={styles.codeLine}>
+              {line.segments.map((seg, j) => (
+                <Text key={j} style={seg.tone === 'error' ? styles.errorText : undefined}>
+                  {seg.text}
+                </Text>
+              ))}
             </Text>
           ))}
-        </Text>
-      ))}
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -358,8 +367,8 @@ const styles = StyleSheet.create({
   code: {
     backgroundColor: colors.surface,
     borderRadius: radius.code,
-    paddingHorizontal: space.md + 2,
     paddingVertical: space.md + 1,
+    overflow: 'hidden',
   },
   copyBtn: {
     position: 'absolute',
@@ -371,6 +380,10 @@ const styles = StyleSheet.create({
     ...typography.caption,
     fontSize: 12,
     color: colors.muted,
+  },
+  codeScrollContent: {
+    paddingHorizontal: space.md + 2,
+    paddingRight: space.lg + space.md,
   },
   codeLine: {
     ...typography.mono,
