@@ -16,6 +16,13 @@ type ChannelEnv = { PUSH_URL?: string };
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 const MAX_FRAME_BYTES = 1024 * 1024;
+/** How long an unpaired channel may sit before its storage is reaped.
+ *  Opening a connector socket persists state immediately, before any frame is
+ *  sent, so anyone who can complete a WebSocket upgrade can leave a Durable
+ *  Object behind — the edge rate limits cap how fast that happens, this is what
+ *  stops it accumulating. Comfortably past LEGACY_CODE_TTL_MS (10 min, see
+ *  logic.ts) so a real pairing window is never cut short. */
+const REAP_AFTER_MS = 15 * 60_000;
 const APP_FRAME_TYPES = new Set([
   'ping', 'pair', 'resume', 'register_push', 'chat', 'sync_req', 'ack_replies', 'api_req', 'approval_resolve',
   'models_req', 'model_select',
@@ -72,6 +79,14 @@ export class PairingChannel {
       if (result.occupied) return new Response('Already occupied', { status: 409 });
       this.state = result.state;
       await this.doState.storage.put('state', this.state);
+      // The put above is what makes an anonymous upgrade cost us storage: it
+      // lands before the socket is accepted and before any frame proves the
+      // peer is a real connector. Arm the reaper here, not at `hello`, because
+      // `codeExpiresAt` is only set once a hello arrives — a socket that
+      // connects and never speaks would otherwise have no expiry at all.
+      if (!this.state.paired) {
+        await this.doState.storage.setAlarm(Date.now() + REAP_AFTER_MS);
+      }
       this.doState.acceptWebSocket(server, ['connector']);
     } else {
       const authenticated = credentialMatches(this.state.sessionToken, token);
@@ -139,6 +154,27 @@ export class PairingChannel {
       // Cleanup below is still required when the transport is already gone.
     }
     await this.handleSocketEnd(ws);
+  }
+
+  /**
+   * Reaps a channel that never became a real pairing. Deleting is the only way
+   * this storage ever goes away — a Durable Object with state persists until
+   * something removes it, and an unpaired code is dead weight the moment its
+   * TTL lapses.
+   */
+  async alarm(): Promise<void> {
+    // A paired channel holds the session and push tokens the app reconnects
+    // with. It must outlive the code, so leave it alone and stop re-arming.
+    if (this.state.paired) return;
+
+    // Someone is still on the line — typically a connector displaying a code
+    // while the user walks over to their phone. Give them another window.
+    if (this.hasOpenSocket('connector') || this.hasOpenSocket('authenticated')) {
+      await this.doState.storage.setAlarm(Date.now() + REAP_AFTER_MS);
+      return;
+    }
+
+    await this.doState.storage.deleteAll();
   }
 
   private async handleSocketEnd(ws: WebSocket): Promise<void> {

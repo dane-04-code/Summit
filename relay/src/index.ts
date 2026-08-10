@@ -11,9 +11,14 @@ interface RateLimiter {
 
 export interface Env {
   PAIRING_CHANNEL: DurableObjectNamespace;
-  /** Per-IP throttle on pairing-code connections (see wrangler.toml). Optional so
-   *  local dev / tests without the binding still run — absent means fail-open. */
+  /** Per-IP throttle on connections that name an existing channel (`code` /
+   *  `claim`). Optional so local dev / tests without the binding still run —
+   *  absent means fail-open. */
   PAIR_LIMITER?: RateLimiter;
+  /** Per-IP throttle on the mint path, in its own namespace so a flood of
+   *  anonymous upgrades cannot spend the budget a real phone needs to pair.
+   *  Optional on the same fail-open terms as PAIR_LIMITER. */
+  MINT_LIMITER?: RateLimiter;
   /** Override the Expo Push API endpoint. Unset in prod (defaults to exp.host);
    *  set via .dev.vars to point local tester loops at a sink. */
   PUSH_URL?: string;
@@ -46,14 +51,20 @@ export default {
       return new Response('Invalid pairing code', { status: 400 });
     }
 
-    // Throttle every attempt that names an existing channel, by client IP.
-    // Both paths need it: the per-code lockout lives in per-code DO state and
-    // cannot see a sweep spread one guess each across many codes, and `claim`
-    // reaches the same channels as `code`. Fail-open when the binding is absent
-    // (local dev / tests).
-    if (locator !== null && env.PAIR_LIMITER) {
+    // Throttle every WebSocket-upgrade attempt that reaches this point, by
+    // client IP. `code` and `claim` need it because the per-code lockout lives
+    // in per-code DO state and cannot see a sweep spread one guess each across
+    // many codes. The mint path needs it too: minting is unauthenticated and
+    // free, and each attempt persists state in a fresh Durable Object.
+    //
+    // They draw on separate budgets deliberately. Sharing one would let a flood
+    // of anonymous mints exhaust the allowance a phone on the same IP needs to
+    // finish pairing — turning a nuisance into a denial of the actual product.
+    // Fail-open when the binding is absent (local dev / tests).
+    const limiter = locator !== null ? env.PAIR_LIMITER : env.MINT_LIMITER;
+    if (limiter) {
       const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
-      const { success } = await env.PAIR_LIMITER.limit({ key: ip });
+      const { success } = await limiter.limit({ key: ip });
       if (!success) return new Response('Too many pairing attempts', { status: 429 });
     }
 

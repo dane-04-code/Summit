@@ -103,6 +103,9 @@ Per `docs/superpowers/plans/2026-07-03-multi-agent-product-direction.md`:
   - **Connector binaries** on GitHub Releases (`connector-latest` tag) for linux/darwin amd64+arm64,
     built by `.github/workflows/release-connector.yml` on every push.
   - **CI deploy** via `.github/workflows/deploy-relay.yml` — runs `wrangler deploy` on push.
+  - **Abuse controls** (per-IP rate limits, the orphaned-channel reaper, connector backoff) are
+    documented in `docs/RELAY_ABUSE_CONTROLS.md` — read it before changing `[[ratelimits]]`,
+    `PairingChannel.alarm()`, or either redial loop.
   - **Cloudflare gotchas:** free plan requires `new_sqlite_classes` (not `new_classes`) in
     `relay/wrangler.toml`; wrangler@4 required (v3 doesn't support it); custom domains must be
     attached manually in the dashboard (API token from "Edit Cloudflare Workers" template lacks DNS

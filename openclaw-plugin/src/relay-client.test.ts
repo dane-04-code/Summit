@@ -101,7 +101,9 @@ describe('relay client handshake', () => {
     expect(identity.current()).toEqual({ code: 'K7M29XQP', connectorToken: 'tok-123' });
 
     sockets[0]!.close();
-    vi.advanceTimersByTime(5_000);
+    // The redial wait is jittered up to 1.25x, so advance past the top of the
+    // window rather than exactly the floor.
+    vi.advanceTimersByTime(6_250);
     expect(urls[1]).toBe('ws://relay.test?claim=K7M29XQP&token=tok-123');
   });
 
@@ -131,7 +133,7 @@ describe('relay client handshake', () => {
     expect(identity.current()).toBeNull();
     expect(sockets[0]!.closed).toBe(true);
 
-    vi.advanceTimersByTime(5_000);
+    vi.advanceTimersByTime(6_250);
     // No claim: the expired code is gone, so the relay mints a fresh one.
     expect(urls[1]).toBe('ws://relay.test');
   });
@@ -197,6 +199,72 @@ describe('relay client frame routing', () => {
     sockets[0]!.emit('message', Buffer.from('{not json'));
     expect(onFrame).not.toHaveBeenCalled();
     expect(sockets[0]!.closed).toBe(false);
+  });
+
+  it('backs off while dials keep failing, so a throttled relay is not hammered', () => {
+    sockets = [];
+    urls = [];
+    let attempts = 0;
+    const client = createRelayClient({
+      relayUrl: 'ws://relay.test',
+      agentName: 'OpenClaw',
+      agentVersion: '1',
+      identity: memoryIdentity(),
+      logger: silentLogger,
+      onFrame: vi.fn(),
+      connect: () => {
+        attempts += 1;
+        throw new Error('429 Too many pairing attempts');
+      },
+    });
+
+    client.start();
+    expect(attempts).toBe(1);
+
+    // First retry sits in the 5s window; the second must not, or the delay
+    // never grew and we are back to a fixed-rate redial.
+    vi.advanceTimersByTime(6_250);
+    expect(attempts).toBe(2);
+    vi.advanceTimersByTime(6_250);
+    expect(attempts).toBe(2);
+    vi.advanceTimersByTime(6_250);
+    expect(attempts).toBe(3);
+
+    client.stop();
+  });
+
+  it('returns to fast redials after a connection succeeds', () => {
+    let failing = true;
+    sockets = [];
+    urls = [];
+    const client = createRelayClient({
+      relayUrl: 'ws://relay.test',
+      agentName: 'OpenClaw',
+      agentVersion: '1',
+      identity: memoryIdentity(),
+      logger: silentLogger,
+      onFrame: vi.fn(),
+      connect: () => {
+        if (failing) throw new Error('dial refused');
+        const socket = new FakeSocket();
+        sockets.push(socket);
+        return socket as unknown as WebSocket;
+      },
+    });
+
+    client.start();
+    vi.advanceTimersByTime(120_000); // burn several failures, growing the delay
+    failing = false;
+    vi.advanceTimersByTime(120_000); // eventually one dial gets through
+    expect(sockets).toHaveLength(1);
+
+    sockets[0]!.emit('open');
+    sockets[0]!.close();
+    // Back at the floor: a session that ran and ended is not a failure.
+    vi.advanceTimersByTime(6_250);
+    expect(sockets).toHaveLength(2);
+
+    client.stop();
   });
 
   it('stops reconnecting once stopped', () => {

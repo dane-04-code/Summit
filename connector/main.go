@@ -109,11 +109,23 @@ func main() {
 	}
 	startNotifyServer(notify, notifyPort)
 
+	wait := backoffFloor
 	for {
-		if err := run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, openclawToken, notify, outbox); err != nil {
-			log.Printf("disconnected: %v — reconnecting in 5s", err)
+		connected, err := run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, openclawToken, notify, outbox)
+		// Reaching the relay at all clears the penalty: the pause is there to
+		// back off a relay that is refusing us, not to slow down a working one
+		// that dropped. Code rotation relies on this — it deliberately closes a
+		// live socket to fetch a fresh code, and must not be made to crawl.
+		if connected {
+			wait = backoffFloor
+		} else {
+			wait = nextBackoff(wait)
 		}
-		time.Sleep(5 * time.Second)
+		pause := jitter(wait)
+		if err != nil {
+			log.Printf("disconnected: %v — reconnecting in %s", err, pause.Round(time.Second))
+		}
+		time.Sleep(pause)
 	}
 }
 
@@ -133,7 +145,10 @@ func savedRelayIdentity() (string, string) {
 	return trimmed, strings.TrimSpace(string(token))
 }
 
-func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, openclawToken string, notify *notifier, outbox *replyOutbox) error {
+// run holds one relay session open until it fails. The bool reports whether the
+// socket was ever established, which is what the caller's backoff keys off:
+// a refused dial should slow us down, a session that ran and ended should not.
+func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, openclawToken string, notify *notifier, outbox *replyOutbox) (bool, error) {
 	target := relayURL
 	if code, token := savedRelayIdentity(); code != "" {
 		target += "?claim=" + url.QueryEscape(code)
@@ -143,7 +158,7 @@ func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, open
 	}
 	conn, _, err := websocket.DefaultDialer.Dial(target, nil)
 	if err != nil {
-		return fmt.Errorf("dial relay %s: %w", relayURL, err)
+		return false, fmt.Errorf("dial relay %s: %w", relayURL, err)
 	}
 	defer conn.Close()
 	var writeMu sync.Mutex
@@ -159,7 +174,7 @@ func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, open
 		T: "hello", Framework: framework, AgentName: agentName, AgentVersion: "1.0", Via: "connector",
 		Capabilities: []string{"code_rotation"},
 	}); err != nil {
-		return fmt.Errorf("send hello: %w", err)
+		return true, fmt.Errorf("send hello: %w", err)
 	}
 
 	// Fires when the advertised code lapses unpaired: drop the saved channel and
@@ -177,11 +192,11 @@ func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, open
 	var oc *ocClient
 	if framework == "openclaw" {
 		if openclawWSURL == "" || openclawToken == "" {
-			return fmt.Errorf("OPENCLAW_WS_URL and OPENCLAW_TOKEN must be set for openclaw")
+			return true, fmt.Errorf("OPENCLAW_WS_URL and OPENCLAW_TOKEN must be set for openclaw")
 		}
 		oc, err = dialOpenClaw(openclawWSURL, openclawToken, "main")
 		if err != nil {
-			return fmt.Errorf("openclaw dial: %w", err)
+			return true, fmt.Errorf("openclaw dial: %w", err)
 		}
 		defer oc.close()
 		// The Gateway pushes exec approvals over the persistent WS; forward
@@ -208,7 +223,7 @@ func run(relayURL, hermesBase, apiKey, framework, agentName, openclawWSURL, open
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
-			return fmt.Errorf("relay closed: %w", err)
+			return true, fmt.Errorf("relay closed: %w", err)
 		}
 		var f Frame
 		if err := json.Unmarshal(msg, &f); err != nil {

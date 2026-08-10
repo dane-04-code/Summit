@@ -2,6 +2,10 @@
 
 Known failure modes in the relay stack (connector + DO + app client). Ordered by severity.
 
+This register records what was wrong and what was done about it. For how the resulting defences
+work day to day — rate-limit budgets, the orphaned-channel reaper, connector backoff, and how to
+verify each locally — see `docs/RELAY_ABUSE_CONTROLS.md`.
+
 ---
 
 ## P0 — Pairing code was too small to survive a distributed sweep
@@ -64,6 +68,48 @@ installs discarded the previously minted token, so there is no secure credential
 connector stores it in a mode-0600 file and must present it when reclaiming its channel.
 
 **Status:** Fixed ✅
+
+---
+
+## P1 — Unauthenticated Durable Object allocation via the no-locator mint path
+
+**Files:** `relay/src/index.ts`, `relay/src/channel.ts`, `relay/wrangler.toml`
+
+**Risk:** When a WebSocket upgrade arrives with neither `code` nor `claim`, the relay mints a new
+pairing code and allocates a real Durable Object for it — the legitimate path a connector takes on
+its very first connection. Two things made it abusable:
+
+1. The `PAIR_LIMITER` IP throttle was gated on `locator !== null`, so it covered `code`/`claim` but
+   not minting. Minting was reachable by anyone, with no authentication and no rate limit.
+2. The allocation is not transient. `handleConnectorOpen` persists channel state
+   (`relay/src/channel.ts`, the `storage.put` before `acceptWebSocket`) *before* any frame proves a
+   real connector is on the other end, and nothing ever deleted it. An unpaired channel outlived its
+   3-minute `CODE_TTL_MS` indefinitely.
+
+So anyone able to complete a WebSocket handshake could leave persistent Durable Object storage
+behind, one object per attempt, at whatever rate they liked. It needs an `Upgrade: websocket` header
+rather than a plain HTTP probe, so commodity internet scanning does not stumble into it — but it
+takes no skill to do deliberately, and the cost accrues to us.
+
+**Fix, in two parts:**
+
+- **Rate:** minting is now throttled per IP like the other paths. It uses its own `MINT_LIMITER`
+  namespace (5 req/60s) rather than sharing `PAIR_LIMITER` — pointedly, so that a flood of anonymous
+  mints cannot exhaust the budget a phone on the same IP needs to finish pairing. Real minting is
+  rare: once at connector startup, then once per code rotation while nobody has paired.
+- **Accumulation:** `PairingChannel` now arms a reap alarm when a connector socket opens, and its
+  `alarm()` handler calls `deleteAll()` on any channel that is still unpaired with no sockets
+  attached. The alarm is armed at open rather than at `hello` precisely because `codeExpiresAt` is
+  only set once a hello arrives — a socket that connects and never speaks, which is the abuse case,
+  would otherwise carry no expiry at all. Paired channels are never reaped; they hold the session
+  and push tokens the app reconnects with.
+
+Both connectors also back off exponentially (5s → 60s, with jitter, reset on a successful
+connection) instead of redialling at a fixed 5s. A fixed rate meant a throttled connector could hold
+its own IP over the limit indefinitely, including for the phone trying to pair from that network.
+
+**Status:** Fixed ✅ — rate-limited *and* reaped. The limiter alone would only have capped the rate
+of accumulation, not stopped it.
 
 ---
 

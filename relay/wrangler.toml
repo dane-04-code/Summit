@@ -21,6 +21,21 @@ namespace_id = "1001"
   limit = 20
   period = 60
 
+# Per-IP throttle on the mint path — an upgrade naming no channel, which is how
+# a connector gets its first code. Minting is unauthenticated and persists state
+# in a fresh Durable Object per attempt, so it is throttled too, but in its own
+# namespace: a mint flood must not be able to spend the PAIR_LIMITER budget a
+# phone on the same IP needs to finish pairing. The ceiling is low because real
+# minting is rare — once at connector startup, then once per code rotation while
+# nobody has paired (CODE_TTL_MS = 3 min, see src/logic.ts).
+[[ratelimits]]
+name = "MINT_LIMITER"
+namespace_id = "1002"
+
+  [ratelimits.simple]
+  limit = 5
+  period = 60
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["PairingChannel"]

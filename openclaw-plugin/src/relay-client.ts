@@ -16,6 +16,11 @@ import type { IdentityStore } from './identity';
 /** Cloudflare's idle timer resets on JSON messages, not WebSocket control pings. */
 const HEARTBEAT_MS = 30_000;
 const RECONNECT_MS = 5_000;
+/** Ceiling on the redial wait. The relay throttles pairing attempts per IP, so a
+ *  connector that redials at a fixed rate can hold its own network over the
+ *  limit indefinitely — including the phone trying to pair from it. Backing off
+ *  is what lets a refused connector stop being the reason it stays refused. */
+const MAX_RECONNECT_MS = 60_000;
 /** Floor on the rotation window: a clock skewed past the deadline would
  *  otherwise spin us through codes as fast as we can dial. */
 const MIN_ROTATE_MS = 5_000;
@@ -77,6 +82,8 @@ export function createRelayClient(options: RelayClientOptions): RelayClient {
   let rotate: NodeJS.Timeout | null = null;
   let reconnect: NodeJS.Timeout | null = null;
   let stopped = false;
+  /** Grows while dials keep failing, resets the moment one succeeds. */
+  let reconnectDelay = reconnectMs;
 
   const clearTimers = () => {
     if (heartbeat) clearInterval(heartbeat);
@@ -125,7 +132,7 @@ export function createRelayClient(options: RelayClientOptions): RelayClient {
     try {
       ws = connect(buildUrl(relayUrl, identity));
     } catch (err) {
-      logger.warn(`summit: relay dial failed: ${String(err)} — retrying in ${reconnectMs}ms`);
+      logger.warn(`summit: relay dial failed: ${String(err)} — retrying in ${reconnectDelay}ms`);
       scheduleReconnect();
       return;
     }
@@ -133,6 +140,10 @@ export function createRelayClient(options: RelayClientOptions): RelayClient {
 
     ws.on('open', () => {
       logger.info(`summit: connected to relay ${relayUrl}`);
+      // Reaching the relay clears the penalty. Code rotation depends on this:
+      // it closes a live socket on purpose to fetch a fresh code, and must not
+      // be made to crawl by a backoff earned before we ever got through.
+      reconnectDelay = reconnectMs;
       // Advertising code_rotation is what earns the short code TTL: we promise
       // to fetch a replacement when it lapses, so the user is never left
       // staring at a dead code.
@@ -180,17 +191,22 @@ export function createRelayClient(options: RelayClientOptions): RelayClient {
       clearTimers();
       socket = null;
       if (stopped) return;
-      logger.info(`summit: relay disconnected — reconnecting in ${reconnectMs}ms`);
+      logger.info(`summit: relay disconnected — reconnecting in ${reconnectDelay}ms`);
       scheduleReconnect();
     });
   };
 
   function scheduleReconnect() {
     if (stopped || reconnect) return;
+    // Spread over [d, 1.25d). A relay deploy drops every connector's socket at
+    // the same instant; without jitter they would all come back at the same
+    // instant too, and rebuild the pile-up they are backing off from.
+    const wait = reconnectDelay + Math.random() * (reconnectDelay / 4);
+    reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_MS);
     reconnect = setTimeout(() => {
       reconnect = null;
       open();
-    }, reconnectMs);
+    }, wait);
   }
 
   return {
